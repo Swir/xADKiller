@@ -1,0 +1,92 @@
+name: Publish xADKiller v1.5.1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/release-v1.5.1.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Stable test signing key
+        run: |
+          mkdir -p "$HOME/.android"
+          base64 -d ci/xadkiller-debug.keystore.b64 > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey >/dev/null
+
+      - name: Build v1.5.1 APK
+        run: gradle --no-daemon assembleDebug
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          cp app/build/outputs/apk/debug/app-debug.apk release/xADKiller-v1.5.1-debug.apk
+          sha256sum release/xADKiller-v1.5.1-debug.apk | tee release/SHA256SUMS.txt
+          cat > release/RELEASE_NOTES.md <<'EOF'
+          # xADKiller v1.5.1 — Adaptive AI Hotfix
+
+          First public GitHub release of xADKiller by SWIR.
+
+          ## Highlights
+          - Local DNS/VPN ad, tracker and malicious-domain filtering.
+          - PRO / ULTRA blocklist mode.
+          - Smart Ad Engine with Accessibility-based ad detection and Auto-Skip support.
+          - Adaptive AI that learns locally from user feedback and successful actions.
+          - Community + Benchmark Intelligence using curated public signals from EasyList, AdGuard Filters, Turtlecute AdBlock Test, AdBlock-Tester.com and SuperAdBlockTest.com.
+          - 5 automatic UI languages: English, Polish, Spanish, German and French.
+          - Unsupported system languages automatically fall back to English.
+          - System Console with diagnostics and Smart/AI events.
+
+          ## v1.5.1 fix
+          - Fixed the false `Too few Community/Benchmark AI signals` error when the 2400-token cache became full from a single source.
+          - Added per-source learning budgets so one large list cannot consume the entire Community AI cache.
+          - Added separate OK / FAILED / SKIPPED source diagnostics.
+
+          ## Installation
+          Download `xADKiller-v1.5.1-debug.apk` from Assets and install it on Android 8.0+.
+
+          **Build note:** this GitHub asset is the reproducibly signed test/debug build used during development. It is not a Play Store production-signed APK.
+          EOF
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v1.5.1
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/xADKiller-v1.5.1-debug.apk release/SHA256SUMS.txt --clobber
+          else
+            gh release create "$TAG" \
+              release/xADKiller-v1.5.1-debug.apk \
+              release/SHA256SUMS.txt \
+              --target "$GITHUB_SHA" \
+              --title "xADKiller v1.5.1 — Adaptive AI Hotfix" \
+              --notes-file release/RELEASE_NOTES.md
+          fi
