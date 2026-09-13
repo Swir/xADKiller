@@ -44,6 +44,7 @@ const customInfo = document.getElementById("customInfo");
 const domainInput = document.getElementById("domainInput");
 const liveInfo = document.getElementById("liveInfo");
 const liveRefresh = document.getElementById("liveRefresh");
+const titanInfo = document.getElementById("titanInfo");
 
 let activeTab = null;
 let host = "";
@@ -81,17 +82,23 @@ async function refresh() {
     }
   }
 
-  const [shield, matrix] = await Promise.all([
+  const [shield, matrix, titan] = await Promise.all([
     send({ type:"getDynamicShieldStats" }),
-    send({ type:"getLiveMatrixStats" })
+    send({ type:"getLiveMatrixStats" }),
+    send({ type:"getTitanStats" })
   ]);
   if (shield?.ok && rulesInfo.textContent !== "—") {
-    const dynamicTotal = Number(shield.total || 0) + Number(matrix?.signatures || 0);
+    const dynamicTotal = Number(shield.total || 0) + Number(matrix?.signatures || 0) + Number(titan?.regex || 0);
     rulesInfo.textContent += ` • ${dynamicTotal.toLocaleString()} ${t("dynamicRules", "dynamic")}`;
   }
   if (matrix?.ok && matrix.version) {
     const cosmetic = modeEl.value === "ultra" ? Number(matrix.cosmeticStandard || 0) + Number(matrix.cosmeticUltra || 0) : Number(matrix.cosmeticStandard || 0);
     liveInfo.textContent += ` • ${Number(matrix.signatures || 0)} sig • ${cosmetic} CSS`;
+  }
+  if (titan?.ok) {
+    titanInfo.textContent = `${Number(titan.session || 0).toLocaleString()} session • ${Number(titan.regex || 0)} regex • ${Number(titan.learned || 0)} learned${titan.version ? ` • ${titan.version}` : ""}`;
+  } else {
+    titanInfo.textContent = "TITAN engine waiting…";
   }
 
   const stats = activeTab ? await tabMessage(activeTab.id, { type:"getPageStats" }) : null;
@@ -142,12 +149,13 @@ liveRefresh.addEventListener("click", async () => {
   stateBusy = true;
   liveRefresh.disabled = true;
   liveInfo.textContent = t("liveShieldUpdating", "Updating Live Shield…");
-  const [domains, matrix] = await Promise.all([
+  const [domains, matrix, titan] = await Promise.all([
     send({ type:"refreshLiveShield" }),
-    send({ type:"refreshLiveMatrix" })
+    send({ type:"refreshLiveMatrix" }),
+    send({ type:"refreshTitan" })
   ]);
-  if (!domains?.ok || !matrix?.ok) {
-    liveInfo.textContent = `${t("liveShieldError", "Update failed")}: ${domains?.error || matrix?.error || "unknown"}`;
+  if (!domains?.ok || !matrix?.ok || !titan?.ok) {
+    liveInfo.textContent = `${t("liveShieldError", "Update failed")}: ${domains?.error || matrix?.error || titan?.error || "unknown"}`;
   }
   stateBusy = false;
   liveRefresh.disabled = false;
