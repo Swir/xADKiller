@@ -89,7 +89,9 @@ const meta = readBuildMeta();
 if (meta.standardRules < 1000 || meta.ultraRules < 1000) throw new Error(`invalid build meta: ${JSON.stringify(meta)}`);
 if (meta.cosmeticGeneric < 250 || meta.cosmeticDomains < 50) throw new Error(`cosmetic build incomplete: ${JSON.stringify(meta)}`);
 if (!Array.isArray(intelDomains) || intelDomains.length < 18000) throw new Error(`dynamic intelligence pack incomplete: ${intelDomains?.length || 0}`);
-log("Build artifact meta OK", `STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, dynamic=${intelDomains.length}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}`);
+if (meta.version !== "1.2.0") throw new Error(`build metadata version mismatch: ${meta.version}`);
+if (meta.dynamicIntelDomains !== intelDomains.length) throw new Error(`build metadata dynamic count mismatch: ${meta.dynamicIntelDomains}`);
+log("Build artifact meta OK", `v=${meta.version}, STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, dynamic=${intelDomains.length}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}`);
 
 const server = http.createServer((req, res) => {
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -195,14 +197,14 @@ try {
   await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded", timeout: 12000 });
   await popup.select("#mode", "ultra");
 
+  const ultraShield = await waitDynamicShield(worker, 23000, 10, 30000);
+  log("ULTRA Dynamic Shield", JSON.stringify(ultraShield));
+
   const enabledRulesets = await worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets());
   log("Popup ULTRA switch", enabledRulesets.join(","));
   if (!enabledRulesets.includes("standard") || !enabledRulesets.includes("ultra")) {
     throw new Error(`ULTRA rulesets not enabled through popup: ${enabledRulesets.join(",")}`);
   }
-
-  const ultraShield = await waitDynamicShield(worker, 23000, 10, 30000);
-  log("ULTRA Dynamic Shield", JSON.stringify(ultraShield));
 
   log("PASS", `STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, dynamic=${ultraShield.intel}, core=${ultraShield.core}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}, matched=${matched.count}`);
 } finally {
