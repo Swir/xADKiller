@@ -52,8 +52,7 @@ function parseOptions(raw){
 }
 function parseLine(line0,sourceWeight){
   let line=String(line0||"").trim();
-  if(!line||line.startsWith("!")||line.startsWith("[")||line.startsWith("#")||line.includes("##")||line.includes("#@#")||line.includes("#$#")||line.includes("#?#")||line.includes("#%#"))return null;
-  let action="block";if(line.startsWith("@@")){action="allow";line=line.slice(2);}
+  if(!line||line.startsWith("!")||line.startsWith("[")||line.startsWith("#")||line.startsWith("@@")||line.includes("##")||line.includes("#@#")||line.includes("#$#")||line.includes("#?#")||line.includes("#%#"))return null;
   let pattern=line,options="";const dollar=line.indexOf("$");if(dollar>=0){pattern=line.slice(0,dollar);options=line.slice(dollar+1);}pattern=pattern.trim();
   if(pattern.length>2&&pattern.startsWith("/")&&pattern.endsWith("/"))return null;
   if(!validFilter(pattern))return null;
@@ -61,7 +60,7 @@ function parseLine(line0,sourceWeight){
   if(!anchored&&!SIGNAL.test(pattern))return null;
   const parsed=parseOptions(options);if(!parsed.ok)return null;
   const condition={urlFilter:pattern,...parsed.condition};
-  let score=sourceWeight*18+(action==="allow"?240:0);
+  let score=sourceWeight*18;
   if(SIGNAL.test(pattern))score+=75;
   if(!pattern.startsWith("||"))score+=35;
   if(pattern.startsWith("/"))score+=25;
@@ -70,14 +69,14 @@ function parseLine(line0,sourceWeight){
   if(condition.resourceTypes.includes("script"))score+=12;
   if(condition.resourceTypes.includes("xmlhttprequest"))score+=12;
   if(condition.initiatorDomains?.length)score+=15;
-  return {action,priority:action==="allow"?110:2,condition,score};
+  return {action:"block",priority:2,condition,score};
 }
 function keyOf(rule){return JSON.stringify({action:rule.action,condition:rule.condition});}
 function existingKeys(){
   const keys=new Set();
   for(const name of ["standard","ultra"]){
     const file=path.join(rulesDir,`${name}.json`);if(!fs.existsSync(file))continue;
-    for(const r of JSON.parse(fs.readFileSync(file,"utf8"))){keys.add(JSON.stringify({action:r.action?.type,condition:r.condition}));}
+    for(const r of JSON.parse(fs.readFileSync(file,"utf8"))){if(r.action?.type==="block")keys.add(JSON.stringify({action:"block",condition:r.condition}));}
   }
   return keys;
 }
@@ -98,13 +97,14 @@ for(const source of SOURCES){
   }catch(error){status.push({id:source.id,ok:false,error:String(error?.message||error)});}
 }
 const ranked=[...candidates.values()].sort((a,b)=>b.score-a.score||a.hash-b.hash).slice(0,TOTAL);
-if(ranked.length<15000)throw new Error(`Too few TITAN boost candidates: ${ranked.length}`);
+if(ranked.length<30000)throw new Error(`Too few block-only TITAN boost candidates: ${ranked.length}`);
 const counts=[];
 for(let s=0;s<SET_COUNT;s++){
   const slice=ranked.slice(s*SET_SIZE,(s+1)*SET_SIZE);
-  const rules=slice.map((r,i)=>({id:i+1,priority:r.priority,action:{type:r.action},condition:r.condition}));
+  const rules=slice.map((r,i)=>({id:i+1,priority:r.priority,action:{type:"block"},condition:r.condition}));
+  if(rules.some((r)=>r.action?.type!=="block"))throw new Error(`TITAN boost ${s+1} contains non-block action`);
   fs.writeFileSync(path.join(rulesDir,`titan-boost-${s+1}.json`),JSON.stringify(rules));
   counts.push(rules.length);
 }
-fs.writeFileSync(path.join(out,"titan-boost-meta.json"),JSON.stringify({version:"1.4.0",counts,total:counts.reduce((a,b)=>a+b,0),candidates:candidates.size,sources:status},null,2));
-console.log(JSON.stringify({titanBoostRules:counts,total:counts.reduce((a,b)=>a+b,0),candidates:candidates.size,sources:status},null,2));
+fs.writeFileSync(path.join(out,"titan-boost-meta.json"),JSON.stringify({version:"1.4.0",policy:"block-only",counts,total:counts.reduce((a,b)=>a+b,0),candidates:candidates.size,sources:status},null,2));
+console.log(JSON.stringify({titanBoostPolicy:"block-only",titanBoostRules:counts,total:counts.reduce((a,b)=>a+b,0),candidates:candidates.size,sources:status},null,2));
