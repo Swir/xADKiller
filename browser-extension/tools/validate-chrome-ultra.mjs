@@ -8,9 +8,9 @@ const readJson = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
 
 const manifest = readJson(path.join(base, "manifest.json"));
 if (manifest.manifest_version !== 3) fail("manifest_version must be 3");
-if (manifest.version !== "1.2.0") fail(`unexpected version ${manifest.version}`);
+if (manifest.version !== "1.3.0") fail(`unexpected version ${manifest.version}`);
 if (Number(manifest.minimum_chrome_version) < 121) fail("minimum Chrome must be >=121");
-for (const p of ["storage","declarativeNetRequest","declarativeNetRequestFeedback","activeTab"]) {
+for (const p of ["storage","alarms","declarativeNetRequest","declarativeNetRequestFeedback","activeTab"]) {
   if (!manifest.permissions?.includes(p)) fail(`missing permission ${p}`);
 }
 if (!manifest.host_permissions?.includes("<all_urls>")) fail("missing host access");
@@ -18,11 +18,18 @@ if (manifest.background?.service_worker !== "background.js") fail("service worke
 const rs = manifest.declarative_net_request?.rule_resources || [];
 if (!rs.some((x) => x.id === "standard" && x.enabled === true)) fail("standard ruleset missing/enabled state wrong");
 if (!rs.some((x) => x.id === "ultra" && x.enabled === false)) fail("ultra ruleset missing/enabled state wrong");
-const contentJs = manifest.content_scripts?.[0]?.js || [];
-if (contentJs[0] !== "cosmetic-data.js" || !contentJs.includes("content.js")) fail("cosmetic data must load before content.js");
+
+const scripts = manifest.content_scripts || [];
+const mainGuard = scripts.find((x) => x.world === "MAIN" && x.js?.includes("early-guard.js"));
+if (!mainGuard || mainGuard.run_at !== "document_start" || mainGuard.all_frames !== true) fail("MAIN-world Preflight Guard missing or not document_start/all_frames");
+const isolated = scripts.find((x) => x.world === "ISOLATED" && x.js?.includes("content.js"));
+if (!isolated) fail("isolated content engine missing");
+if (isolated.js?.[0] !== "cosmetic-data.js") fail("cosmetic data must load before content.js");
+if (!isolated.js?.includes("shadow-sentinel.js")) fail("Shadow DOM Sentinel missing");
+if (isolated.all_frames !== true) fail("isolated engine must run in all frames");
 
 for (const rel of [
-  "background.js","content.js","cosmetic-data.js","build-meta.js","dynamic-intel-meta.json",
+  "background.js","early-guard.js","content.js","shadow-sentinel.js","cosmetic-data.js","build-meta.js","dynamic-intel-meta.json",
   "popup.html","popup.js","popup.css","rules/standard.json","rules/ultra.json","rules/dynamic-intel.json","icons/icon128.png"
 ]) {
   if (!fs.existsSync(path.join(base, rel))) fail(`missing ${rel}`);
@@ -71,6 +78,11 @@ for (const domain of intel.slice(0, 200)) {
   if (!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,63}$/i.test(domain)) fail(`invalid dynamic intelligence domain: ${domain}`);
 }
 
+const background = fs.readFileSync(path.join(base, "background.js"), "utf8");
+if (!background.includes("xadkiller-live-shield.json")) fail("Live Shield feed endpoint missing");
+if (!background.includes("chrome.alarms")) fail("Live Shield periodic refresh missing");
+if (!background.includes("LIVE_RULE_MIN")) fail("Live Shield dynamic rule range missing");
+
 for (const lang of ["en","pl","es","de","fr"]) {
   const messages = readJson(path.join(base, "_locales", lang, "messages.json"));
   for (const key of ["extName","extDescription","protection","filterMode","modeUltra","smartEngine","pickElement","statusOn","statusOff"]) {
@@ -78,10 +90,10 @@ for (const lang of ["en","pl","es","de","fr"]) {
   }
 }
 
-for (const rel of ["background.js","content.js","popup.js"]) {
+for (const rel of ["background.js","early-guard.js","content.js","shadow-sentinel.js","popup.js"]) {
   const code = fs.readFileSync(path.join(base, rel), "utf8");
   if (/\beval\s*\(|\bnew\s+Function\s*\(/.test(code)) fail(`${rel}: dynamic code execution forbidden`);
   if (/importScripts\s*\(\s*["']https?:/i.test(code)) fail(`${rel}: remote hosted code forbidden`);
 }
 
-if (!process.exitCode) console.log(`OK: Chrome Ultra v1.2.0 validated: ${standard} STANDARD + ${ultra} ULTRA static, ${intel.length} dynamic intelligence domains, 5 locales`);
+if (!process.exitCode) console.log(`OK: Chrome Shield v1.3.0 validated: ${standard} STANDARD + ${ultra} ULTRA static, ${intel.length} packaged intelligence domains, Preflight Guard + Shadow DOM Sentinel + Live Shield`);
