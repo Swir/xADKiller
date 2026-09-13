@@ -1,44 +1,9 @@
 {
-  "extName": {
-    "message": "xADKiller Browser"
-  },
-  "extDescription": {
-    "message": "Bloquea anuncios y rastreadores con reglas Manifest V3, filtrado cosmético local y Smart Auto-Skip."
-  },
-  "protection": {
-    "message": "Protección"
-  },
-  "currentSite": {
-    "message": "Sitio actual"
-  },
-  "autoSkip": {
-    "message": "Smart Auto-Skip"
-  },
-  "autoSkipHint": {
-    "message": "Solo pulsa botones claros de Omitir anuncio"
-  },
-  "hiddenAds": {
-    "message": "elementos ocultos"
-  },
-  "skippedAds": {
-    "message": "omisiones automáticas"
-  },
-  "testButton": {
-    "message": "Probar bloqueo"
-  },
-  "unsupportedPage": {
-    "message": "Página del navegador"
-  },
-  "statusOn": {
-    "message": "ACTIVA"
-  },
-  "statusOff": {
-    "message": "DESACTIVADA"
-  },
-  "allowSite": {
-    "message": "Permitir este sitio"
-  },
-  "protectSite": {
-    "message": "Proteger este sitio"
-  }
+  "extName":{"message":"xADKiller Browser"},
+  "extDescription":{"message":"Bloquea anuncios y rastreadores con reglas Manifest V3, Smart DOM adaptativo local y Auto-Skip."},
+  "protection":{"message":"Protección"},"currentSite":{"message":"Sitio actual"},"filterMode":{"message":"Modo de filtro"},"modeStandard":{"message":"STANDARD"},"modeUltra":{"message":"ULTRA"},
+  "networkRules":{"message":"reglas de red"},"cosmeticRules":{"message":"reglas cosméticas"},"smartEngine":{"message":"Smart DOM Engine"},"smartHint":{"message":"Detección adaptativa local de elementos"},
+  "autoSkip":{"message":"Smart Auto-Skip"},"autoSkipHint":{"message":"Solo pulsa botones claros de Omitir anuncio"},"networkBlocks":{"message":"bloqueos de red"},"hiddenAds":{"message":"elementos ocultos"},"smartBlocks":{"message":"ocultaciones Smart"},"learnedSignals":{"message":"señales aprendidas"},
+  "adaptiveLab":{"message":"Herramientas adaptativas"},"pickElement":{"message":"Bloquear / enseñar elemento"},"falsePositive":{"message":"Falso positivo"},"adaptiveHint":{"message":"El aprendizaje queda localmente en este perfil del navegador."},
+  "customDomain":{"message":"Dominio bloqueado personalizado"},"customDomainsCount":{"message":"dominios personalizados"},"add":{"message":"Añadir"},"testButton":{"message":"Probar bloqueo"},"unsupportedPage":{"message":"Página del navegador"},"statusOn":{"message":"ACTIVA"},"statusOff":{"message":"DESACTIVADA"},"allowSite":{"message":"Permitir este sitio"},"protectSite":{"message":"Proteger este sitio"}
 }
