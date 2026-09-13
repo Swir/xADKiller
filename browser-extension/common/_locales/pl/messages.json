@@ -1,0 +1,44 @@
+{
+  "extName": {
+    "message": "xADKiller Browser"
+  },
+  "extDescription": {
+    "message": "Blokuje reklamy i trackery przez reguły Manifest V3, filtrowanie elementów strony i Smart Auto-Skip."
+  },
+  "protection": {
+    "message": "Ochrona"
+  },
+  "currentSite": {
+    "message": "Aktualna strona"
+  },
+  "autoSkip": {
+    "message": "Smart Auto-Skip"
+  },
+  "autoSkipHint": {
+    "message": "Klika tylko jednoznaczne przyciski Pomiń reklamę"
+  },
+  "hiddenAds": {
+    "message": "ukrytych elementów"
+  },
+  "skippedAds": {
+    "message": "auto-pominięć"
+  },
+  "testButton": {
+    "message": "Testuj blokowanie"
+  },
+  "unsupportedPage": {
+    "message": "Strona przeglądarki"
+  },
+  "statusOn": {
+    "message": "AKTYWNA"
+  },
+  "statusOff": {
+    "message": "WYŁĄCZONA"
+  },
+  "allowSite": {
+    "message": "Zezwól tej stronie"
+  },
+  "protectSite": {
+    "message": "Chroń tę stronę"
+  }
+}

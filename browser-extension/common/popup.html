@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>xADKiller</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header>
+      <img src="icons/icon128.png" alt="">
+      <div>
+        <h1>xADKiller</h1>
+        <p>Browser Shield • BY SWIR</p>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="row">
+        <div>
+          <strong data-i18n="protection">Protection</strong>
+          <small id="statusText">—</small>
+        </div>
+        <label class="switch">
+          <input id="enabled" type="checkbox">
+          <span></span>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <strong data-i18n="currentSite">Current site</strong>
+      <div id="host" class="host">—</div>
+      <button id="siteToggle" class="secondary" disabled>—</button>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <div>
+          <strong data-i18n="autoSkip">Smart Auto-Skip</strong>
+          <small data-i18n="autoSkipHint">Clicks only clear Skip Ad buttons</small>
+        </div>
+        <label class="switch">
+          <input id="autoSkip" type="checkbox">
+          <span></span>
+        </label>
+      </div>
+    </section>
+
+    <section class="card stats">
+      <div><b id="hiddenCount">0</b><span data-i18n="hiddenAds">hidden elements</span></div>
+      <div><b id="skipCount">0</b><span data-i18n="skippedAds">auto-skips</span></div>
+    </section>
+
+    <div class="actions">
+      <button id="testBtn" data-i18n="testButton">Test blocking</button>
+      <button id="githubBtn" class="secondary">GitHub</button>
+    </div>
+    <footer>v1.0.0 • Manifest V3 • local processing</footer>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+{
+  "extName": {
+    "message": "xADKiller Browser"
+  },
+  "extDescription": {
+    "message": "Blocks ads and trackers with Manifest V3 network rules plus local cosmetic filtering and Smart Auto-Skip."
+  },
+  "protection": {
+    "message": "Protection"
+  },
+  "currentSite": {
+    "message": "Current site"
+  },
+  "autoSkip": {
+    "message": "Smart Auto-Skip"
+  },
+  "autoSkipHint": {
+    "message": "Clicks only clear Skip Ad buttons"
+  },
+  "hiddenAds": {
+    "message": "hidden elements"
+  },
+  "skippedAds": {
+    "message": "auto-skips"
+  },
+  "testButton": {
+    "message": "Test blocking"
+  },
+  "unsupportedPage": {
+    "message": "Browser page"
+  },
+  "statusOn": {
+    "message": "ACTIVE"
+  },
+  "statusOff": {
+    "message": "DISABLED"
+  },
+  "allowSite": {
+    "message": "Allow this site"
+  },
+  "protectSite": {
+    "message": "Protect this site"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "xadkiller-browser-extension",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "validate": "node tools/validate.mjs",
+    "test:chrome": "node tests/chrome-runtime.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0",
+    "web-ext": "10.6.0"
+  }
+}

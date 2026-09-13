@@ -1,0 +1,44 @@
+{
+  "extName": {
+    "message": "xADKiller Browser"
+  },
+  "extDescription": {
+    "message": "Blockiert Werbung und Tracker mit Manifest-V3-Regeln, lokalem kosmetischem Filter und Smart Auto-Skip."
+  },
+  "protection": {
+    "message": "Schutz"
+  },
+  "currentSite": {
+    "message": "Aktuelle Website"
+  },
+  "autoSkip": {
+    "message": "Smart Auto-Skip"
+  },
+  "autoSkipHint": {
+    "message": "Klickt nur eindeutige Werbung-überspringen-Schaltflächen"
+  },
+  "hiddenAds": {
+    "message": "ausgeblendete Elemente"
+  },
+  "skippedAds": {
+    "message": "Auto-Skips"
+  },
+  "testButton": {
+    "message": "Blockierung testen"
+  },
+  "unsupportedPage": {
+    "message": "Browserseite"
+  },
+  "statusOn": {
+    "message": "AKTIV"
+  },
+  "statusOff": {
+    "message": "DEAKTIVIERT"
+  },
+  "allowSite": {
+    "message": "Diese Website erlauben"
+  },
+  "protectSite": {
+    "message": "Diese Website schützen"
+  }
+}
