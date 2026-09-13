@@ -7,6 +7,7 @@ import path from "node:path";
 const root = path.resolve(import.meta.dirname, "..");
 const extensionPath = path.join(root, "dist", "chrome");
 const testHtml = fs.readFileSync(path.join(root, "tests", "test-page.html"));
+const intelDomains = JSON.parse(fs.readFileSync(path.join(extensionPath, "rules", "dynamic-intel.json"), "utf8"));
 
 function log(stage, extra = "") {
   console.log(`[xADKiller CI] ${stage}${extra ? ` • ${extra}` : ""}`);
@@ -60,17 +61,35 @@ async function findXadWorker(browser, timeoutMs = 20000) {
       if (!result) continue;
       const { probe } = result;
       seen.set(probe.href, probe);
-      if (probe.version === "1.1.0" && probe.permissions.includes("declarativeNetRequest")) return { ...result, target };
+      if (probe.version === "1.2.0" && probe.permissions.includes("declarativeNetRequest")) return { ...result, target };
     }
     await delay(250);
   }
   throw new Error(`xADKiller service worker not found. Seen: ${JSON.stringify([...seen.values()])}`);
 }
+async function waitDynamicShield(worker, minimumIntel, minimumCore = 0, timeoutMs = 20000) {
+  const deadline = Date.now() + timeoutMs;
+  let last = { total: 0, intel: 0, core: 0 };
+  while (Date.now() < deadline) {
+    last = await worker.evaluate(async () => {
+      const rules = await chrome.declarativeNetRequest.getDynamicRules();
+      return {
+        total: rules.length,
+        intel: rules.filter((r) => r.id >= 100000 && r.id <= 123999).length,
+        core: rules.filter((r) => r.id >= 130000 && r.id <= 130099).length
+      };
+    });
+    if (last.intel >= minimumIntel && last.core >= minimumCore) return last;
+    await delay(250);
+  }
+  throw new Error(`Dynamic Shield timeout: ${JSON.stringify(last)}`);
+}
 
 const meta = readBuildMeta();
 if (meta.standardRules < 1000 || meta.ultraRules < 1000) throw new Error(`invalid build meta: ${JSON.stringify(meta)}`);
 if (meta.cosmeticGeneric < 250 || meta.cosmeticDomains < 50) throw new Error(`cosmetic build incomplete: ${JSON.stringify(meta)}`);
-log("Build artifact meta OK", `STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}`);
+if (!Array.isArray(intelDomains) || intelDomains.length < 18000) throw new Error(`dynamic intelligence pack incomplete: ${intelDomains?.length || 0}`);
+log("Build artifact meta OK", `STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, dynamic=${intelDomains.length}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}`);
 
 const server = http.createServer((req, res) => {
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -91,12 +110,7 @@ try {
     headless: true,
     pipe: true,
     enableExtensions: [extensionPath],
-    args: [
-      "--no-sandbox",
-      "--disable-dev-shm-usage",
-      "--no-first-run",
-      "--no-default-browser-check"
-    ],
+    args: ["--no-sandbox","--disable-dev-shm-usage","--no-first-run","--no-default-browser-check"],
     timeout: 60000
   }), 70000, "Puppeteer Chrome launch");
   log("Chrome launched");
@@ -117,6 +131,16 @@ try {
   if (!initialRulesets.includes("standard")) throw new Error(`STANDARD ruleset not enabled: ${initialRulesets.join(",")}`);
   if (initialRulesets.includes("ultra")) throw new Error(`ULTRA unexpectedly enabled initially: ${initialRulesets.join(",")}`);
   log("Initial DNR rulesets OK", initialRulesets.join(","));
+
+  const standardShield = await waitDynamicShield(worker, 15000, 0, 25000);
+  log("STANDARD Dynamic Shield", JSON.stringify(standardShield));
+
+  const sampleDomain = intelDomains[0];
+  const samplePresent = await worker.evaluate(async (domain) => {
+    const rules = await chrome.declarativeNetRequest.getDynamicRules();
+    return rules.some((r) => Array.isArray(r.condition?.requestDomains) && r.condition.requestDomains.includes(domain));
+  }, sampleDomain);
+  if (!samplePresent) throw new Error(`dynamic intelligence sample not installed: ${sampleDomain}`);
 
   const page = await browser.newPage();
   page.setDefaultTimeout(10000);
@@ -170,7 +194,6 @@ try {
   const popup = await browser.newPage();
   await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded", timeout: 12000 });
   await popup.select("#mode", "ultra");
-  await delay(1000);
 
   const enabledRulesets = await worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets());
   log("Popup ULTRA switch", enabledRulesets.join(","));
@@ -178,7 +201,10 @@ try {
     throw new Error(`ULTRA rulesets not enabled through popup: ${enabledRulesets.join(",")}`);
   }
 
-  log("PASS", `STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}, matched=${matched.count}`);
+  const ultraShield = await waitDynamicShield(worker, 23000, 10, 30000);
+  log("ULTRA Dynamic Shield", JSON.stringify(ultraShield));
+
+  log("PASS", `STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, dynamic=${ultraShield.intel}, core=${ultraShield.core}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}, matched=${matched.count}`);
 } finally {
   log("Shutting down Chrome");
   if (browser) {
