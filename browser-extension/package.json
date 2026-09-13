@@ -7,6 +7,7 @@
     "build": "node --import ./tools/fetch-node-http.mjs tools/build-chrome-ultra.mjs && node --import ./tools/fetch-node-http.mjs tools/build-dynamic-intel.mjs && node --import ./tools/fetch-node-http.mjs tools/build-titan-session.mjs && node --import ./tools/fetch-node-http.mjs tools/build-titan-boost.mjs && node tools/stamp-build-meta.mjs && node tools/optimize-chrome-runtime.mjs",
     "validate": "node tools/validate-chrome-ultra.mjs && node tools/validate-titan-boost.mjs",
     "test:chrome": "node tests/chrome-ultra-runtime.mjs",
+    "test:boost": "node tests/chrome-static-boost-runtime.mjs",
     "build:legacy": "node tools/build.mjs"
   },
   "devDependencies": {
