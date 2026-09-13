@@ -24,6 +24,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".AdaptiveAiActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".MainActivityV121"
             android:exported="true">
             <intent-filter>
