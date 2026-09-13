@@ -2,6 +2,8 @@
   if (globalThis.__xadPreflightGuardV1) return;
   globalThis.__xadPreflightGuardV1 = true;
 
+  let active = true;
+
   const STRONG_HOST = /(^|\.)(?:doubleclick\.net|googlesyndication\.com|googleadservices\.com|amazon-adsystem\.com|adnxs\.com|adsrvr\.org|pubmatic\.com|rubiconproject\.com|criteo\.(?:com|net)|taboola\.com|outbrain\.com|adcolony\.com|smartadserver\.com|adform\.net)$/i;
   const STRONG_PATHS = [
     /\/(?:ads?|adserver|adservice|ad-loader|adloader|ad-script|adscript)(?:[._\/-]|$)/i,
@@ -12,9 +14,13 @@
   ];
   const TRACK_BEACON = /(?:^|[?&])(?:event|conversion|campaign|tracking|tracker|analytics|pixel|impression)=/i;
 
+  window.addEventListener("xadkiller:preflight-config", (event) => {
+    if (typeof event?.detail?.active === "boolean") active = event.detail.active;
+  }, true);
+
   function asUrl(value) {
     try {
-      if (value instanceof Request) return new URL(value.url, location.href);
+      if (typeof Request !== "undefined" && value instanceof Request) return new URL(value.url, location.href);
       return new URL(String(value || ""), location.href);
     } catch (_) {
       return null;
@@ -22,8 +28,11 @@
   }
 
   function shouldBlock(value, kind = "request") {
+    if (!active) return false;
     const u = asUrl(value);
-    if (!u || !/^https?:$/i.test(u.protocol)) return false;
+    if (!u) return false;
+    const protocolOk = kind === "websocket" ? /^(?:wss?|https?):$/i.test(u.protocol) : /^https?:$/i.test(u.protocol);
+    if (!protocolOk) return false;
     const host = u.hostname.toLowerCase();
     const own = location.hostname && (host === location.hostname || host.endsWith("." + location.hostname));
     const pathQuery = `${u.pathname}${u.search}`;
@@ -44,8 +53,8 @@
 
   const nativeFetch = globalThis.fetch;
   if (typeof nativeFetch === "function") {
-    globalThis.fetch = function(input, init) {
-      const url = input instanceof Request ? input.url : input;
+    globalThis.fetch = function(input) {
+      const url = typeof Request !== "undefined" && input instanceof Request ? input.url : input;
       if (shouldBlock(url, "fetch")) {
         emitBlocked(url, "fetch");
         return Promise.reject(new TypeError("Failed to fetch"));
