@@ -68,6 +68,40 @@ async function waitForDevTools(port, timeoutMs, processState) {
   }
   throw new Error(`DevTools endpoint timed out after ${timeoutMs}ms: ${lastError}`);
 }
+async function probeWorker(worker) {
+  try {
+    return await worker.evaluate(() => {
+      const manifest = chrome.runtime?.getManifest?.() || null;
+      return {
+        href: self.location.href,
+        id: chrome.runtime?.id || "",
+        name: manifest?.name || "",
+        version: manifest?.version || "",
+        permissions: manifest?.permissions || [],
+        hasStorage: !!chrome.storage?.local,
+        hasDnr: !!chrome.declarativeNetRequest,
+        dnrMethods: chrome.declarativeNetRequest ? Object.keys(chrome.declarativeNetRequest).sort() : []
+      };
+    });
+  } catch (error) {
+    return { href: worker.url(), error: String(error?.message || error), permissions: [] };
+  }
+}
+async function waitForXadWorker(context, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  const seen = new Map();
+  while (Date.now() < deadline) {
+    for (const worker of context.serviceWorkers()) {
+      const probe = await probeWorker(worker);
+      seen.set(probe.href || worker.url(), probe);
+      if (probe.version === "1.1.0" && Array.isArray(probe.permissions) && probe.permissions.includes("declarativeNetRequest")) {
+        return { worker, probe, seen: [...seen.values()] };
+      }
+    }
+    await delay(250);
+  }
+  throw new Error(`xADKiller service worker not found. Seen workers: ${JSON.stringify([...seen.values()])}`);
+}
 
 const meta = readBuildMeta();
 if (!meta || meta.standardRules < 1000 || meta.ultraRules < 1000) throw new Error(`invalid build meta: ${JSON.stringify(meta)}`);
@@ -143,29 +177,13 @@ try {
   if (!context) throw new Error("Chrome default browser context not found over CDP");
   log("CDP connected");
 
-  let worker = context.serviceWorkers()[0];
-  if (!worker) worker = await withTimeout(context.waitForEvent("serviceworker", { timeout: 20000 }), 22000, "service worker");
-  const extensionId = new URL(worker.url()).host;
-  if (!extensionId) throw new Error("could not resolve extension id");
-  log("Service worker ready", extensionId);
-
-  const runtimeProbe = await withTimeout(worker.evaluate(() => {
-    const manifest = chrome.runtime?.getManifest?.() || null;
-    return {
-      href: self.location.href,
-      id: chrome.runtime?.id || "",
-      name: manifest?.name || "",
-      version: manifest?.version || "",
-      permissions: manifest?.permissions || [],
-      hasStorage: !!chrome.storage?.local,
-      hasDnr: !!chrome.declarativeNetRequest,
-      dnrMethods: chrome.declarativeNetRequest ? Object.keys(chrome.declarativeNetRequest).sort() : []
-    };
-  }), 8000, "extension API probe");
+  const found = await withTimeout(waitForXadWorker(context, 20000), 22000, "xADKiller service worker");
+  const worker = found.worker;
+  const runtimeProbe = found.probe;
+  const extensionId = runtimeProbe.id;
+  log("xADKiller service worker ready", `${extensionId} / ${runtimeProbe.href}`);
   log("Extension API probe", JSON.stringify(runtimeProbe));
-  if (runtimeProbe.id !== extensionId || runtimeProbe.version !== "1.1.0") throw new Error(`Unexpected extension worker: ${JSON.stringify(runtimeProbe)}`);
-  if (!runtimeProbe.permissions.includes("declarativeNetRequest")) throw new Error(`Manifest permission missing at runtime: ${JSON.stringify(runtimeProbe)}`);
-  if (!runtimeProbe.hasStorage) throw new Error("chrome.storage.local unavailable in extension worker");
+  if (!runtimeProbe.hasStorage) throw new Error("chrome.storage.local unavailable in xADKiller worker");
   if (!runtimeProbe.hasDnr) throw new Error(`chrome.declarativeNetRequest unavailable in loaded xADKiller worker: ${JSON.stringify(runtimeProbe)}`);
 
   const initialRulesets = await withTimeout(worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets()), 8000, "initial enabled rulesets");
