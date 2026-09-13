@@ -24,12 +24,15 @@ const mainGuard = scripts.find((x) => x.world === "MAIN" && x.js?.includes("earl
 if (!mainGuard || mainGuard.run_at !== "document_start" || mainGuard.all_frames !== true) fail("MAIN-world Preflight Guard missing or not document_start/all_frames");
 const isolated = scripts.find((x) => x.world === "ISOLATED" && x.js?.includes("content.js"));
 if (!isolated) fail("isolated content engine missing");
-if (isolated.js?.[0] !== "cosmetic-data.js") fail("cosmetic data must load before content.js");
+if (!isolated.js?.includes("preflight-config.js")) fail("Preflight state bridge missing");
+const cosmeticIndex = isolated.js?.indexOf("cosmetic-data.js") ?? -1;
+const contentIndex = isolated.js?.indexOf("content.js") ?? -1;
+if (cosmeticIndex < 0 || contentIndex < 0 || cosmeticIndex > contentIndex) fail("cosmetic data must load before content.js");
 if (!isolated.js?.includes("shadow-sentinel.js")) fail("Shadow DOM Sentinel missing");
 if (isolated.all_frames !== true) fail("isolated engine must run in all frames");
 
 for (const rel of [
-  "background.js","early-guard.js","content.js","shadow-sentinel.js","cosmetic-data.js","build-meta.js","dynamic-intel-meta.json",
+  "background.js","early-guard.js","preflight-config.js","content.js","shadow-sentinel.js","cosmetic-data.js","build-meta.js","dynamic-intel-meta.json",
   "popup.html","popup.js","popup.css","rules/standard.json","rules/ultra.json","rules/dynamic-intel.json","icons/icon128.png"
 ]) {
   if (!fs.existsSync(path.join(base, rel))) fail(`missing ${rel}`);
@@ -83,17 +86,22 @@ if (!background.includes("xadkiller-live-shield.json")) fail("Live Shield feed e
 if (!background.includes("chrome.alarms")) fail("Live Shield periodic refresh missing");
 if (!background.includes("LIVE_RULE_MIN")) fail("Live Shield dynamic rule range missing");
 
+const guard = fs.readFileSync(path.join(base, "early-guard.js"), "utf8");
+const bridge = fs.readFileSync(path.join(base, "preflight-config.js"), "utf8");
+if (!guard.includes("xadkiller:preflight-config") || !bridge.includes("xadkiller:preflight-config")) fail("Preflight state synchronization missing");
+if (!guard.includes("wss?") && !guard.includes("websocket")) fail("Preflight WebSocket handling missing");
+
 for (const lang of ["en","pl","es","de","fr"]) {
   const messages = readJson(path.join(base, "_locales", lang, "messages.json"));
-  for (const key of ["extName","extDescription","protection","filterMode","modeUltra","smartEngine","pickElement","statusOn","statusOff"]) {
+  for (const key of ["extName","extDescription","protection","filterMode","modeUltra","smartEngine","pickElement","statusOn","statusOff","liveShield","updateNow"]) {
     if (!messages[key]?.message) fail(`${lang}: missing ${key}`);
   }
 }
 
-for (const rel of ["background.js","early-guard.js","content.js","shadow-sentinel.js","popup.js"]) {
+for (const rel of ["background.js","early-guard.js","preflight-config.js","content.js","shadow-sentinel.js","popup.js"]) {
   const code = fs.readFileSync(path.join(base, rel), "utf8");
   if (/\beval\s*\(|\bnew\s+Function\s*\(/.test(code)) fail(`${rel}: dynamic code execution forbidden`);
   if (/importScripts\s*\(\s*["']https?:/i.test(code)) fail(`${rel}: remote hosted code forbidden`);
 }
 
-if (!process.exitCode) console.log(`OK: Chrome Shield v1.3.0 validated: ${standard} STANDARD + ${ultra} ULTRA static, ${intel.length} packaged intelligence domains, Preflight Guard + Shadow DOM Sentinel + Live Shield`);
+if (!process.exitCode) console.log(`OK: Chrome Shield v1.3.0 validated: ${standard} STANDARD + ${ultra} ULTRA static, ${intel.length} packaged intelligence domains, Preflight Guard + state bridge + Shadow DOM Sentinel + Live Shield`);
