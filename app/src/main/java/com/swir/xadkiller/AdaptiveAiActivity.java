@@ -7,6 +7,7 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -42,11 +43,11 @@ public class AdaptiveAiActivity extends Activity {
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(18),dp(18),dp(18),dp(30));scroll.addView(root,new ScrollView.LayoutParams(-1,-2));
 
         TextView title=tv("ADAPTIVE AI LAB",27,text,true);title.setLetterSpacing(.07f);root.addView(title);
-        root.addView(tv("xADKiller v1.4 • lokalne uczenie + Community Intelligence",12,blue,true));space(root,12);
+        root.addView(tv("xADKiller v1.4.1 • Local + Community + Benchmark Learning",12,blue,true));space(root,12);
 
         LinearLayout intro=card(surface,18);root.addView(intro,lpWrap());
         intro.addView(tv("JAK TO DZIAŁA",15,text,true));
-        intro.addView(tv("Model uczy się tylko na telefonie. Zapamiętuje zahashowane cechy interfejsu, a nie pełny tekst ekranu. Community AI pobiera publiczne reguły z EasyList i AdGuard Filters i wyciąga z nich wyłącznie identyfikatory związane z reklamami.",12,muted,false));
+        intro.addView(tv("Model uczy się na telefonie. Zapamiętuje zahashowane cechy interfejsu, nie pełny tekst ekranu. Community/Benchmark AI pobiera publiczne reguły i strony testowe, wyciąga tylko krótkie sygnały reklamowe i nigdy nie wykonuje ich kodu JavaScript.",12,muted,false));
         space(intro,8);statusText=tv("",13,green,true);intro.addView(statusText);space(root,10);
 
         SharedPreferences prefs=getSharedPreferences(BlocklistManager.PREFS,MODE_PRIVATE);
@@ -68,16 +69,23 @@ public class AdaptiveAiActivity extends Activity {
         space(model,8);
         Button reset=button("RESETUJ LOKALNE UCZENIE",surface2,text);reset.setOnClickListener(v->confirmReset());model.addView(reset,lpH(46));space(root,10);
 
-        LinearLayout community=card(surface,18);root.addView(community,lpWrap());community.addView(tv("COMMUNITY INTELLIGENCE • GITHUB",15,text,true));
-        community.addView(tv("Źródła: EasyList oraz AdGuard Filters. xADKiller analizuje tekstowe reguły i uczy się nazw kontenerów/sygnałów reklamowych. Nie pobiera ani nie wykonuje kodu aplikacji z GitHuba.",12,muted,false));
+        LinearLayout community=card(surface,18);root.addView(community,lpWrap());community.addView(tv("COMMUNITY + BENCHMARK INTELLIGENCE",15,text,true));
+        community.addView(tv("Źródła: EasyList, AdGuard Filters, Turtlecute AdBlock Test, AdBlock-Tester.com i SuperAdBlockTest.com. Pobieramy tylko publiczny tekst/reguły i wyciągamy z nich identyfikatory reklamowe. Same strony testowe nigdy nie są automatycznie blokowane.",12,muted,false));
         space(community,6);communityStats=tv("",12,muted,false);community.addView(communityStats);space(community,8);
-        updateCommunity=button("AKTUALIZUJ COMMUNITY AI",blue,Color.BLACK);updateCommunity.setOnClickListener(v->updateCommunity());community.addView(updateCommunity,lpH(50));space(root,10);
+        updateCommunity=button("AKTUALIZUJ COMMUNITY + BENCHMARK AI",blue,Color.BLACK);updateCommunity.setOnClickListener(v->updateCommunity());community.addView(updateCommunity,lpH(50));space(root,10);
+
+        LinearLayout benchmark=card(surface,18);root.addView(benchmark,lpWrap());benchmark.addView(tv("BENCHMARK LAB • 3 TESTY",15,text,true));
+        benchmark.addView(tv("Uruchom test w przeglądarce przy aktywnym VPN/DNS i Smart Engine. Wynik traktujemy jako diagnostykę — nie uczymy modelu na ślepo tylko po to, żeby nabić procent.",12,muted,false));space(benchmark,8);
+        Button t1=button("1 • TURTLECUTE AD BLOCK TEST",surface2,text);t1.setOnClickListener(v->openUrl("https://adblock.turtlecute.org/"));benchmark.addView(t1,lpH(46));space(benchmark,6);
+        Button t2=button("2 • ADBLOCK-TESTER.COM",surface2,text);t2.setOnClickListener(v->openUrl("https://adblock-tester.com/"));benchmark.addView(t2,lpH(46));space(benchmark,6);
+        Button t3=button("3 • SUPER ADBLOCK TEST",surface2,text);t3.setOnClickListener(v->openUrl("https://superadblocktest.com/"));benchmark.addView(t3,lpH(46));space(benchmark,8);
+        Button learn=button("UCZ Z TYCH ŹRÓDEŁ TERAZ",blue,Color.BLACK);learn.setOnClickListener(v->updateCommunity());benchmark.addView(learn,lpH(50));space(root,10);
 
         LinearLayout tips=card(surface,18);root.addView(tips,lpWrap());tips.addView(tv("JAK NAJSZYBCIEJ UCZYĆ",15,text,true));
-        tips.addView(tv("1. Otwórz aplikację z reklamą i poczekaj aż reklama się pojawi.\n2. Wróć do xADKiller → Adaptive AI Lab.\n3. Kliknij „To była reklama”.\n4. Jeśli xADKiller pomyli normalny ekran z reklamą, kliknij „Fałszywy alarm”.\n\nPo kilku powtórzeniach model zacznie korygować score dla podobnych ekranów w tej aplikacji.",12,muted,false));space(root,10);
+        tips.addView(tv("1. Zaktualizuj Community + Benchmark AI.\n2. Uruchom jeden z trzech testów albo zwykłą aplikację z reklamą.\n3. Jeśli reklama przejdzie, wróć do xADKiller i użyj „To była reklama”.\n4. Przy pomyłce użyj „Fałszywy alarm”.\n\nW ten sposób benchmarki dostarczają wiedzę, ale lokalny feedback nadal ma najwyższe znaczenie.",12,muted,false));space(root,10);
 
         Button back=button("← WRÓĆ DO xADKILLER",surface2,text);back.setOnClickListener(v->finish());root.addView(back,lpH(50));space(root,8);
-        TextView footer=tv("Adaptive AI • on-device • no cloud training • BY SWIR",11,muted,false);footer.setGravity(Gravity.CENTER);root.addView(footer,lpWrap());
+        TextView footer=tv("Adaptive AI • Benchmark Learning • on-device • BY SWIR",11,muted,false);footer.setGravity(Gravity.CENTER);root.addView(footer,lpWrap());
         setContentView(scroll);
     }
 
@@ -88,21 +96,26 @@ public class AdaptiveAiActivity extends Activity {
     }
 
     private void updateCommunity(){
-        updateCommunity.setEnabled(false);updateCommunity.setText("UCZENIE Z GITHUBA…");
-        SystemLogStore.info(this,"AI_COMMUNITY","Ręczna aktualizacja Community AI rozpoczęta");
+        if(updateCommunity!=null){updateCommunity.setEnabled(false);updateCommunity.setText("UCZENIE Z 6 ŹRÓDEŁ…");}
+        SystemLogStore.info(this,"AI_COMMUNITY","Ręczna aktualizacja Community/Benchmark AI rozpoczęta");
         new Thread(()->{
             try{
                 int n=CommunityLearningManager.update(getApplicationContext());
-                runOnUiThread(()->{updateCommunity.setEnabled(true);updateCommunity.setText("AKTUALIZUJ COMMUNITY AI");Toast.makeText(this,"Community AI: "+n+" sygnałów.",Toast.LENGTH_LONG).show();refresh();});
+                runOnUiThread(()->{if(updateCommunity!=null){updateCommunity.setEnabled(true);updateCommunity.setText("AKTUALIZUJ COMMUNITY + BENCHMARK AI");}Toast.makeText(this,"AI: "+n+" sygnałów.",Toast.LENGTH_LONG).show();refresh();});
             }catch(Throwable t){
                 SystemLogStore.error(this,"AI_COMMUNITY","Ręczna aktualizacja nieudana",t);
-                runOnUiThread(()->{updateCommunity.setEnabled(true);updateCommunity.setText("AKTUALIZUJ COMMUNITY AI");Toast.makeText(this,"Błąd aktualizacji — zobacz SYSTEM CONSOLE.",Toast.LENGTH_LONG).show();refresh();});
+                runOnUiThread(()->{if(updateCommunity!=null){updateCommunity.setEnabled(true);updateCommunity.setText("AKTUALIZUJ COMMUNITY + BENCHMARK AI");}Toast.makeText(this,"Błąd aktualizacji — zobacz SYSTEM CONSOLE.",Toast.LENGTH_LONG).show();refresh();});
             }
-        },"xADKiller-CommunityUpdate").start();
+        },"xADKiller-BenchmarkUpdate").start();
+    }
+
+    private void openUrl(String url){
+        try{startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));}
+        catch(Exception e){SystemLogStore.error(this,"AI_UI","Nie udało się otworzyć testu",e);Toast.makeText(this,"Nie można otworzyć strony testowej.",Toast.LENGTH_LONG).show();}
     }
 
     private void confirmReset(){
-        new AlertDialog.Builder(this).setTitle("Zresetować Adaptive AI?").setMessage("Usunie tylko lokalnie nauczone wagi i feedback. Listy DNS i Community AI zostaną zachowane.").setNegativeButton("Anuluj",null).setPositiveButton("RESET",(d,w)->{AdaptiveLearningEngine.reset(this);refresh();Toast.makeText(this,"Model lokalny zresetowany.",Toast.LENGTH_LONG).show();}).show();
+        new AlertDialog.Builder(this).setTitle("Zresetować Adaptive AI?").setMessage("Usunie tylko lokalnie nauczone wagi i feedback. Listy DNS i Community/Benchmark AI zostaną zachowane.").setNegativeButton("Anuluj",null).setPositiveButton("RESET",(d,w)->{AdaptiveLearningEngine.reset(this);refresh();Toast.makeText(this,"Model lokalny zresetowany.",Toast.LENGTH_LONG).show();}).show();
     }
 
     private void refresh(){
@@ -115,8 +128,8 @@ public class AdaptiveAiActivity extends Activity {
             String dt=DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.MEDIUM,Locale.getDefault()).format(new Date(s.lastObservationTime));
             lastObservation.setText("Ostatnia obserwacja: "+(s.lastPackage.isEmpty()?"nieznana aplikacja":s.lastPackage)+" • base score="+s.lastBaseScore+" • "+dt);
         }else lastObservation.setText("Ostatnia obserwacja: brak — użyj aplikacji przy włączonym Smart Engine.");
-        int count=CommunityLearningManager.count(this);long last=p.getLong(CommunityLearningManager.KEY_LAST_UPDATE,0);
-        communityStats.setText("Sygnały Community: "+count+(last>0?" • aktualizacja: "+DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT,Locale.getDefault()).format(new Date(last)):" • tylko wbudowany seed"));
+        int count=CommunityLearningManager.count(this);long last=p.getLong(CommunityLearningManager.KEY_LAST_UPDATE,0);int ok=p.getInt(CommunityLearningManager.KEY_SOURCES_OK,0);int total=p.getInt(CommunityLearningManager.KEY_SOURCES_TOTAL,CommunityLearningManager.sourceCount());
+        communityStats.setText("Sygnały AI: "+count+" • źródła: "+(last>0?ok+"/"+total:"seed / "+total)+(last>0?" • aktualizacja: "+DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT,Locale.getDefault()).format(new Date(last)):""));
     }
 
     private TextView tv(String s,float sp,int c,boolean bold){TextView v=new TextView(this);v.setText(s);v.setTextSize(sp);v.setTextColor(c);v.setLineSpacing(0,1.08f);if(bold)v.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return v;}
