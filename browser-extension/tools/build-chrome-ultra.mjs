@@ -36,8 +36,8 @@ function normalizeSelector(v) {
   return s;
 }
 function parseOptions(raw) {
-  const condition = { resourceTypes: [...ALL_TYPES] };
-  if (!raw) return { ok: true, condition };
+  const condition = {};
+  if (!raw) return { ok: true, condition: { resourceTypes: [...ALL_TYPES] } };
   const positives = [];
   const negatives = [];
   const initiators = [];
@@ -64,10 +64,22 @@ function parseOptions(raw) {
     const mapped = TYPE_MAP[key];
     if (mapped) (neg ? negatives : positives).push(mapped);
   }
-  if (positives.length) condition.resourceTypes = [...new Set(positives)];
-  if (negatives.length) condition.excludedResourceTypes = [...new Set(negatives)];
-  if (initiators.length) condition.initiatorDomains = [...new Set(initiators)].slice(0, 100);
-  if (excludedInitiators.length) condition.excludedInitiatorDomains = [...new Set(excludedInitiators)].slice(0, 100);
+
+  // Chrome DNR rejects a condition when the same resource appears in both
+  // resourceTypes and excludedResourceTypes. Compile exclusions into the
+  // effective positive type set instead of emitting overlapping arrays.
+  const negativeTypes = new Set(negatives);
+  const baseTypes = positives.length ? [...new Set(positives)] : [...ALL_TYPES];
+  const effectiveTypes = baseTypes.filter((type) => !negativeTypes.has(type));
+  if (!effectiveTypes.length) return { ok: false };
+  condition.resourceTypes = effectiveTypes;
+
+  // Likewise, never emit the same initiator in include and exclude arrays.
+  const excludedSet = new Set(excludedInitiators);
+  const uniqueInitiators = [...new Set(initiators)].filter((d) => !excludedSet.has(d));
+  if (initiators.length && !uniqueInitiators.length) return { ok: false };
+  if (uniqueInitiators.length) condition.initiatorDomains = uniqueInitiators.slice(0, 100);
+  if (excludedSet.size) condition.excludedInitiatorDomains = [...excludedSet].slice(0, 100);
   return { ok: true, condition };
 }
 function parseNetworkLine(line0) {
@@ -96,7 +108,7 @@ function parseDomainLine(line0) {
   if (s.startsWith("||")) s = s.slice(2).split("^")[0].split("/")[0];
   s = cleanDomain(s.split(/[\s^/]/)[0]);
   if (!validDomain(s)) return null;
-  return { action: "block", priority: 1, condition: { urlFilter: `||${s}^`, resourceTypes: ALL_TYPES } };
+  return { action: "block", priority: 1, condition: { urlFilter: `||${s}^`, resourceTypes: [...ALL_TYPES] } };
 }
 function addRule(target, seen, parsed) {
   if (!parsed) return false;
