@@ -13,6 +13,6 @@ public class XadKillerApp extends Application {
             } catch (Throwable ignored) {}
             if (previous != null) previous.uncaughtException(thread, throwable);
         });
-        SystemLogStore.info(this, "APP", "Start procesu xADKiller 1.2.1 • Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")");
+        SystemLogStore.info(this, "APP", "Start procesu xADKiller 1.3.0 • Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")");
     }
 }
