@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="swir_bg">#090D14</color>
+    <color name="swir_surface">#111823</color>
+    <color name="swir_surface_2">#172231</color>
+    <color name="swir_blue">#18A7FF</color>
+    <color name="swir_cyan">#46E7FF</color>
+    <color name="swir_green">#50E3A4</color>
+    <color name="swir_red">#FF5570</color>
+    <color name="swir_text">#F4F8FF</color>
+    <color name="swir_muted">#9FB0C5</color>
+</resources>
