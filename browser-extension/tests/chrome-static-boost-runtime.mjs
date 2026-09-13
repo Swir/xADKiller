@@ -6,9 +6,7 @@ import path from "node:path";
 const root = path.resolve(import.meta.dirname, "..");
 const extensionPath = path.join(root,"dist","chrome");
 const meta = JSON.parse(fs.readFileSync(path.join(extensionPath,"titan-boost-meta.json"),"utf8"));
-const buildText = fs.readFileSync(path.join(extensionPath,"build-meta.js"),"utf8");
-const buildMatch = buildText.match(/XAD_BUILD_META\s*=\s*(\{[\s\S]*\})\s*;?$/);
-const buildMeta = buildMatch ? JSON.parse(buildMatch[1]) : {};
+const coreUltraRules = JSON.parse(fs.readFileSync(path.join(extensionPath,"rules","ultra.json"),"utf8")).length;
 const ids = ["titan_boost_1","titan_boost_2","titan_boost_3"];
 const delay = (ms) => new Promise((r) => setTimeout(r,ms));
 function log(msg,extra=""){console.log(`[xADKiller BOOST CI] ${msg}${extra?` • ${extra}`:""}`);}
@@ -55,7 +53,7 @@ async function setModeThroughRuntime(worker,mode){
 }
 
 if(!Array.isArray(meta.counts)||meta.counts.length!==3||meta.total<15000)throw new Error(`invalid boost meta ${JSON.stringify(meta)}`);
-if(Number(buildMeta.ultraRules||0)<7000)throw new Error(`invalid core ULTRA meta ${JSON.stringify(buildMeta)}`);
+if(coreUltraRules<7000)throw new Error(`invalid compiled core ULTRA count ${coreUltraRules}`);
 let browser;
 try{
   browser=await puppeteer.launch({
@@ -75,7 +73,7 @@ try{
   const modeResult=await setModeThroughRuntime(worker,"ultra");
   if(modeResult?.ok===false)throw new Error(`real setMode path failed: ${JSON.stringify(modeResult)}`);
 
-  const coreReserve=Number(buildMeta.ultraRules||10000);
+  const coreReserve=coreUltraRules;
   const totalBudget=Number(standard.available||0)+standardActive.reduce((s,id)=>s+Number(meta.counts[ids.indexOf(id)]||0),0)-coreReserve;
   let expectedUltra=0,remaining=Math.max(0,totalBudget);
   for(let i=0;i<ids.length;i++){
