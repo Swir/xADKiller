@@ -127,15 +127,13 @@ const processState = { exited: false, code: null, signal: null };
 try {
   const bundledChrome = chromium.executablePath();
   const chromeExecutable = [
-    "/usr/bin/google-chrome-stable",
-    "/usr/bin/google-chrome",
+    bundledChrome,
     "/usr/bin/chromium",
-    "/usr/bin/chromium-browser",
-    bundledChrome
+    "/usr/bin/chromium-browser"
   ].find((p) => p && fs.existsSync(p));
-  if (!chromeExecutable) throw new Error("No Chrome/Chromium executable found");
+  if (!chromeExecutable) throw new Error("No Chrome for Testing/Chromium executable found");
 
-  log("Launching Chrome headless through DevTools port", `${chromeExecutable} / ${debugPort}`);
+  log("Launching Chrome for Testing headless through DevTools port", `${chromeExecutable} / ${debugPort}`);
   chromeProcess = spawn(chromeExecutable, [
     "--headless=new",
     `--user-data-dir=${userDataDir}`,
