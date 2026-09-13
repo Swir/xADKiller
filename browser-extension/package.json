@@ -1,10 +1,10 @@
 {
   "name": "xadkiller-browser-extension",
   "private": true,
-  "version": "1.3.1",
+  "version": "1.4.0",
   "type": "module",
   "scripts": {
-    "build": "node --import ./tools/fetch-node-http.mjs tools/build-chrome-ultra.mjs && node --import ./tools/fetch-node-http.mjs tools/build-dynamic-intel.mjs && node tools/stamp-build-meta.mjs && node tools/optimize-chrome-runtime.mjs",
+    "build": "node --import ./tools/fetch-node-http.mjs tools/build-chrome-ultra.mjs && node --import ./tools/fetch-node-http.mjs tools/build-dynamic-intel.mjs && node --import ./tools/fetch-node-http.mjs tools/build-titan-session.mjs && node tools/stamp-build-meta.mjs && node tools/optimize-chrome-runtime.mjs",
     "validate": "node tools/validate-chrome-ultra.mjs",
     "test:chrome": "node tests/chrome-ultra-runtime.mjs",
     "build:legacy": "node tools/build.mjs"
