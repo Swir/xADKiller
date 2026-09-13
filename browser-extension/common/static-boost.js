@@ -2,6 +2,7 @@
   const IDS = ["titan_boost_1", "titan_boost_2", "titan_boost_3"];
   let metaPromise = null;
   let applying = null;
+  let deferredTimer = null;
 
   function local(defaults) {
     return new Promise((resolve) => chrome.storage.local.get(defaults, resolve));
@@ -26,6 +27,10 @@
   function updateRulesets(enableRulesetIds, disableRulesetIds) {
     return chrome.declarativeNetRequest.updateEnabledRulesets({ enableRulesetIds, disableRulesetIds });
   }
+  function scheduleApply(delay = 350) {
+    clearTimeout(deferredTimer);
+    deferredTimer = setTimeout(() => apply().catch(() => {}), delay);
+  }
 
   async function apply() {
     if (applying) return applying;
@@ -39,7 +44,14 @@
       const counts = IDS.map((_, i) => Number(m.counts[i] || 0));
       const currentlyEnabled = IDS.filter((id) => enabled.includes(id));
       const currentBoostCost = currentlyEnabled.reduce((sum, id) => sum + counts[IDS.indexOf(id)], 0);
-      let budget = available + currentBoostCost;
+
+      // A storage mode change can arrive a fraction of a second before the
+      // core background engine has enabled the packaged ULTRA ruleset. Never
+      // let optional boosts consume quota that the core 10k ULTRA pack needs.
+      const ultraCoreReserve = prefs.enabled !== false && prefs.mode === "ultra" && !enabled.includes("ultra")
+        ? Math.max(0, Number(globalThis.XAD_BUILD_META?.ultraRules || 10000))
+        : 0;
+      let budget = Math.max(0, available + currentBoostCost - ultraCoreReserve);
       const target = [];
       if (prefs.enabled !== false) {
         const maxSets = prefs.mode === "ultra" ? IDS.length : 1;
@@ -57,8 +69,6 @@
           await updateRulesets(enableRulesetIds, disableRulesetIds);
         } catch (error) {
           console.warn("xADKiller Static Boost activation failed, falling back safely", error);
-          // Keep guaranteed core rulesets untouched. If a bulk activation races
-          // another extension for the global quota, retry one boost at a time.
           const now = await enabledRulesets();
           for (const id of IDS) {
             if (now.includes(id) && !target.includes(id)) {
@@ -68,7 +78,11 @@
           for (const id of target) {
             const check = await enabledRulesets();
             if (check.includes(id)) continue;
-            const free = await availableStatic();
+            let free = await availableStatic();
+            const reserve = prefs.enabled !== false && prefs.mode === "ultra" && !check.includes("ultra")
+              ? Math.max(0, Number(globalThis.XAD_BUILD_META?.ultraRules || 10000))
+              : 0;
+            free = Math.max(0, free - reserve);
             const cost = counts[IDS.indexOf(id)];
             if (cost <= free) {
               try { await updateRulesets([id], []); } catch (_) { break; }
@@ -86,7 +100,7 @@
         xadStaticBoostAvailable:freeAfter,
         xadStaticBoostCheckedAt:Date.now()
       }, resolve));
-      return { ok:true, active, activeRules, available:freeAfter, packaged:m.total };
+      return { ok:true, active, activeRules, available:freeAfter, packaged:m.total, reservedCore:ultraCoreReserve };
     })().finally(() => { applying = null; });
     return applying;
   }
@@ -104,10 +118,10 @@
     };
   }
 
-  chrome.runtime.onInstalled.addListener(() => apply().catch(() => {}));
-  chrome.runtime.onStartup.addListener(() => apply().catch(() => {}));
+  chrome.runtime.onInstalled.addListener(() => scheduleApply(250));
+  chrome.runtime.onStartup.addListener(() => scheduleApply(250));
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && (changes.enabled || changes.mode)) apply().catch(() => {});
+    if (area === "local" && (changes.enabled || changes.mode)) scheduleApply(450);
   });
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg?.type === "getStaticBoostStats") {
@@ -121,5 +135,5 @@
     return false;
   });
 
-  apply().catch(() => {});
+  scheduleApply(250);
 })();
