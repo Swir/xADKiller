@@ -14,6 +14,12 @@ const intelPath = path.join(out, "dynamic-intel-meta.json");
 if (fs.existsSync(intelPath)) {
   const intel = JSON.parse(fs.readFileSync(intelPath, "utf8"));
   meta.dynamicIntelDomains = Number(intel.domains || 0);
+  meta.dynamicIntelStrategy = String(intel.strategy || "");
+}
+const titanPath = path.join(out, "titan-session-meta.json");
+if (fs.existsSync(titanPath)) {
+  const titan = JSON.parse(fs.readFileSync(titanPath, "utf8"));
+  meta.titanSessionRules = Number(titan.rules || 0);
 }
 fs.writeFileSync(metaPath, `self.XAD_BUILD_META=${JSON.stringify(meta)};\n`);
-console.log(`OK: stamped build metadata version=${meta.version}, dynamicIntelDomains=${meta.dynamicIntelDomains || 0}`);
+console.log(`OK: stamped build metadata version=${meta.version}, dynamicIntelDomains=${meta.dynamicIntelDomains || 0}, titanSessionRules=${meta.titanSessionRules || 0}`);
