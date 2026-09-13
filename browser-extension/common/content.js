@@ -198,10 +198,12 @@
     smartScan(root);
     tryAutoSkip(scope);
   }
-  function scheduleScan(root) {
+  function scheduleScan() {
     if (!active()) return;
     clearTimeout(scanTimer);
-    scanTimer = setTimeout(() => scan(root || document), 45);
+    // Coalesce a burst of DOM mutations into one bounded full-page scan. Scanning
+    // only the last added node can miss an ad inserted earlier in the same burst.
+    scanTimer = setTimeout(() => scan(document), 45);
   }
   function updateWeights(tokens, delta) {
     const next = { ...(learnWeights || {}) };
@@ -278,7 +280,14 @@
   function startObserver() {
     if (observer) return;
     observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) for (const node of mutation.addedNodes) if (node instanceof Element) scheduleScan(node);
+      let hasAddedElement = false;
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node instanceof Element) { hasAddedElement = true; break; }
+        }
+        if (hasAddedElement) break;
+      }
+      if (hasAddedElement) scheduleScan();
     });
     const begin = () => {
       if (!document.documentElement) return setTimeout(begin, 20);
