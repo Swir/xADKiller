@@ -15,6 +15,7 @@ const SOURCES = [
 
 const STANDARD_CAP = 19700;
 const ULTRA_CAP = 10000;
+const COMPAT_CAP = 8000;
 const ALL_TYPES = ["script","image","stylesheet","xmlhttprequest","sub_frame","media","font","ping","websocket","other"];
 const TYPE_MAP = {
   script: "script", image: "image", stylesheet: "stylesheet", xhr: "xmlhttprequest",
@@ -104,6 +105,7 @@ function parseNetworkLine(line0) {
   const dollar = line.indexOf("$");
   if (dollar >= 0) { pattern = line.slice(0, dollar); options = line.slice(dollar + 1); }
   pattern = pattern.trim();
+  // ABP regex uses /.../. A normal substring such as /ads.js must survive.
   if (pattern.length > 2 && pattern.startsWith("/") && pattern.endsWith("/")) return null;
   if (!validDnrUrlFilter(pattern)) return null;
   const anchored = pattern.startsWith("||") || pattern.startsWith("|http://") || pattern.startsWith("|https://");
@@ -203,6 +205,7 @@ function materialize(rawRules, startId = 1) {
 
 const standard = [];
 const ultra = [];
+const compatCandidates = [];
 const standardSeen = new Set();
 const ultraSeen = new Set();
 const genericSelectors = new Set();
@@ -218,20 +221,35 @@ for (const source of SOURCES) {
     const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
     if (source.cosmetic) for (const line of lines) parseCosmeticLine(line, genericSelectors, scopedSelectors);
     const parsed = lines.map((line) => source.id === "hagezi-ultimate" ? parseDomainLine(line) : parseNetworkLine(line)).filter(Boolean);
-    const best = selectBest(parsed, source.budget);
-    const target = source.mode === "ultra" ? ultra : standard;
-    const seen = source.mode === "ultra" ? ultraSeen : standardSeen;
-    const cap = source.mode === "ultra" ? ULTRA_CAP : STANDARD_CAP;
-    const added = addRules(target, seen, best, cap);
-    sourceStatus.push({ id: source.id, ok: true, parsed: parsed.length, selected: best.length, added });
+
+    if (source.mode === "standard") {
+      const blocks = parsed.filter((r) => r.action === "block");
+      const allows = parsed.filter((r) => r.action === "allow");
+      compatCandidates.push(...allows);
+      const best = selectBest(blocks, source.budget);
+      const added = addRules(standard, standardSeen, best, STANDARD_CAP);
+      sourceStatus.push({ id: source.id, ok: true, parsed: parsed.length, blockCandidates: blocks.length, allowCandidates: allows.length, selected: best.length, added });
+    } else {
+      const blocks = parsed.filter((r) => r.action === "block");
+      const best = selectBest(blocks, source.budget);
+      const added = addRules(ultra, ultraSeen, best, ULTRA_CAP);
+      sourceStatus.push({ id: source.id, ok: true, parsed: parsed.length, blockCandidates: blocks.length, allowCandidates: 0, selected: best.length, added });
+    }
   } catch (error) {
     sourceStatus.push({ id: source.id, ok: false, error: String(error?.message || error) });
   }
 }
 
-if (standard.length < 15000) throw new Error(`Too few STANDARD rules: ${standard.length}`);
-if (ultra.length < 7000) throw new Error(`Too few ULTRA rules: ${ultra.length}`);
-if (standard.length + ultra.length > 29850) throw new Error(`Static rule budget exceeded: ${standard.length + ultra.length}`);
+const compat = selectBest(compatCandidates, COMPAT_CAP);
+
+if (standard.length < 15000) throw new Error(`Too few STANDARD block rules: ${standard.length}`);
+if (ultra.length < 7000) throw new Error(`Too few ULTRA block rules: ${ultra.length}`);
+if (compat.length < 1000) throw new Error(`Too few COMPAT exception rules: ${compat.length}`);
+if (standard.length + ultra.length > 29850) throw new Error(`ULTRA static rule budget exceeded: ${standard.length + ultra.length}`);
+if (standard.length + compat.length > 29850) throw new Error(`STANDARD+COMPAT static rule budget exceeded: ${standard.length + compat.length}`);
+if (standard.some((r) => r.action !== "block")) throw new Error("STANDARD contains non-block actions");
+if (ultra.some((r) => r.action !== "block")) throw new Error("ULTRA contains non-block actions");
+if (compat.some((r) => r.action !== "allow")) throw new Error("COMPAT contains non-allow actions");
 if (!sourceStatus.some((s) => s.id === "easylist" && s.ok)) throw new Error("EasyList unavailable");
 if (genericSelectors.size < 500) throw new Error(`Too few generic cosmetic selectors: ${genericSelectors.size}`);
 if (scopedSelectors.size < 100) throw new Error(`Too few scoped cosmetic domains: ${scopedSelectors.size}`);
@@ -243,6 +261,7 @@ fs.mkdirSync(path.join(out, "rules"), { recursive: true });
 fs.rmSync(path.join(out, "rules", "domains.txt"), { force: true });
 fs.writeFileSync(path.join(out, "rules", "standard.json"), JSON.stringify(materialize(standard), null, 2));
 fs.writeFileSync(path.join(out, "rules", "ultra.json"), JSON.stringify(materialize(ultra), null, 2));
+fs.writeFileSync(path.join(out, "rules", "compat.json"), JSON.stringify(materialize(compat), null, 2));
 fs.copyFileSync(path.join(root, "chrome", "manifest.json"), path.join(out, "manifest.json"));
 
 const cosmeticData = {
@@ -256,6 +275,7 @@ const buildMeta = {
   builtAt: new Date().toISOString(),
   standardRules: standard.length,
   ultraRules: ultra.length,
+  compatRules: compat.length,
   cosmeticGeneric: genericSelectors.size,
   cosmeticDomains: scopedSelectors.size,
   sources: sourceStatus
