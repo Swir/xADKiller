@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
   "minimum_chrome_version": "121",
   "permissions": [
     "storage",
+    "alarms",
     "declarativeNetRequest",
     "declarativeNetRequestFeedback",
     "activeTab"
@@ -48,10 +49,29 @@
         "https://*/*"
       ],
       "js": [
-        "cosmetic-data.js",
-        "content.js"
+        "early-guard.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "cosmetic-data.js",
+        "content.js",
+        "shadow-sentinel.js"
+      ],
+      "run_at": "document_start",
+      "world": "ISOLATED",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
     }
   ]
 }
