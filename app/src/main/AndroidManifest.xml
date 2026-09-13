@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
+        android:name=".XadKillerApp"
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher"
         android:label="xADKiller"
@@ -18,7 +19,11 @@
         android:theme="@style/Theme.XadKiller">
 
         <activity
-            android:name=".MainActivity"
+            android:name=".SystemConsoleActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".MainActivityV12"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -27,7 +32,7 @@
         </activity>
 
         <service
-            android:name=".AdBlockVpnService"
+            android:name=".AdBlockVpnServiceV12"
             android:exported="false"
             android:foregroundServiceType="specialUse"
             android:permission="android.permission.BIND_VPN_SERVICE">
@@ -43,7 +48,7 @@
         </service>
 
         <receiver
-            android:name=".BootReceiver"
+            android:name=".BootReceiverV12"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
