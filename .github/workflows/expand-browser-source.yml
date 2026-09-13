@@ -41,17 +41,46 @@ jobs:
           node --check dist/firefox/popup.js
       - name: Firefox web-ext lint
         run: npx web-ext lint --source-dir dist/firefox --warnings-as-errors
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Chromium and Firefox
+        run: npx playwright install --with-deps chromium firefox
+      - name: Firefox temporary-install smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          FIREFOX_BIN="$(node -e "import('playwright').then(({firefox})=>console.log(firefox.executablePath()))")"
+          echo "Firefox binary: $FIREFOX_BIN"
+          test -x "$FIREFOX_BIN"
+          set +e
+          xvfb-run -a timeout 20s npx web-ext run \
+            --source-dir dist/firefox \
+            --firefox "$FIREFOX_BIN" \
+            --start-url about:blank \
+            --no-reload \
+            --no-input
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
+            echo "Firefox smoke test failed with exit code $code"
+            exit "$code"
+          fi
+          echo "Firefox smoke test passed (extension remained loaded until controlled timeout)."
       - name: Chromium runtime test
         run: xvfb-run -a npm run test:chrome
-      - name: Package store ZIPs
+      - name: Package Chrome store ZIP
         run: |
           mkdir -p packages
           (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.0.0.zip .)
-          (cd dist/firefox && zip -qr ../../packages/xADKiller-Firefox-v1.0.0.zip .)
+      - name: Package Firefox with web-ext
+        run: npx web-ext build --source-dir dist/firefox --artifacts-dir packages --filename xADKiller-Firefox-v1.0.0.zip --overwrite-dest
       - name: Checksums
-        run: sha256sum packages/*.zip | tee packages/SHA256SUMS.txt
+        run: |
+          cd packages
+          sha256sum *.zip | tee SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+      - name: Verify packaged archives
+        run: |
+          unzip -tq packages/xADKiller-Chrome-v1.0.0.zip
+          unzip -tq packages/xADKiller-Firefox-v1.0.0.zip
       - name: Upload tested packages
         uses: actions/upload-artifact@v4
         with:
