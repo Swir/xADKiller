@@ -82,17 +82,17 @@ try {
   const bundledChrome = chromium.executablePath();
   const chromeExecutable = fs.existsSync(bundledChrome)
     ? bundledChrome
-    : ["/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium"].find((p) => fs.existsSync(p));
+    : ["/usr/bin/chromium-browser", "/usr/bin/chromium", "/usr/bin/google-chrome-stable", "/usr/bin/google-chrome"].find((p) => fs.existsSync(p));
   if (!chromeExecutable) throw new Error("No Chrome/Chromium executable found");
 
-  log("Launching Chromium through DevTools port", `${chromeExecutable} / ${debugPort}`);
+  log("Launching Chromium headless through DevTools port", `${chromeExecutable} / ${debugPort}`);
   chromeProcess = spawn(chromeExecutable, [
+    "--headless=new",
     `--user-data-dir=${userDataDir}`,
     `--remote-debugging-port=${debugPort}`,
     "--remote-debugging-address=127.0.0.1",
     `--disable-extensions-except=${extensionPath}`,
     `--load-extension=${extensionPath}`,
-    "--disable-gpu",
     "--disable-dev-shm-usage",
     "--no-first-run",
     "--no-default-browser-check",
@@ -119,7 +119,7 @@ try {
     processState.signal = signal;
   });
 
-  const version = await waitForDevTools(debugPort, 60000, processState);
+  const version = await waitForDevTools(debugPort, 30000, processState);
   log("DevTools endpoint ready", version.Browser || "Chrome");
 
   browser = await withTimeout(chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`), 15000, "CDP connection");
