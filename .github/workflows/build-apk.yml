@@ -24,6 +24,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Stable test signing key
+        run: |
+          mkdir -p "$HOME/.android"
+          base64 -d ci/xadkiller-debug.keystore.b64 > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey >/dev/null
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
       - name: APK checksum
