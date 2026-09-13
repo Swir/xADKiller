@@ -8,13 +8,13 @@ const readJson = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
 
 const manifest = readJson(path.join(base, "manifest.json"));
 if (manifest.manifest_version !== 3) fail("manifest_version must be 3");
-if (manifest.version !== "1.3.0") fail(`unexpected version ${manifest.version}`);
+if (manifest.version !== "1.3.1") fail(`unexpected version ${manifest.version}`);
 if (Number(manifest.minimum_chrome_version) < 121) fail("minimum Chrome must be >=121");
 for (const p of ["storage","alarms","declarativeNetRequest","declarativeNetRequestFeedback","activeTab"]) {
   if (!manifest.permissions?.includes(p)) fail(`missing permission ${p}`);
 }
 if (!manifest.host_permissions?.includes("<all_urls>")) fail("missing host access");
-if (manifest.background?.service_worker !== "background.js") fail("service worker missing");
+if (manifest.background?.service_worker !== "service-worker.js") fail("composite service worker missing");
 const rs = manifest.declarative_net_request?.rule_resources || [];
 if (!rs.some((x) => x.id === "standard" && x.enabled === true)) fail("standard ruleset missing/enabled state wrong");
 if (!rs.some((x) => x.id === "ultra" && x.enabled === false)) fail("ultra ruleset missing/enabled state wrong");
@@ -29,21 +29,24 @@ const cosmeticIndex = isolated.js?.indexOf("cosmetic-data.js") ?? -1;
 const contentIndex = isolated.js?.indexOf("content.js") ?? -1;
 if (cosmeticIndex < 0 || contentIndex < 0 || cosmeticIndex > contentIndex) fail("cosmetic data must load before content.js");
 if (!isolated.js?.includes("shadow-sentinel.js")) fail("Shadow DOM Sentinel missing");
+if (!isolated.js?.includes("live-cosmetic.js")) fail("Live Cosmetic Matrix missing");
 if (isolated.all_frames !== true) fail("isolated engine must run in all frames");
 
 for (const rel of [
-  "background.js","early-guard.js","preflight-config.js","content.js","shadow-sentinel.js","cosmetic-data.js","build-meta.js","dynamic-intel-meta.json",
+  "service-worker.js","background.js","live-signatures.js","early-guard.js","preflight-config.js","content.js","shadow-sentinel.js","live-cosmetic.js","cosmetic-data.js","build-meta.js","dynamic-intel-meta.json",
   "popup.html","popup.js","popup.css","rules/standard.json","rules/ultra.json","rules/dynamic-intel.json","icons/icon128.png"
 ]) {
   if (!fs.existsSync(path.join(base, rel))) fail(`missing ${rel}`);
 }
+
+const composite = fs.readFileSync(path.join(base, "service-worker.js"), "utf8");
+if (!composite.includes("background.js") || !composite.includes("live-signatures.js")) fail("composite worker does not load both engines");
 
 function overlap(a, b) {
   if (!Array.isArray(a) || !Array.isArray(b)) return [];
   const bs = new Set(b);
   return [...new Set(a)].filter((x) => bs.has(x));
 }
-
 function validateRules(name, min, max) {
   const rules = readJson(path.join(base, "rules", `${name}.json`));
   if (rules.length < min) fail(`${name}: too few rules ${rules.length}`);
@@ -57,7 +60,6 @@ function validateRules(name, min, max) {
     if (!rule.condition?.urlFilter) fail(`${name} ${rule.id}: urlFilter missing`);
     if (rule.condition.regexFilter) fail(`${name} ${rule.id}: regex rules disabled for beta`);
     if (!Array.isArray(rule.condition?.resourceTypes) || !rule.condition.resourceTypes.length) fail(`${name} ${rule.id}: resourceTypes missing`);
-
     const resourceOverlap = overlap(rule.condition.resourceTypes, rule.condition.excludedResourceTypes);
     if (resourceOverlap.length) fail(`${name} ${rule.id}: resourceTypes overlap excludedResourceTypes: ${resourceOverlap.join(",")}`);
     const initiatorOverlap = overlap(rule.condition.initiatorDomains, rule.condition.excludedInitiatorDomains);
@@ -82,14 +84,17 @@ for (const domain of intel.slice(0, 200)) {
 }
 
 const background = fs.readFileSync(path.join(base, "background.js"), "utf8");
-if (!background.includes("xadkiller-live-shield.json")) fail("Live Shield feed endpoint missing");
+const liveMatrix = fs.readFileSync(path.join(base, "live-signatures.js"), "utf8");
+if (!background.includes("xadkiller-live-shield.json")) fail("Live Shield domain feed endpoint missing");
 if (!background.includes("chrome.alarms")) fail("Live Shield periodic refresh missing");
-if (!background.includes("LIVE_RULE_MIN")) fail("Live Shield dynamic rule range missing");
+if (!liveMatrix.includes("browser-intelligence/xadkiller-live-shield.json")) fail("Live Matrix feed endpoint missing");
+if (!liveMatrix.includes("raw.githubusercontent.com/Swir/xADKiller/main/")) fail("Live Matrix must use official main-branch feed");
+if (!liveMatrix.includes("RULE_MIN = 150000")) fail("Live Matrix dedicated DNR range missing");
 
 const guard = fs.readFileSync(path.join(base, "early-guard.js"), "utf8");
 const bridge = fs.readFileSync(path.join(base, "preflight-config.js"), "utf8");
 if (!guard.includes("xadkiller:preflight-config") || !bridge.includes("xadkiller:preflight-config")) fail("Preflight state synchronization missing");
-if (!guard.includes("wss?") && !guard.includes("websocket")) fail("Preflight WebSocket handling missing");
+if (!guard.includes("websocket")) fail("Preflight WebSocket handling missing");
 
 for (const lang of ["en","pl","es","de","fr"]) {
   const messages = readJson(path.join(base, "_locales", lang, "messages.json"));
@@ -98,10 +103,10 @@ for (const lang of ["en","pl","es","de","fr"]) {
   }
 }
 
-for (const rel of ["background.js","early-guard.js","preflight-config.js","content.js","shadow-sentinel.js","popup.js"]) {
+for (const rel of ["service-worker.js","background.js","live-signatures.js","early-guard.js","preflight-config.js","content.js","shadow-sentinel.js","live-cosmetic.js","popup.js"]) {
   const code = fs.readFileSync(path.join(base, rel), "utf8");
   if (/\beval\s*\(|\bnew\s+Function\s*\(/.test(code)) fail(`${rel}: dynamic code execution forbidden`);
   if (/importScripts\s*\(\s*["']https?:/i.test(code)) fail(`${rel}: remote hosted code forbidden`);
 }
 
-if (!process.exitCode) console.log(`OK: Chrome Shield v1.3.0 validated: ${standard} STANDARD + ${ultra} ULTRA static, ${intel.length} packaged intelligence domains, Preflight Guard + state bridge + Shadow DOM Sentinel + Live Shield`);
+if (!process.exitCode) console.log(`OK: Chrome Shield v1.3.1 validated: ${standard} STANDARD + ${ultra} ULTRA static, ${intel.length} packaged intelligence domains, Preflight + Shadow DOM + Live Domain Feed + Live Signature/Cosmetic Matrix`);
