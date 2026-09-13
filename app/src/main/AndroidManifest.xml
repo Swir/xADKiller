@@ -23,7 +23,7 @@
             android:exported="false" />
 
         <activity
-            android:name=".MainActivityV12"
+            android:name=".MainActivityV121"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -32,7 +32,7 @@
         </activity>
 
         <service
-            android:name=".AdBlockVpnServiceV12"
+            android:name=".AdBlockVpnServiceV121"
             android:exported="false"
             android:foregroundServiceType="specialUse"
             android:permission="android.permission.BIND_VPN_SERVICE">
@@ -48,7 +48,7 @@
         </service>
 
         <receiver
-            android:name=".BootReceiverV12"
+            android:name=".BootReceiverV121"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
