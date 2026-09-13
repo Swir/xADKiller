@@ -56,6 +56,12 @@ async function waitMode(worker, mode, timeout = 18000) {
   throw new Error(`COMPAT transition timeout for ${mode}: ${JSON.stringify(last)}`);
 }
 
+async function openPopup(browser, extensionId) {
+  const popup = await browser.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil:"domcontentloaded", timeout:12000 });
+  return popup;
+}
+
 assertPack("STANDARD", standardRules, "block", 15000);
 assertPack("COMPAT", compatRules, "allow", 1000);
 assertPack("ULTRA", ultraRules, "block", 7000);
@@ -77,12 +83,17 @@ try {
   const initial = await waitMode(worker, "standard", 18000);
   log("STANDARD mode", initial.enabled.join(","));
 
-  const popup = await browser.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil:"domcontentloaded", timeout:12000 });
+  let popup = await openPopup(browser, extensionId);
   await popup.select("#mode", "ultra");
   const ultra = await waitMode(worker, "ultra", 22000);
   log("ULTRA mode", ultra.enabled.join(","));
+  await popup.close();
 
+  // Reopen the popup like a real user. This guarantees its async stateBusy
+  // guard from the previous transition cannot swallow the next change event.
+  popup = await openPopup(browser, extensionId);
+  const popupMode = await popup.$eval("#mode", (el) => el.value);
+  if (popupMode !== "ultra") throw new Error(`popup did not reflect ULTRA state: ${popupMode}`);
   await popup.select("#mode", "standard");
   const standard = await waitMode(worker, "standard", 22000);
   log("STANDARD restored", standard.enabled.join(","));
@@ -91,6 +102,7 @@ try {
   if (!compatStats?.ok || compatStats.active !== true || compatStats.mode !== "standard") {
     throw new Error(`COMPAT stats mismatch: ${JSON.stringify(compatStats)}`);
   }
+  await popup.close();
   log("PASS", `foreign exceptions isolated from ULTRA; own whitelist remains dynamic and separate`);
 } finally {
   if (browser) { try { await browser.close(); } catch (_) {} }
