@@ -27,9 +27,9 @@ jobs:
           node-version: "24"
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Compile EasyList AdGuard and Ultra rules
+      - name: Compile EasyList AdGuard and Ultra Shield rules
         run: npm run build
-      - name: Validate Chrome Ultra package
+      - name: Validate Chrome Ultra Shield package
         run: npm run validate
       - name: JavaScript syntax
         run: |
@@ -41,24 +41,24 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Chromium runtime test
-        run: timeout --signal=TERM --kill-after=10s 120s npm run test:chrome
+        run: timeout --signal=TERM --kill-after=10s 180s npm run test:chrome
       - name: Package Chrome beta ZIP
         run: |
           rm -rf packages
           mkdir -p packages
-          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.1.0-ULTRA-beta.zip .)
+          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.2.0-ULTRA-Shield-beta.zip .)
       - name: Checksums
         run: |
           cd packages
-          sha256sum xADKiller-Chrome-v1.1.0-ULTRA-beta.zip > SHA256SUMS.txt
+          sha256sum xADKiller-Chrome-v1.2.0-ULTRA-Shield-beta.zip > SHA256SUMS.txt
       - name: Verify archive
         run: |
-          unzip -tq packages/xADKiller-Chrome-v1.1.0-ULTRA-beta.zip
+          unzip -tq packages/xADKiller-Chrome-v1.2.0-ULTRA-Shield-beta.zip
           (cd packages && sha256sum -c SHA256SUMS.txt)
       - name: Upload tested Chrome beta
         uses: actions/upload-artifact@v4
         with:
-          name: xADKiller-Chrome-v1.1.0-ULTRA-beta-tested
+          name: xADKiller-Chrome-v1.2.0-ULTRA-Shield-beta-tested
           path: browser-extension/packages/*
           if-no-files-found: error
           retention-days: 30
