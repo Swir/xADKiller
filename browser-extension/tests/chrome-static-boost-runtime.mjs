@@ -43,14 +43,6 @@ async function waitState(worker,{minBoost=0,requireUltra=false},timeout=18000){
   }
   throw new Error(`boost activation timeout: ${JSON.stringify(last)}`);
 }
-async function setModeThroughRuntime(worker,mode){
-  return await worker.evaluate(async(m)=>await new Promise((resolve,reject)=>{
-    chrome.runtime.sendMessage({type:"setMode",mode:m},(response)=>{
-      if(chrome.runtime.lastError)reject(new Error(chrome.runtime.lastError.message));
-      else resolve(response||{});
-    });
-  }),mode);
-}
 
 if(!Array.isArray(meta.counts)||meta.counts.length!==3||meta.total<15000)throw new Error(`invalid boost meta ${JSON.stringify(meta)}`);
 if(coreUltraRules<7000)throw new Error(`invalid compiled core ULTRA count ${coreUltraRules}`);
@@ -61,6 +53,7 @@ try{
     args:["--no-sandbox","--disable-dev-shm-usage","--no-first-run","--no-default-browser-check"],timeout:60000
   });
   const worker=await workerFor(browser);
+  const extensionId=await worker.evaluate(()=>chrome.runtime.id);
   const initialFree=await worker.evaluate(async()=>await chrome.declarativeNetRequest.getAvailableStaticRuleCount());
   log("Initial available static quota",String(initialFree));
   const expectedStandard=initialFree>=Number(meta.counts[0]||0)?1:0;
@@ -70,16 +63,21 @@ try{
   if(!standard.enabled.includes("standard"))throw new Error(`STANDARD core ruleset missing: ${standard.enabled.join(",")}`);
   log("STANDARD adaptive boost",JSON.stringify({active:standardActive,available:standard.available}));
 
-  const modeResult=await setModeThroughRuntime(worker,"ultra");
-  if(modeResult?.ok===false)throw new Error(`real setMode path failed: ${JSON.stringify(modeResult)}`);
-
   const coreReserve=coreUltraRules;
   const totalBudget=Number(standard.available||0)+standardActive.reduce((s,id)=>s+Number(meta.counts[ids.indexOf(id)]||0),0)-coreReserve;
   let expectedUltra=0,remaining=Math.max(0,totalBudget);
   for(let i=0;i<ids.length;i++){
     const cost=Number(meta.counts[i]||0);if(cost>0&&cost<=remaining){expectedUltra++;remaining-=cost;}else break;
   }
+
+  // Exercise exactly the same UI path as a real user: open the extension popup
+  // and change the mode selector. popup.js sends the setMode message to the worker.
+  const popup=await browser.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`,{waitUntil:"domcontentloaded",timeout:12000});
+  await popup.select("#mode","ultra");
+
   const ultra=await waitState(worker,{minBoost:expectedUltra,requireUltra:true},22000);
+  await popup.close();
   const ultraActive=ultra.enabled.filter((x)=>ids.includes(x));
   if(ultraActive.length!==expectedUltra)throw new Error(`ULTRA adaptive boost mismatch: expected=${expectedUltra}, state=${JSON.stringify(ultra)}`);
   if(!ultra.enabled.includes("standard")||!ultra.enabled.includes("ultra"))throw new Error(`core rulesets disturbed by boost: ${ultra.enabled.join(",")}`);
