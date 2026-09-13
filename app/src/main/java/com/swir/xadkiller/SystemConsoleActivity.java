@@ -43,7 +43,8 @@ public class SystemConsoleActivity extends Activity {
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(18),dp(18),dp(18),dp(30)); scroll.addView(root,new ScrollView.LayoutParams(-1,-2));
 
         TextView title=tv("SYSTEM CONSOLE",26,text,true); title.setLetterSpacing(.08f); root.addView(title);
-        root.addView(tv("xADKiller 1.3.0 • DNS + Smart Engine • diagnostyka i błędy",12,blue,true));
+        root.addView(tv("xADKiller 1.5.0 • DNS + Smart Engine + Adaptive AI • diagnostics",12,blue,true));
+        root.addView(tv(I18n.languageStatus(this),10,muted,false));
         addSpace(root,12);
 
         LinearLayout health=card(surface,18); root.addView(health,lpMatchWrap());
@@ -60,7 +61,7 @@ public class SystemConsoleActivity extends Activity {
         addSpace(root,12);
 
         LinearLayout controls=card(surface,18); root.addView(controls,lpMatchWrap()); controls.addView(tv("LOGOWANIE",15,text,true));
-        Switch verbose=new Switch(this); verbose.setText("Pełny log DNS (również dozwolone zapytania)"); verbose.setTextColor(text); verbose.setTextSize(13); verbose.setChecked(getSharedPreferences(BlocklistManager.PREFS,MODE_PRIVATE).getBoolean(SystemLogStore.PREF_VERBOSE_DNS,false));
+        Switch verbose=new Switch(this); verbose.setText(I18n.t(this,"Pełny log DNS (również dozwolone zapytania)")); verbose.setTextColor(text); verbose.setTextSize(13); verbose.setChecked(getSharedPreferences(BlocklistManager.PREFS,MODE_PRIVATE).getBoolean(SystemLogStore.PREF_VERBOSE_DNS,false));
         verbose.setOnCheckedChangeListener((b,on)->{getSharedPreferences(BlocklistManager.PREFS,MODE_PRIVATE).edit().putBoolean(SystemLogStore.PREF_VERBOSE_DNS,on).apply();SystemLogStore.info(this,"CONSOLE","Pełny log DNS: "+(on?"WŁĄCZONY":"WYŁĄCZONY"));refresh();}); controls.addView(verbose,lpMatchWrap());
         controls.addView(tv("Smart Engine zapisuje tutaj AD_DETECTED, AUTO-SKIP, MUTE, RESTORE i błędy. Log pozostaje lokalnie na telefonie.",11,muted,false));
         addSpace(controls,8);
@@ -72,28 +73,30 @@ public class SystemConsoleActivity extends Activity {
         LinearLayout row2=new LinearLayout(this); row2.setOrientation(LinearLayout.HORIZONTAL); controls.addView(row2,lpMatchWrap());
         Button refreshBtn=button("ODŚWIEŻ",surface2,text), copy=button("KOPIUJ RAPORT",surface2,text), clear=button("WYCZYŚĆ",red,Color.WHITE);
         LinearLayout.LayoutParams c1=new LinearLayout.LayoutParams(0,dp(46),1); c1.setMarginEnd(dp(4)); LinearLayout.LayoutParams c2=new LinearLayout.LayoutParams(0,dp(46),1); c2.setMargins(dp(4),0,dp(4),0); LinearLayout.LayoutParams c3=new LinearLayout.LayoutParams(0,dp(46),1); c3.setMarginStart(dp(4)); row2.addView(refreshBtn,c1); row2.addView(copy,c2); row2.addView(clear,c3);
-        refreshBtn.setOnClickListener(v->refresh()); copy.setOnClickListener(v->copyReport()); clear.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Wyczyścić SYSTEM CONSOLE?").setMessage("Usunie lokalny log diagnostyczny, ale nie log blokad DNS.").setNegativeButton("Anuluj",null).setPositiveButton("Wyczyść",(d,w)->{SystemLogStore.clear(this);SystemLogStore.info(this,"CONSOLE","Log wyczyszczony przez użytkownika");refresh();}).show());
+        refreshBtn.setOnClickListener(v->refresh()); copy.setOnClickListener(v->copyReport()); clear.setOnClickListener(v->new AlertDialog.Builder(this).setTitle(I18n.t(this,"Wyczyścić SYSTEM CONSOLE?")).setMessage(I18n.t(this,"Usunie lokalny log diagnostyczny, ale nie log blokad DNS.")).setNegativeButton(I18n.t(this,"Anuluj"),null).setPositiveButton(I18n.t(this,"WYCZYŚĆ"),(d,w)->{SystemLogStore.clear(this);SystemLogStore.info(this,"CONSOLE","Log wyczyszczony przez użytkownika");refresh();}).show());
         addSpace(root,12);
 
         LinearLayout console=card(surface,18); root.addView(console,lpMatchWrap()); console.addView(tv("ZDARZENIA",15,text,true)); infoText=tv("",12,muted,false); console.addView(infoText); addSpace(console,6); logBox=new LinearLayout(this); logBox.setOrientation(LinearLayout.VERTICAL); console.addView(logBox,lpMatchWrap());
         addSpace(root,12);
         Button back=button("← WRÓĆ DO xADKILLER",surface2,text); back.setOnClickListener(v->finish()); root.addView(back,lpMatch(dp(50)));
         setContentView(scroll);
+        localize();
     }
 
     private void refresh() {
         PrivateDnsHelper.Snapshot s=PrivateDnsHelper.inspect(this);
-        privateDnsText.setText("Prywatny DNS: "+s.pretty());
+        privateDnsText.setText(I18n.dynamic(this,"Prywatny DNS: "+s.pretty()));
         privateDnsText.setTextColor(s.isStrict()?getColor(R.color.swir_red):getColor(R.color.swir_green));
         String dns=s.dnsServers.isEmpty()?"brak":""+s.dnsServers;
-        networkText.setText("Sieć: "+(s.networkAvailable?"dostępna":"brak aktywnej sieci")+" • DNS: "+dns);
+        networkText.setText(I18n.dynamic(this,"Sieć: "+(s.networkAvailable?"dostępna":"brak aktywnej sieci")+" • DNS: "+dns));
 
         SharedPreferences p=getSharedPreferences(BlocklistManager.PREFS,MODE_PRIVATE);
         long hb=p.getLong(SmartAdAccessibilityService.KEY_HEARTBEAT,0);
         long age=hb<=0?-1:System.currentTimeMillis()-hb;
         long det=p.getLong(SmartAdAccessibilityService.KEY_DETECTIONS,0), act=p.getLong(SmartAdAccessibilityService.KEY_ACTIONS,0);
         boolean smart=p.getBoolean(SmartAdAccessibilityService.KEY_SMART_ENABLED,true);
-        smartText.setText("Smart Engine: "+(smart?"ON":"OFF")+" • heartbeat="+(age<0?"brak":age+" ms")+" • wykrycia="+det+" • akcje="+act);
+        String noHeartbeat=I18n.language(this).equals("pl")?"brak":"none";
+        smartText.setText(I18n.dynamic(this,"Smart Engine: "+(smart?"ON":"OFF")+" • heartbeat="+(age<0?noHeartbeat:age+" ms")+" • wykrycia="+det+" • akcje="+act));
         smartText.setTextColor(smart && age>=0 && age<15000?getColor(R.color.swir_green):getColor(R.color.swir_muted));
 
         List<SystemLogStore.Entry> entries=SystemLogStore.readRecent(this,500); logBox.removeAllViews();
@@ -105,15 +108,16 @@ public class SystemConsoleActivity extends Activity {
             int accent=colorFor(e.level);
             LinearLayout card=card(getColor(R.color.swir_surface_2),12); LinearLayout.LayoutParams lp=lpMatchWrap(); lp.setMargins(0,0,0,dp(7)); logBox.addView(card,lp);
             TextView top=tv(df.format(new Date(e.time))+"  •  "+e.level+" / "+e.category,10,accent,true); card.addView(top);
-            card.addView(tv(e.message,13,getColor(R.color.swir_text),false));
+            card.addView(tv(I18n.dynamic(this,e.message),13,getColor(R.color.swir_text),false));
             if(!e.detail.isEmpty()) { TextView detail=tv(e.detail,11,getColor(R.color.swir_muted),false); detail.setTextIsSelectable(true); card.addView(detail); }
         }
-        infoText.setText(shown+" wpisów"+(errorsOnly?" • filtr: WARN/ERROR":"")+" • maks. 500 pokazanych");
+        infoText.setText(I18n.dynamic(this,shown+" wpisów"+(errorsOnly?" • filtr: WARN/ERROR":"")+" • maks. 500 pokazanych"));
         if(shown==0) logBox.addView(tv("Brak wpisów dla wybranego filtra.",13,getColor(R.color.swir_muted),false));
+        localize();
     }
 
     private void runNetworkTest() {
-        Toast.makeText(this,"Testuję DNS i internet…",Toast.LENGTH_SHORT).show();
+        Toast.makeText(this,I18n.t(this,"Testuję DNS i internet…"),Toast.LENGTH_SHORT).show();
         SystemLogStore.info(this,"DIAG","Rozpoczęto test sieci");
         new Thread(()->{
             long start=System.currentTimeMillis();
@@ -122,10 +126,10 @@ public class SystemConsoleActivity extends Activity {
                 InetAddress b=InetAddress.getByName("github.com");
                 long ms=System.currentTimeMillis()-start;
                 SystemLogStore.add(this,"INFO","DIAG","Test DNS OK • "+ms+" ms","example.com="+a.getHostAddress()+" • github.com="+b.getHostAddress());
-                runOnUiThread(()->{Toast.makeText(this,"DNS działa • "+ms+" ms",Toast.LENGTH_LONG).show();refresh();});
+                runOnUiThread(()->{Toast.makeText(this,I18n.dynamic(this,"DNS działa • "+ms+" ms"),Toast.LENGTH_LONG).show();refresh();});
             } catch(Exception e) {
                 SystemLogStore.error(this,"DIAG","Test DNS NIEUDANY",e);
-                runOnUiThread(()->{Toast.makeText(this,"Test DNS nieudany — zobacz konsolę.",Toast.LENGTH_LONG).show();refresh();});
+                runOnUiThread(()->{Toast.makeText(this,I18n.t(this,"Test DNS nieudany — zobacz konsolę."),Toast.LENGTH_LONG).show();refresh();});
             }
         },"xADKiller-Diagnostics").start();
     }
@@ -135,7 +139,8 @@ public class SystemConsoleActivity extends Activity {
         PrivateDnsHelper.Snapshot s=PrivateDnsHelper.inspect(this);
         SharedPreferences p=getSharedPreferences(BlocklistManager.PREFS,MODE_PRIVATE);
         StringBuilder b=new StringBuilder();
-        b.append("xADKiller 1.3.0 SYSTEM REPORT\n");
+        b.append("xADKiller 1.5.0 SYSTEM REPORT\n");
+        b.append("App language: ").append(I18n.languageName(this)).append(" (system=").append(I18n.rawSystemLanguage(this)).append(")\n");
         b.append("Private DNS: ").append(s.pretty()).append("\n");
         b.append("Network: ").append(s.networkAvailable).append(" DNS=").append(s.dnsServers).append("\n");
         b.append("Smart enabled: ").append(p.getBoolean(SmartAdAccessibilityService.KEY_SMART_ENABLED,true)).append("\n");
@@ -143,12 +148,13 @@ public class SystemConsoleActivity extends Activity {
         b.append("Smart detections/actions: ").append(p.getLong(SmartAdAccessibilityService.KEY_DETECTIONS,0)).append('/').append(p.getLong(SmartAdAccessibilityService.KEY_ACTIONS,0)).append("\n\n");
         DateFormat df=DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.MEDIUM,Locale.getDefault());
         for(SystemLogStore.Entry e:entries){b.append(df.format(new Date(e.time))).append(" | ").append(e.level).append(" | ").append(e.category).append(" | ").append(e.message);if(!e.detail.isEmpty())b.append(" | ").append(e.detail);b.append('\n');}
-        ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE); if(cm!=null){cm.setPrimaryClip(ClipData.newPlainText("xADKiller report",b.toString()));Toast.makeText(this,"Raport skopiowany.",Toast.LENGTH_SHORT).show();}
+        ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE); if(cm!=null){cm.setPrimaryClip(ClipData.newPlainText("xADKiller report",b.toString()));Toast.makeText(this,I18n.t(this,"Raport skopiowany."),Toast.LENGTH_SHORT).show();}
     }
 
+    private void localize(){try{I18n.apply(this,getWindow().getDecorView());}catch(Throwable ignored){}}
     private int colorFor(String level){if("ERROR".equals(level))return getColor(R.color.swir_red);if("WARN".equals(level))return 0xffffb74d;if("BLOCK".equals(level)||"SMART".equals(level))return getColor(R.color.swir_cyan);if("DNS".equals(level))return getColor(R.color.swir_blue);return getColor(R.color.swir_green);}
-    private TextView tv(String value,float sp,int color,boolean bold){TextView v=new TextView(this);v.setText(value);v.setTextSize(sp);v.setTextColor(color);v.setLineSpacing(0,1.08f);if(bold)v.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return v;}
-    private Button button(String text,int bg,int fg){Button b=new Button(this);b.setText(text);b.setTextColor(fg);b.setTextSize(12);b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);b.setAllCaps(false);b.setPadding(dp(8),0,dp(8),0);b.setBackground(round(bg,13));return b;}
+    private TextView tv(String value,float sp,int color,boolean bold){TextView v=new TextView(this);v.setText(I18n.t(this,value));v.setTextSize(sp);v.setTextColor(color);v.setLineSpacing(0,1.08f);if(bold)v.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return v;}
+    private Button button(String text,int bg,int fg){Button b=new Button(this);b.setText(I18n.t(this,text));b.setTextColor(fg);b.setTextSize(12);b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);b.setAllCaps(false);b.setPadding(dp(8),0,dp(8),0);b.setBackground(round(bg,13));return b;}
     private LinearLayout card(int bg,int radiusDp){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(dp(15),dp(13),dp(15),dp(13));c.setBackground(round(bg,radiusDp));return c;}
     private GradientDrawable round(int color,int radiusDp){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radiusDp));return d;}
     private LinearLayout.LayoutParams lpMatchWrap(){return new LinearLayout.LayoutParams(-1,-2);} private LinearLayout.LayoutParams lpMatch(int h){return new LinearLayout.LayoutParams(-1,h);} private void addSpace(LinearLayout p,int d){Space s=new Space(this);p.addView(s,new LinearLayout.LayoutParams(1,dp(d)));} private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
