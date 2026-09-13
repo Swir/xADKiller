@@ -1,5 +1,5 @@
+import puppeteer from "puppeteer-core";
 import { chromium } from "playwright";
-import { spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -21,31 +21,6 @@ function withTimeout(promise, ms, label) {
     })
   ]);
 }
-function getFreePort() {
-  return new Promise((resolve, reject) => {
-    const s = http.createServer();
-    s.once("error", reject);
-    s.listen(0, "127.0.0.1", () => {
-      const port = s.address().port;
-      s.close((error) => error ? reject(error) : resolve(port));
-    });
-  });
-}
-function getJson(url) {
-  return new Promise((resolve, reject) => {
-    const req = http.get(url, { timeout: 1500 }, (res) => {
-      let body = "";
-      res.setEncoding("utf8");
-      res.on("data", (chunk) => { body += chunk; });
-      res.on("end", () => {
-        if ((res.statusCode || 0) < 200 || (res.statusCode || 0) >= 300) return reject(new Error(`HTTP ${res.statusCode}`));
-        try { resolve(JSON.parse(body)); } catch (error) { reject(error); }
-      });
-    });
-    req.on("timeout", () => req.destroy(new Error("request timeout")));
-    req.on("error", reject);
-  });
-}
 function readBuildMeta() {
   const file = path.join(extensionPath, "build-meta.js");
   const text = fs.readFileSync(file, "utf8").trim();
@@ -53,24 +28,11 @@ function readBuildMeta() {
   if (!match) throw new Error("Could not parse generated build-meta.js");
   return JSON.parse(match[1]);
 }
-async function waitForDevTools(port, timeoutMs, processState) {
-  const deadline = Date.now() + timeoutMs;
-  let lastError = "not ready";
-  while (Date.now() < deadline) {
-    if (processState.exited) throw new Error(`Chrome exited before DevTools became ready (code=${processState.code}, signal=${processState.signal})`);
-    try {
-      const version = await getJson(`http://127.0.0.1:${port}/json/version`);
-      if (version?.webSocketDebuggerUrl) return version;
-    } catch (error) {
-      lastError = String(error?.message || error);
-    }
-    await delay(250);
-  }
-  throw new Error(`DevTools endpoint timed out after ${timeoutMs}ms: ${lastError}`);
-}
-async function probeWorker(worker) {
+async function probeWorker(target) {
+  const worker = await target.worker();
+  if (!worker) return null;
   try {
-    return await worker.evaluate(() => {
+    const probe = await worker.evaluate(() => {
       const manifest = chrome.runtime?.getManifest?.() || null;
       return {
         href: self.location.href,
@@ -83,28 +45,30 @@ async function probeWorker(worker) {
         dnrMethods: chrome.declarativeNetRequest ? Object.keys(chrome.declarativeNetRequest).sort() : []
       };
     });
-  } catch (error) {
-    return { href: worker.url(), error: String(error?.message || error), permissions: [] };
+    return { worker, probe };
+  } catch (_) {
+    return null;
   }
 }
-async function waitForXadWorker(context, timeoutMs) {
+async function findXadWorker(browser, timeoutMs = 20000) {
   const deadline = Date.now() + timeoutMs;
   const seen = new Map();
   while (Date.now() < deadline) {
-    for (const worker of context.serviceWorkers()) {
-      const probe = await probeWorker(worker);
-      seen.set(probe.href || worker.url(), probe);
-      if (probe.version === "1.1.0" && Array.isArray(probe.permissions) && probe.permissions.includes("declarativeNetRequest")) {
-        return { worker, probe, seen: [...seen.values()] };
-      }
+    for (const target of browser.targets()) {
+      if (target.type() !== "service_worker" || !target.url().startsWith("chrome-extension://")) continue;
+      const result = await probeWorker(target);
+      if (!result) continue;
+      const { probe } = result;
+      seen.set(probe.href, probe);
+      if (probe.version === "1.1.0" && probe.permissions.includes("declarativeNetRequest")) return { ...result, target };
     }
     await delay(250);
   }
-  throw new Error(`xADKiller service worker not found. Seen workers: ${JSON.stringify([...seen.values()])}`);
+  throw new Error(`xADKiller service worker not found. Seen: ${JSON.stringify([...seen.values()])}`);
 }
 
 const meta = readBuildMeta();
-if (!meta || meta.standardRules < 1000 || meta.ultraRules < 1000) throw new Error(`invalid build meta: ${JSON.stringify(meta)}`);
+if (meta.standardRules < 1000 || meta.ultraRules < 1000) throw new Error(`invalid build meta: ${JSON.stringify(meta)}`);
 if (meta.cosmeticGeneric < 250 || meta.cosmeticDomains < 50) throw new Error(`cosmetic build incomplete: ${JSON.stringify(meta)}`);
 log("Build artifact meta OK", `STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}`);
 
@@ -116,161 +80,109 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const port = server.address().port;
 log("HTTP fixture ready", String(port));
 
-const userDataDir = fs.mkdtempSync("/tmp/xadkiller-chrome-ultra-");
-const debugPort = await getFreePort();
-let chromeProcess = null;
 let browser = null;
-let context = null;
-let stderrTail = "";
-const processState = { exited: false, code: null, signal: null };
-
 try {
-  const bundledChrome = chromium.executablePath();
-  const chromeExecutable = [
-    bundledChrome,
-    "/usr/bin/chromium",
-    "/usr/bin/chromium-browser"
-  ].find((p) => p && fs.existsSync(p));
-  if (!chromeExecutable) throw new Error("No Chrome for Testing/Chromium executable found");
+  const executablePath = chromium.executablePath();
+  if (!fs.existsSync(executablePath)) throw new Error(`Chrome for Testing executable missing: ${executablePath}`);
 
-  log("Launching Chrome for Testing headless through DevTools port", `${chromeExecutable} / ${debugPort}`);
-  chromeProcess = spawn(chromeExecutable, [
-    "--headless=new",
-    `--user-data-dir=${userDataDir}`,
-    `--remote-debugging-port=${debugPort}`,
-    "--remote-debugging-address=127.0.0.1",
-    `--disable-extensions-except=${extensionPath}`,
-    `--load-extension=${extensionPath}`,
-    "--disable-dev-shm-usage",
-    "--no-first-run",
-    "--no-default-browser-check",
-    "--disable-background-networking",
-    "--disable-component-update",
-    "--password-store=basic",
-    "--use-mock-keychain",
-    "--no-sandbox",
-    "about:blank"
-  ], {
-    detached: true,
-    env: process.env,
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-  chromeProcess.stdout?.on("data", (chunk) => { process.stdout.write(`[chrome] ${chunk}`); });
-  chromeProcess.stderr?.on("data", (chunk) => {
-    const text = String(chunk);
-    stderrTail = (stderrTail + text).slice(-12000);
-    process.stderr.write(`[chrome] ${text}`);
-  });
-  chromeProcess.once("exit", (code, signal) => {
-    processState.exited = true;
-    processState.code = code;
-    processState.signal = signal;
-  });
+  log("Launching Chrome for Testing with Puppeteer enableExtensions", executablePath);
+  browser = await withTimeout(puppeteer.launch({
+    executablePath,
+    headless: true,
+    pipe: true,
+    enableExtensions: [extensionPath],
+    args: [
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--no-first-run",
+      "--no-default-browser-check"
+    ],
+    timeout: 60000
+  }), 70000, "Puppeteer Chrome launch");
+  log("Chrome launched");
 
-  const version = await waitForDevTools(debugPort, 30000, processState);
-  log("DevTools endpoint ready", version.Browser || "Chrome");
+  const extensionList = await withTimeout(browser.extensions(), 8000, "extension inventory");
+  log("Installed extension inventory", JSON.stringify([...extensionList.values()].map((e) => ({ id: e.id, name: e.name, version: e.version }))));
 
-  browser = await withTimeout(chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`), 15000, "CDP connection");
-  context = browser.contexts()[0];
-  if (!context) throw new Error("Chrome default browser context not found over CDP");
-  log("CDP connected");
-
-  const found = await withTimeout(waitForXadWorker(context, 20000), 22000, "xADKiller service worker");
+  const found = await withTimeout(findXadWorker(browser), 22000, "xADKiller service worker");
   const worker = found.worker;
   const runtimeProbe = found.probe;
   const extensionId = runtimeProbe.id;
   log("xADKiller service worker ready", `${extensionId} / ${runtimeProbe.href}`);
   log("Extension API probe", JSON.stringify(runtimeProbe));
   if (!runtimeProbe.hasStorage) throw new Error("chrome.storage.local unavailable in xADKiller worker");
-  if (!runtimeProbe.hasDnr) throw new Error(`chrome.declarativeNetRequest unavailable in loaded xADKiller worker: ${JSON.stringify(runtimeProbe)}`);
+  if (!runtimeProbe.hasDnr) throw new Error("chrome.declarativeNetRequest unavailable in xADKiller worker");
 
-  const initialRulesets = await withTimeout(worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets()), 8000, "initial enabled rulesets");
-  if (!initialRulesets.includes("standard")) throw new Error(`STANDARD ruleset not enabled at startup: ${initialRulesets.join(",")}`);
-  if (initialRulesets.includes("ultra")) throw new Error(`ULTRA should start disabled before popup switch: ${initialRulesets.join(",")}`);
+  const initialRulesets = await withTimeout(worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets()), 8000, "initial rulesets");
+  if (!initialRulesets.includes("standard")) throw new Error(`STANDARD ruleset not enabled: ${initialRulesets.join(",")}`);
+  if (initialRulesets.includes("ultra")) throw new Error(`ULTRA unexpectedly enabled initially: ${initialRulesets.join(",")}`);
   log("Initial DNR rulesets OK", initialRulesets.join(","));
 
-  const page = await withTimeout(context.newPage(), 8000, "test page creation");
+  const page = await browser.newPage();
   page.setDefaultTimeout(10000);
   let dnrFailure = "";
   page.on("requestfailed", (request) => {
     if (request.url().includes("ads.xadkiller.test")) dnrFailure = request.failure()?.errorText || "";
   });
   log("Opening local runtime fixture");
-  await withTimeout(page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 10000 }), 12000, "fixture navigation");
-  await page.waitForTimeout(1200);
-  log("Fixture loaded");
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 12000 });
+  await delay(1500);
 
-  const visibleState = await withTimeout(page.evaluate(() => ({
+  const visibleState = await page.evaluate(() => ({
     normalVisible: !!document.querySelector("#normal") && getComputedStyle(document.querySelector("#normal")).display !== "none",
     cosmeticVisible: !!document.querySelector("#cosmetic-ad") && getComputedStyle(document.querySelector("#cosmetic-ad")).display !== "none",
     smartVisible: !!document.querySelector("#sponsored-banner-unit") && getComputedStyle(document.querySelector("#sponsored-banner-unit")).display !== "none",
     skipClicks: window.skipClicks || 0
-  })), 10000, "DOM assertions");
-  log("DOM assertions returned", JSON.stringify(visibleState));
+  }));
+  log("DOM assertions", JSON.stringify(visibleState));
 
-  const blockTest = await withTimeout(page.evaluate(async () => await Promise.race([
+  const blockTest = await page.evaluate(async () => await Promise.race([
     window.blockTest.then((v) => ({ state: "done", value: v })),
     new Promise((resolve) => setTimeout(() => resolve({ state: "timeout", value: false }), 5000))
-  ])), 8000, "DNR control request");
-  log("DNR request finished", `${JSON.stringify(blockTest)} / ${dnrFailure || "no failure text"}`);
+  ]));
+  log("DNR request", `${JSON.stringify(blockTest)} / ${dnrFailure || "no failure text"}`);
 
   if (!visibleState.normalVisible) throw new Error("normal content was hidden");
   if (visibleState.cosmeticVisible) throw new Error("cosmetic ad was not hidden");
   if (visibleState.smartVisible) throw new Error("Smart DOM did not hide strong ad candidate");
   if (visibleState.skipClicks < 1) throw new Error("Smart Auto-Skip did not click Skip Ad");
-  if (blockTest.state === "timeout") throw new Error("DNR control request timed out instead of being blocked");
+  if (blockTest.state === "timeout") throw new Error("DNR request timed out instead of being blocked");
   if (!blockTest.value || !/ERR_BLOCKED_BY_CLIENT/i.test(dnrFailure)) throw new Error(`DNR block failed: ${dnrFailure || "no failure captured"}`);
 
-  const testTabId = await withTimeout(worker.evaluate(async (urlPart) => {
+  const testTabId = await worker.evaluate(async (urlPart) => {
     const tabs = await chrome.tabs.query({});
     return tabs.find((t) => (t.url || "").includes(urlPart))?.id || -1;
-  }, `127.0.0.1:${port}`), 8000, "tab id lookup");
+  }, `127.0.0.1:${port}`);
   if (testTabId < 0) throw new Error("test tab id not found");
-  log("Test tab identified", String(testTabId));
 
-  const matched = await withTimeout(worker.evaluate(async (tabId) => {
+  const matched = await worker.evaluate(async (tabId) => {
     try {
       const details = await chrome.declarativeNetRequest.getMatchedRules({ tabId });
       return { ok: true, count: details?.rulesMatchedInfo?.length || 0 };
     } catch (error) {
       return { ok: false, error: String(error?.message || error) };
     }
-  }, testTabId), 8000, "matched rules lookup");
-  if (!matched.ok) throw new Error(`getMatchedRules failed: ${matched.error || "unknown"}`);
-  if (matched.count < 1) throw new Error("DNR reported zero matched rules for the test tab");
-  log("Matched rules OK", String(matched.count));
+  }, testTabId);
+  if (!matched.ok) throw new Error(`getMatchedRules failed: ${matched.error}`);
+  if (matched.count < 1) throw new Error("DNR reported zero matched rules");
+  log("Matched DNR rules", String(matched.count));
 
-  const popup = await withTimeout(context.newPage(), 8000, "popup page creation");
-  popup.setDefaultTimeout(10000);
-  log("Opening extension popup page");
-  await withTimeout(popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded", timeout: 10000 }), 12000, "popup navigation");
-  await withTimeout(popup.selectOption("#mode", "ultra"), 10000, "ULTRA select");
-  await popup.waitForTimeout(1000);
-  const enabledRulesets = await withTimeout(worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets()), 8000, "enabled rulesets");
-  log("Popup mode switch returned", enabledRulesets.join(","));
+  const popup = await browser.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded", timeout: 12000 });
+  await popup.select("#mode", "ultra");
+  await delay(1000);
+
+  const enabledRulesets = await worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets());
+  log("Popup ULTRA switch", enabledRulesets.join(","));
   if (!enabledRulesets.includes("standard") || !enabledRulesets.includes("ultra")) {
     throw new Error(`ULTRA rulesets not enabled through popup: ${enabledRulesets.join(",")}`);
   }
 
   log("PASS", `STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}, matched=${matched.count}`);
-} catch (error) {
-  if (stderrTail) console.error("[xADKiller CI] Chrome stderr tail:\n" + stderrTail);
-  throw error;
 } finally {
-  log("Shutting down Chromium");
+  log("Shutting down Chrome");
   if (browser) {
-    try { await withTimeout(browser.close(), 6000, "CDP browser close"); } catch (error) { console.warn(String(error)); }
-  }
-  if (chromeProcess && !processState.exited) {
-    try { process.kill(-chromeProcess.pid, "SIGTERM"); } catch (_) {
-      try { chromeProcess.kill("SIGTERM"); } catch (_) {}
-    }
-    await delay(700);
-    if (!processState.exited) {
-      try { process.kill(-chromeProcess.pid, "SIGKILL"); } catch (_) {
-        try { chromeProcess.kill("SIGKILL"); } catch (_) {}
-      }
-    }
+    try { await browser.close(); } catch (_) {}
   }
   await new Promise((resolve) => server.close(resolve));
   log("Shutdown complete");
