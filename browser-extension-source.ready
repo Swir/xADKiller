@@ -1,2 +1,3 @@
 sha256=46b17cbc0df7c43e7e759e1ce04786827fba727114fd7ff50f65a1a3b969b197
-parts=10
+parts=10-corrected
+retry=2
