@@ -17,6 +17,7 @@ if (!manifest.host_permissions?.includes("<all_urls>")) fail("missing host acces
 if (manifest.background?.service_worker !== "service-worker.js") fail("composite service worker missing");
 const rs = manifest.declarative_net_request?.rule_resources || [];
 if (!rs.some((x) => x.id === "standard" && x.enabled === true)) fail("standard ruleset missing/enabled state wrong");
+if (!rs.some((x) => x.id === "compat" && x.enabled === true)) fail("compat ruleset missing/enabled state wrong");
 if (!rs.some((x) => x.id === "ultra" && x.enabled === false)) fail("ultra ruleset missing/enabled state wrong");
 
 const scripts = manifest.content_scripts || [];
@@ -34,21 +35,21 @@ if (cosmeticIndex < 0 || contentIndex < 0 || cosmeticIndex > contentIndex) fail(
 if (isolated.all_frames !== true) fail("isolated engine must run in all frames");
 
 for (const rel of [
-  "service-worker.js","background.js","live-signatures.js","titan-engine.js","titan-main.js","network-scout.js","early-guard.js","preflight-config.js","content.js","shadow-sentinel.js","live-cosmetic.js","cosmetic-data.js","build-meta.js","dynamic-intel-meta.json","titan-session-meta.json",
-  "popup.html","popup.js","popup.css","rules/standard.json","rules/ultra.json","rules/dynamic-intel.json","rules/titan-session.json","icons/icon128.png"
+  "service-worker.js","background.js","compat-engine.js","live-signatures.js","titan-engine.js","static-boost.js","titan-main.js","network-scout.js","early-guard.js","preflight-config.js","content.js","shadow-sentinel.js","live-cosmetic.js","cosmetic-data.js","build-meta.js","dynamic-intel-meta.json","titan-session-meta.json",
+  "popup.html","popup.js","popup.css","rules/standard.json","rules/compat.json","rules/ultra.json","rules/dynamic-intel.json","rules/titan-session.json","icons/icon128.png"
 ]) {
   if (!fs.existsSync(path.join(base, rel))) fail(`missing ${rel}`);
 }
 
 const composite = fs.readFileSync(path.join(base, "service-worker.js"), "utf8");
-for (const engine of ["background.js","live-signatures.js","titan-engine.js"]) if (!composite.includes(engine)) fail(`composite worker missing ${engine}`);
+for (const engine of ["background.js","compat-engine.js","live-signatures.js","titan-engine.js","static-boost.js"]) if (!composite.includes(engine)) fail(`composite worker missing ${engine}`);
 
 function overlap(a, b) {
   if (!Array.isArray(a) || !Array.isArray(b)) return [];
   const bs = new Set(b);
   return [...new Set(a)].filter((x) => bs.has(x));
 }
-function validateRules(name, min, max) {
+function validateRules(name, min, max, expectedAction) {
   const rules = readJson(path.join(base, "rules", `${name}.json`));
   if (rules.length < min) fail(`${name}: too few rules ${rules.length}`);
   if (rules.length > max) fail(`${name}: too many rules ${rules.length}`);
@@ -57,7 +58,7 @@ function validateRules(name, min, max) {
     if (!Number.isInteger(rule.id) || rule.id <= 0) fail(`${name}: invalid id`);
     if (ids.has(rule.id)) fail(`${name}: duplicate id ${rule.id}`);
     ids.add(rule.id);
-    if (!["block","allow"].includes(rule.action?.type)) fail(`${name} ${rule.id}: unsafe action ${rule.action?.type}`);
+    if (rule.action?.type !== expectedAction) fail(`${name} ${rule.id}: expected ${expectedAction}, got ${rule.action?.type}`);
     if (!rule.condition?.urlFilter) fail(`${name} ${rule.id}: urlFilter missing`);
     if (rule.condition.regexFilter) fail(`${name} ${rule.id}: regex rules must be runtime-validated TITAN rules, not static`);
     if (!Array.isArray(rule.condition?.resourceTypes) || !rule.condition.resourceTypes.length) fail(`${name} ${rule.id}: resourceTypes missing`);
@@ -69,9 +70,11 @@ function validateRules(name, min, max) {
   return rules.length;
 }
 
-const standard = validateRules("standard", 15000, 19700);
-const ultra = validateRules("ultra", 7000, 10000);
-if (standard + ultra > 29850) fail(`static rules exceed TITAN budget: ${standard + ultra}`);
+const standard = validateRules("standard", 15000, 19700, "block");
+const compat = validateRules("compat", 1000, 8000, "allow");
+const ultra = validateRules("ultra", 7000, 10000, "block");
+if (standard + ultra > 29850) fail(`ULTRA static rules exceed TITAN budget: ${standard + ultra}`);
+if (standard + compat > 29850) fail(`STANDARD+COMPAT static rules exceed guaranteed budget: ${standard + compat}`);
 
 const intel = readJson(path.join(base, "rules", "dynamic-intel.json"));
 if (!Array.isArray(intel)) fail("dynamic intelligence pack must be an array");
@@ -98,10 +101,12 @@ const titanMeta = readJson(path.join(base, "titan-session-meta.json"));
 if (Number(titanMeta.rules || 0) !== session.length) fail("TITAN session metadata mismatch");
 
 const background = fs.readFileSync(path.join(base, "background.js"), "utf8");
+const compatEngine = fs.readFileSync(path.join(base, "compat-engine.js"), "utf8");
 const liveMatrix = fs.readFileSync(path.join(base, "live-signatures.js"), "utf8");
 const titan = fs.readFileSync(path.join(base, "titan-engine.js"), "utf8");
 const titanMain = fs.readFileSync(path.join(base, "titan-main.js"), "utf8");
 if (!background.includes("xadkiller-live-shield.json")) fail("Live Shield domain feed endpoint missing");
+if (!compatEngine.includes("COMPAT_RULESET") || !compatEngine.includes("updateEnabledRulesets") || !compatEngine.includes('prefs.mode !== "ultra"')) fail("mode-aware COMPAT engine incomplete");
 if (!liveMatrix.includes("raw.githubusercontent.com/Swir/xADKiller/main/")) fail("Live Matrix must use official main-branch feed");
 if (!titan.includes("xadkiller-titan-feed.json")) fail("TITAN data feed endpoint missing");
 if (!titan.includes("updateSessionRules") || !titan.includes("isRegexSupported")) fail("TITAN session/regex engines missing");
@@ -120,10 +125,10 @@ for (const lang of ["en","pl","es","de","fr"]) {
   }
 }
 
-for (const rel of ["service-worker.js","background.js","live-signatures.js","titan-engine.js","titan-main.js","network-scout.js","early-guard.js","preflight-config.js","content.js","shadow-sentinel.js","live-cosmetic.js","popup.js"]) {
+for (const rel of ["service-worker.js","background.js","compat-engine.js","live-signatures.js","titan-engine.js","static-boost.js","titan-main.js","network-scout.js","early-guard.js","preflight-config.js","content.js","shadow-sentinel.js","live-cosmetic.js","popup.js"]) {
   const code = fs.readFileSync(path.join(base, rel), "utf8");
   if (/\beval\s*\(|\bnew\s+Function\s*\(/.test(code)) fail(`${rel}: dynamic code execution forbidden`);
   if (/importScripts\s*\(\s*["']https?:/i.test(code)) fail(`${rel}: remote hosted code forbidden`);
 }
 
-if (!process.exitCode) console.log(`OK: xADKiller TITAN v1.4.0 validated: ${standard}+${ultra} static, ${intel.length} consensus dynamic domains, ${session.length} session rules, regex/adaptive/closed-shadow layers enabled`);
+if (!process.exitCode) console.log(`OK: xADKiller TITAN v1.4.0 validated: ${standard} STANDARD block + ${compat} COMPAT allow + ${ultra} ULTRA block, ${intel.length} consensus dynamic domains, ${session.length} session rules`);
