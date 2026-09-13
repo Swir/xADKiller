@@ -31,6 +31,17 @@
     clearTimeout(deferredTimer);
     deferredTimer = setTimeout(() => apply().catch(() => {}), delay);
   }
+  function pendingUltraReserve(enabled) {
+    if (enabled.includes("ultra")) return 0;
+    const ultraCost = Math.max(0, Number(globalThis.XAD_BUILD_META?.ultraRules || 10000));
+    // COMPAT is disabled in ULTRA. If it is still active during this transition,
+    // its quota will be released at the same time and can safely offset part of
+    // the packaged ULTRA cost. This makes the calculation race-independent.
+    const compatCredit = enabled.includes("compat")
+      ? Math.max(0, Number(globalThis.XAD_BUILD_META?.compatRules || 0))
+      : 0;
+    return Math.max(0, ultraCost - compatCredit);
+  }
 
   async function apply() {
     if (applying) return applying;
@@ -44,13 +55,7 @@
       const counts = IDS.map((_, i) => Number(m.counts[i] || 0));
       const currentlyEnabled = IDS.filter((id) => enabled.includes(id));
       const currentBoostCost = currentlyEnabled.reduce((sum, id) => sum + counts[IDS.indexOf(id)], 0);
-
-      // A storage mode change can arrive a fraction of a second before the
-      // core background engine has enabled the packaged ULTRA ruleset. Never
-      // let optional boosts consume quota that the core 10k ULTRA pack needs.
-      const ultraCoreReserve = prefs.enabled !== false && prefs.mode === "ultra" && !enabled.includes("ultra")
-        ? Math.max(0, Number(globalThis.XAD_BUILD_META?.ultraRules || 10000))
-        : 0;
+      const ultraCoreReserve = prefs.enabled !== false && prefs.mode === "ultra" ? pendingUltraReserve(enabled) : 0;
       let budget = Math.max(0, available + currentBoostCost - ultraCoreReserve);
       const target = [];
       if (prefs.enabled !== false) {
@@ -79,9 +84,7 @@
             const check = await enabledRulesets();
             if (check.includes(id)) continue;
             let free = await availableStatic();
-            const reserve = prefs.enabled !== false && prefs.mode === "ultra" && !check.includes("ultra")
-              ? Math.max(0, Number(globalThis.XAD_BUILD_META?.ultraRules || 10000))
-              : 0;
+            const reserve = prefs.enabled !== false && prefs.mode === "ultra" ? pendingUltraReserve(check) : 0;
             free = Math.max(0, free - reserve);
             const cost = counts[IDS.indexOf(id)];
             if (cost <= free) {
