@@ -46,6 +46,13 @@ function getJson(url) {
     req.on("error", reject);
   });
 }
+function readBuildMeta() {
+  const file = path.join(extensionPath, "build-meta.js");
+  const text = fs.readFileSync(file, "utf8").trim();
+  const match = text.match(/^(?:self|globalThis)\.XAD_BUILD_META\s*=\s*(\{[\s\S]*\})\s*;?$/);
+  if (!match) throw new Error("Could not parse generated build-meta.js");
+  return JSON.parse(match[1]);
+}
 async function waitForDevTools(port, timeoutMs, processState) {
   const deadline = Date.now() + timeoutMs;
   let lastError = "not ready";
@@ -61,6 +68,11 @@ async function waitForDevTools(port, timeoutMs, processState) {
   }
   throw new Error(`DevTools endpoint timed out after ${timeoutMs}ms: ${lastError}`);
 }
+
+const meta = readBuildMeta();
+if (!meta || meta.standardRules < 1000 || meta.ultraRules < 1000) throw new Error(`invalid build meta: ${JSON.stringify(meta)}`);
+if (meta.cosmeticGeneric < 250 || meta.cosmeticDomains < 50) throw new Error(`cosmetic build incomplete: ${JSON.stringify(meta)}`);
+log("Build artifact meta OK", `STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}`);
 
 const server = http.createServer((req, res) => {
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -133,10 +145,10 @@ try {
   if (!extensionId) throw new Error("could not resolve extension id");
   log("Service worker ready", extensionId);
 
-  const meta = await withTimeout(worker.evaluate(() => self.XAD_BUILD_META || null), 8000, "build meta");
-  if (!meta || meta.standardRules < 1000 || meta.ultraRules < 1000) throw new Error(`invalid build meta: ${JSON.stringify(meta)}`);
-  if (meta.cosmeticGeneric < 250 || meta.cosmeticDomains < 50) throw new Error(`cosmetic build incomplete: ${JSON.stringify(meta)}`);
-  log("Build meta OK", `STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}`);
+  const initialRulesets = await withTimeout(worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets()), 8000, "initial enabled rulesets");
+  if (!initialRulesets.includes("standard")) throw new Error(`STANDARD ruleset not enabled at startup: ${initialRulesets.join(",")}`);
+  if (initialRulesets.includes("ultra")) throw new Error(`ULTRA should start disabled before popup switch: ${initialRulesets.join(",")}`);
+  log("Initial DNR rulesets OK", initialRulesets.join(","));
 
   const page = await withTimeout(context.newPage(), 8000, "test page creation");
   page.setDefaultTimeout(10000);
