@@ -56,9 +56,15 @@ async function waitMode(worker, mode, timeout = 18000) {
   throw new Error(`COMPAT transition timeout for ${mode}: ${JSON.stringify(last)}`);
 }
 
-async function openPopup(browser, extensionId) {
+async function openPopup(browser, extensionId, expectedMode = null) {
   const popup = await browser.newPage();
   await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil:"domcontentloaded", timeout:12000 });
+  if (expectedMode) {
+    await popup.waitForFunction((mode) => {
+      const el = document.querySelector("#mode");
+      return !!el && el.value === mode;
+    }, { timeout:12000 }, expectedMode);
+  }
   return popup;
 }
 
@@ -83,17 +89,16 @@ try {
   const initial = await waitMode(worker, "standard", 18000);
   log("STANDARD mode", initial.enabled.join(","));
 
-  let popup = await openPopup(browser, extensionId);
+  let popup = await openPopup(browser, extensionId, "standard");
   await popup.select("#mode", "ultra");
   const ultra = await waitMode(worker, "ultra", 22000);
   log("ULTRA mode", ultra.enabled.join(","));
   await popup.close();
 
-  // Reopen the popup like a real user. This guarantees its async stateBusy
-  // guard from the previous transition cannot swallow the next change event.
-  popup = await openPopup(browser, extensionId);
-  const popupMode = await popup.$eval("#mode", (el) => el.value);
-  if (popupMode !== "ultra") throw new Error(`popup did not reflect ULTRA state: ${popupMode}`);
+  // Reopen like a real user and wait until popup.js has hydrated the persisted
+  // mode from storage. Reading the select immediately after DOMContentLoaded can
+  // observe the HTML default before async refresh() has finished.
+  popup = await openPopup(browser, extensionId, "ultra");
   await popup.select("#mode", "standard");
   const standard = await waitMode(worker, "standard", 22000);
   log("STANDARD restored", standard.enabled.join(","));
