@@ -56,7 +56,7 @@ public class AdBlockVpnServiceV121 extends VpnService {
         super.onCreate();
         createNotificationChannel();
         int base = BlocklistManager.bootstrap(this);
-        SystemLogStore.info(this, "VPN", "Serwis v1.2.1 utworzony • bootstrap=" + base + " domen");
+        SystemLogStore.info(this, "VPN", "Serwis v1.5.0 utworzony • bootstrap=" + base + " domen • lang=" + I18n.language(this));
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -116,13 +116,13 @@ public class AdBlockVpnServiceV121 extends VpnService {
 
         return new Notification.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_shield_small)
-                .setContentTitle("xADKiller aktywny")
-                .setContentText("Ochrona reklam/trackingu • zablokowano: " + blocked)
+                .setContentTitle(I18n.t(this,"xADKiller aktywny"))
+                .setContentText(I18n.dynamic(this,"Ochrona reklam/trackingu • zablokowano: " + blocked))
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setContentIntent(openPi)
                 .addAction(new Notification.Action.Builder(
-                        android.R.drawable.ic_menu_close_clear_cancel, "Wyłącz", stopPi).build())
+                        android.R.drawable.ic_menu_close_clear_cancel, I18n.t(this,"Wyłącz"), stopPi).build())
                 .build();
     }
 
@@ -130,7 +130,7 @@ public class AdBlockVpnServiceV121 extends VpnService {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel c = new NotificationChannel(
                     CHANNEL_ID, "xADKiller VPN", NotificationManager.IMPORTANCE_LOW);
-            c.setDescription("Lokalna ochrona DNS przed reklamami, trackerami i złośliwymi domenami");
+            c.setDescription(I18n.t(this,"Lokalna ochrona DNS przed reklamami, trackerami i złośliwymi domenami"));
             NotificationManager nm = getSystemService(NotificationManager.class);
             if (nm != null) nm.createNotificationChannel(c);
         }
@@ -232,7 +232,7 @@ public class AdBlockVpnServiceV121 extends VpnService {
 
     private void writeBlockedLog(DnsPacket.Query q, String domain) {
         int uid = findOwnerUid(q);
-        String appName = uid == Process.INVALID_UID ? "Nieznana aplikacja" : "UID " + uid;
+        String appName = uid == Process.INVALID_UID ? I18n.t(this,"Nieznana aplikacja") : "UID " + uid;
         String packageName = "";
         if (uid != Process.INVALID_UID) {
             try {
