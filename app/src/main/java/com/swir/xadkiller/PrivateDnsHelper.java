@@ -65,7 +65,11 @@ final class PrivateDnsHelper {
     }
 
     static Intent settingsIntent() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) return new Intent(Settings.ACTION_PRIVATE_DNS_SETTINGS);
+        // The public Settings constant for this screen is not available on every SDK/OEM,
+        // while Android still accepts the documented action string on Android 9+.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return new Intent("android.settings.PRIVATE_DNS_SETTINGS");
+        }
         return new Intent(Settings.ACTION_WIRELESS_SETTINGS);
     }
 }
