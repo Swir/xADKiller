@@ -34,25 +34,30 @@ public class SmartAdAccessibilityService extends AccessibilityService {
 
     private static final long ANALYZE_MIN_MS = 220;
     private static final long DUPLICATE_LOG_MS = 4500;
+    private static final long ACTION_COOLDOWN_MS = 1700;
     private static final long MUTE_FAILSAFE_MS = 18000;
     private static final int MAX_NODES = 420;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private long lastAnalyzeAt;
     private long lastDetectionAt;
+    private long lastDetectionLoggedAt;
+    private long lastActionAt;
     private String lastDetectionKey = "";
     private long lastHeartbeatWrite;
     private int savedMusicVolume = -1;
     private boolean mutedByUs;
 
-    private final Runnable restoreRunnable = () -> {
-        if (!mutedByUs) return;
-        long age = System.currentTimeMillis() - lastDetectionAt;
-        if (age < MUTE_FAILSAFE_MS - 400) {
-            handler.postDelayed(restoreRunnable, Math.max(500, MUTE_FAILSAFE_MS - age));
-            return;
+    private final Runnable restoreRunnable = new Runnable() {
+        @Override public void run() {
+            if (!mutedByUs) return;
+            long age = System.currentTimeMillis() - lastDetectionAt;
+            if (age < MUTE_FAILSAFE_MS - 400) {
+                handler.postDelayed(this, Math.max(500, MUTE_FAILSAFE_MS - age));
+                return;
+            }
+            restoreAudio("timeout / brak dalszych sygnałów reklamy");
         }
-        restoreAudio("timeout / brak dalszych sygnałów reklamy");
     };
 
     @Override protected void onServiceConnected() {
@@ -94,10 +99,7 @@ public class SmartAdAccessibilityService extends AccessibilityService {
 
         String app = appLabel(pkg);
         String key = pkg + "|" + scan.signature;
-        boolean duplicate = key.equals(lastDetectionKey) && now - scan.lastLoggedAtHint < DUPLICATE_LOG_MS;
-        // lastLoggedAtHint is set below from our service timestamp; use explicit fields for clarity.
-        duplicate = key.equals(lastDetectionKey) && now - lastDetectionLoggedAt < DUPLICATE_LOG_MS;
-
+        boolean duplicate = key.equals(lastDetectionKey) && now - lastDetectionLoggedAt < DUPLICATE_LOG_MS;
         if (!duplicate) {
             lastDetectionKey = key;
             lastDetectionLoggedAt = now;
@@ -109,11 +111,12 @@ public class SmartAdAccessibilityService extends AccessibilityService {
         }
 
         boolean acted = false;
-        if (prefs.getBoolean(KEY_AUTO_SKIP, true) && scan.skipNode != null && scan.score >= 70) {
+        if (prefs.getBoolean(KEY_AUTO_SKIP, true) && scan.skipNode != null && scan.score >= 70 && now - lastActionAt >= ACTION_COOLDOWN_MS) {
             AccessibilityNodeInfo clickable = findClickable(scan.skipNode);
             if (clickable != null) {
                 try {
                     if (clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                        lastActionAt = now;
                         acted = true;
                         SystemLogStore.info(this, "SMART_ACTION", "AUTO-SKIP • " + app + " • " + pkg + " • score=" + scan.score + "%");
                     }
@@ -129,8 +132,6 @@ public class SmartAdAccessibilityService extends AccessibilityService {
 
         if (acted) prefs.edit().putLong(KEY_ACTIONS, prefs.getLong(KEY_ACTIONS, 0) + 1).apply();
     }
-
-    private long lastDetectionLoggedAt;
 
     @Override public void onInterrupt() {
         SystemLogStore.warn(this, "SMART", "AccessibilityService przerwany przez Android");
@@ -164,8 +165,11 @@ public class SmartAdAccessibilityService extends AccessibilityService {
                         "close ad", "zamknij reklamę", "zamknij reklame", "przejdź dalej po reklamie")) {
                     score += 75; signals.add("skip-control"); if (skip == null) skip = n;
                 }
-                if (containsAny(text, "advertisement", "reklama", "sponsored", "sponsorowane", "promoted", "promowane")) {
-                    score += 38; signals.add("ad-label");
+                if (containsAny(text, "advertisement", "reklama")) {
+                    score += 62; signals.add("ad-label");
+                }
+                if (containsAny(text, "sponsored", "sponsorowane", "promoted", "promowane")) {
+                    score += 38; signals.add("sponsored-label");
                 }
                 if (containsAny(text, "ad choices", "ads by", "why this ad", "dlaczego ta reklama", "treść sponsorowana", "tresc sponsorowana")) {
                     score += 45; signals.add("ad-metadata");
@@ -193,9 +197,7 @@ public class SmartAdAccessibilityService extends AccessibilityService {
 
         score = Math.min(99, score);
         String signature = signals.isEmpty() ? "unknown" : String.join(",", signals);
-        ScanResult r = new ScanResult(score, signature, skip);
-        r.lastLoggedAtHint = lastDetectionLoggedAt;
-        return r;
+        return new ScanResult(score, signature, skip);
     }
 
     private static String normalized(AccessibilityNodeInfo n) {
@@ -273,9 +275,10 @@ public class SmartAdAccessibilityService extends AccessibilityService {
         final int score;
         final String signature;
         final AccessibilityNodeInfo skipNode;
-        long lastLoggedAtHint;
         ScanResult(int score, String signature, AccessibilityNodeInfo skipNode) {
-            this.score = score; this.signature = signature; this.skipNode = skipNode;
+            this.score = score;
+            this.signature = signature;
+            this.skipNode = skipNode;
         }
     }
 }
