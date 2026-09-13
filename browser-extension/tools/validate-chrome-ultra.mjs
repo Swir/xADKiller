@@ -25,6 +25,12 @@ for (const rel of ["background.js","content.js","cosmetic-data.js","build-meta.j
   if (!fs.existsSync(path.join(base, rel))) fail(`missing ${rel}`);
 }
 
+function overlap(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return [];
+  const bs = new Set(b);
+  return [...new Set(a)].filter((x) => bs.has(x));
+}
+
 function validateRules(name, min, max) {
   const rules = readJson(path.join(base, "rules", `${name}.json`));
   if (rules.length < min) fail(`${name}: too few rules ${rules.length}`);
@@ -38,6 +44,13 @@ function validateRules(name, min, max) {
     if (!rule.condition?.urlFilter) fail(`${name} ${rule.id}: urlFilter missing`);
     if (rule.condition.regexFilter) fail(`${name} ${rule.id}: regex rules disabled for beta`);
     if (!Array.isArray(rule.condition?.resourceTypes) || !rule.condition.resourceTypes.length) fail(`${name} ${rule.id}: resourceTypes missing`);
+
+    const resourceOverlap = overlap(rule.condition.resourceTypes, rule.condition.excludedResourceTypes);
+    if (resourceOverlap.length) fail(`${name} ${rule.id}: resourceTypes overlap excludedResourceTypes: ${resourceOverlap.join(",")}`);
+    const initiatorOverlap = overlap(rule.condition.initiatorDomains, rule.condition.excludedInitiatorDomains);
+    if (initiatorOverlap.length) fail(`${name} ${rule.id}: initiatorDomains overlap excludedInitiatorDomains: ${initiatorOverlap.join(",")}`);
+    const requestOverlap = overlap(rule.condition.requestDomains, rule.condition.excludedRequestDomains);
+    if (requestOverlap.length) fail(`${name} ${rule.id}: requestDomains overlap excludedRequestDomains: ${requestOverlap.join(",")}`);
   }
   return rules.length;
 }
