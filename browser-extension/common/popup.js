@@ -42,6 +42,8 @@ const learnedCount = document.getElementById("learnedCount");
 const rulesInfo = document.getElementById("rulesInfo");
 const customInfo = document.getElementById("customInfo");
 const domainInput = document.getElementById("domainInput");
+const liveInfo = document.getElementById("liveInfo");
+const liveRefresh = document.getElementById("liveRefresh");
 
 let activeTab = null;
 let host = "";
@@ -70,6 +72,18 @@ async function refresh() {
       rulesInfo.textContent = `${total.toLocaleString()} ${t("networkRules", "network rules")} • ${(b.cosmeticGeneric || 0).toLocaleString()}+ ${t("cosmeticRules", "cosmetic rules")}`;
     }
     customInfo.textContent = `${(state.customDomains || []).length} ${t("customDomainsCount", "custom domains")}`;
+    const live = state.liveShield || {};
+    if (live.version) {
+      const count = state.mode === "ultra" ? Number(live.standard || 0) + Number(live.ultra || 0) : Number(live.standard || 0);
+      liveInfo.textContent = `${live.version} • ${count.toLocaleString()} ${t("liveDomains", "own live domains")}`;
+    } else {
+      liveInfo.textContent = t("liveShieldWaiting", "Waiting for intelligence feed…");
+    }
+  }
+
+  const shield = await send({ type:"getDynamicShieldStats" });
+  if (shield?.ok && rulesInfo.textContent !== "—") {
+    rulesInfo.textContent += ` • ${Number(shield.total || 0).toLocaleString()} ${t("dynamicRules", "dynamic")}`;
   }
 
   const stats = activeTab ? await tabMessage(activeTab.id, { type:"getPageStats" }) : null;
@@ -113,6 +127,17 @@ siteToggle.addEventListener("click", async () => {
   await send({ type:"setSiteAllowed", host, allowed:!siteAllowed });
   await rescan();
   stateBusy = false;
+  refresh();
+});
+liveRefresh.addEventListener("click", async () => {
+  if (stateBusy) return;
+  stateBusy = true;
+  liveRefresh.disabled = true;
+  liveInfo.textContent = t("liveShieldUpdating", "Updating Live Shield…");
+  const result = await send({ type:"refreshLiveShield" });
+  if (!result?.ok) liveInfo.textContent = `${t("liveShieldError", "Update failed")}: ${result?.error || "unknown"}`;
+  stateBusy = false;
+  liveRefresh.disabled = false;
   refresh();
 });
 document.getElementById("pickerBtn").addEventListener("click", async () => {
