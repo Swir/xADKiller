@@ -36,8 +36,8 @@ function normalizeSelector(v) {
   return s;
 }
 function parseOptions(raw) {
-  if (!raw) return { ok: true, condition: {} };
-  const condition = {};
+  const condition = { resourceTypes: [...ALL_TYPES] };
+  if (!raw) return { ok: true, condition };
   const positives = [];
   const negatives = [];
   const initiators = [];
@@ -65,7 +65,6 @@ function parseOptions(raw) {
     if (mapped) (neg ? negatives : positives).push(mapped);
   }
   if (positives.length) condition.resourceTypes = [...new Set(positives)];
-  else condition.resourceTypes = ALL_TYPES;
   if (negatives.length) condition.excludedResourceTypes = [...new Set(negatives)];
   if (initiators.length) condition.initiatorDomains = [...new Set(initiators)].slice(0, 100);
   if (excludedInitiators.length) condition.excludedInitiatorDomains = [...new Set(excludedInitiators)].slice(0, 100);
@@ -115,12 +114,12 @@ function parseCosmeticLine(line, generic, scoped) {
   const selector = normalizeSelector(line.slice(idx + 2));
   if (!selector) return;
   if (!left) {
-    if (generic.size < 3500) generic.add(selector);
+    if (generic.size < 4500) generic.add(selector);
     return;
   }
   const domains = left.split(",").map(cleanDomain).filter((d) => validDomain(d) && !d.startsWith("~")).slice(0, 8);
   for (const d of domains) {
-    if (scoped.size >= 2500 && !scoped.has(d)) break;
+    if (scoped.size >= 3000 && !scoped.has(d)) break;
     if (!scoped.has(d)) scoped.set(d, new Set());
     const set = scoped.get(d);
     if (set.size < 50) set.add(selector);
@@ -154,9 +153,15 @@ for (const source of SOURCES) {
   try {
     const text = await fetchText(source.url);
     const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
+
+    // Cosmetic rules must be scanned across the WHOLE source. Network budgets must
+    // never stop us before EasyList/AdGuard cosmetic sections are reached.
+    if (source.cosmetic) {
+      for (const line of lines) parseCosmeticLine(line, genericSelectors, scopedSelectors);
+    }
+
     let added = 0;
     for (const line of lines) {
-      if (source.cosmetic) parseCosmeticLine(line, genericSelectors, scopedSelectors);
       const parsed = source.id === "hagezi-ultimate" ? parseDomainLine(line) : parseNetworkLine(line);
       if (!parsed) continue;
       const target = source.mode === "ultra" ? ultra : standard;
@@ -173,6 +178,8 @@ for (const source of SOURCES) {
 if (standard.length < 1000) throw new Error(`Too few STANDARD rules: ${standard.length}`);
 if (ultra.length < 1000) throw new Error(`Too few ULTRA rules: ${ultra.length}`);
 if (!sourceStatus.some((s) => s.id === "easylist" && s.ok)) throw new Error("EasyList unavailable");
+if (genericSelectors.size < 250) throw new Error(`Too few generic cosmetic selectors: ${genericSelectors.size}`);
+if (scopedSelectors.size < 50) throw new Error(`Too few scoped cosmetic domains: ${scopedSelectors.size}`);
 
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
