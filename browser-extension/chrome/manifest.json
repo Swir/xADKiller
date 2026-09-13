@@ -39,6 +39,21 @@
         "id": "ultra",
         "enabled": false,
         "path": "rules/ultra.json"
+      },
+      {
+        "id": "titan_boost_1",
+        "enabled": false,
+        "path": "rules/titan-boost-1.json"
+      },
+      {
+        "id": "titan_boost_2",
+        "enabled": false,
+        "path": "rules/titan-boost-2.json"
+      },
+      {
+        "id": "titan_boost_3",
+        "enabled": false,
+        "path": "rules/titan-boost-3.json"
       }
     ]
   },
