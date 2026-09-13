@@ -1,12 +1,14 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
+  "minimum_chrome_version": "121",
   "permissions": [
     "storage",
     "declarativeNetRequest",
+    "declarativeNetRequestFeedback",
     "activeTab"
   ],
   "host_permissions": [
@@ -28,9 +30,14 @@
   "declarative_net_request": {
     "rule_resources": [
       {
-        "id": "core",
+        "id": "standard",
         "enabled": true,
-        "path": "rules/core.json"
+        "path": "rules/standard.json"
+      },
+      {
+        "id": "ultra",
+        "enabled": false,
+        "path": "rules/ultra.json"
       }
     ]
   },
@@ -41,6 +48,7 @@
         "https://*/*"
       ],
       "js": [
+        "cosmetic-data.js",
         "content.js"
       ],
       "run_at": "document_start"
