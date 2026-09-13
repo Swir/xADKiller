@@ -1,44 +1,32 @@
 {
-  "extName": {
-    "message": "xADKiller Browser"
-  },
-  "extDescription": {
-    "message": "Blokuje reklamy i trackery przez reguły Manifest V3, filtrowanie elementów strony i Smart Auto-Skip."
-  },
-  "protection": {
-    "message": "Ochrona"
-  },
-  "currentSite": {
-    "message": "Aktualna strona"
-  },
-  "autoSkip": {
-    "message": "Smart Auto-Skip"
-  },
-  "autoSkipHint": {
-    "message": "Klika tylko jednoznaczne przyciski Pomiń reklamę"
-  },
-  "hiddenAds": {
-    "message": "ukrytych elementów"
-  },
-  "skippedAds": {
-    "message": "auto-pominięć"
-  },
-  "testButton": {
-    "message": "Testuj blokowanie"
-  },
-  "unsupportedPage": {
-    "message": "Strona przeglądarki"
-  },
-  "statusOn": {
-    "message": "AKTYWNA"
-  },
-  "statusOff": {
-    "message": "WYŁĄCZONA"
-  },
-  "allowSite": {
-    "message": "Zezwól tej stronie"
-  },
-  "protectSite": {
-    "message": "Chroń tę stronę"
-  }
+  "extName":{"message":"xADKiller Browser"},
+  "extDescription":{"message":"Blokuje reklamy i trackery przez reguły Manifest V3, lokalny adaptacyjny Smart DOM i Auto-Skip."},
+  "protection":{"message":"Ochrona"},
+  "currentSite":{"message":"Aktualna strona"},
+  "filterMode":{"message":"Tryb filtrowania"},
+  "modeStandard":{"message":"STANDARD"},
+  "modeUltra":{"message":"ULTRA"},
+  "networkRules":{"message":"reguł sieciowych"},
+  "cosmeticRules":{"message":"reguł kosmetycznych"},
+  "smartEngine":{"message":"Smart DOM Engine"},
+  "smartHint":{"message":"Lokalne adaptacyjne wykrywanie elementów"},
+  "autoSkip":{"message":"Smart Auto-Skip"},
+  "autoSkipHint":{"message":"Klika tylko jednoznaczne przyciski Pomiń reklamę"},
+  "networkBlocks":{"message":"trafień sieciowych"},
+  "hiddenAds":{"message":"ukrytych elementów"},
+  "smartBlocks":{"message":"ukryć Smart"},
+  "learnedSignals":{"message":"nauczonych sygnałów"},
+  "adaptiveLab":{"message":"Narzędzia adaptacyjne"},
+  "pickElement":{"message":"Zablokuj / naucz element"},
+  "falsePositive":{"message":"Fałszywy alarm"},
+  "adaptiveHint":{"message":"Uczenie odbywa się lokalnie w tym profilu przeglądarki."},
+  "customDomain":{"message":"Własna blokowana domena"},
+  "customDomainsCount":{"message":"własnych domen"},
+  "add":{"message":"Dodaj"},
+  "testButton":{"message":"Testuj blokowanie"},
+  "unsupportedPage":{"message":"Strona przeglądarki"},
+  "statusOn":{"message":"AKTYWNA"},
+  "statusOff":{"message":"WYŁĄCZONA"},
+  "allowSite":{"message":"Zezwól tej stronie"},
+  "protectSite":{"message":"Chroń tę stronę"}
 }
