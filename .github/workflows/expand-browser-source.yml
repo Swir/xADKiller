@@ -4,7 +4,7 @@ on:
   push:
     branches: [ browser-extension-dev ]
     paths:
-      - "browser-extension-source.zip.b64"
+      - "browser-extension-source.ready"
 
 permissions:
   contents: write
@@ -15,14 +15,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Reassemble and verify source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat browser-extension-source.parts/part-*.b64 > /tmp/xad-browser-source.b64
+          base64 -d /tmp/xad-browser-source.b64 > /tmp/xad-browser-source.zip
+          echo "46b17cbc0df7c43e7e759e1ce04786827fba727114fd7ff50f65a1a3b969b197  /tmp/xad-browser-source.zip" | sha256sum -c -
+          unzip -tq /tmp/xad-browser-source.zip
       - name: Expand source bundle
         shell: bash
         run: |
           set -euo pipefail
-          test -f browser-extension-source.zip.b64 || exit 0
           rm -rf /tmp/xad-browser-src
           mkdir -p /tmp/xad-browser-src
-          base64 -d browser-extension-source.zip.b64 > /tmp/xad-browser-source.zip
           unzip -q /tmp/xad-browser-source.zip -d /tmp/xad-browser-src
           rm -rf browser-extension
           mkdir -p browser-extension .github/workflows
@@ -34,7 +40,7 @@ jobs:
           cp /tmp/xad-browser-src/package.json browser-extension/package.json
           cp /tmp/xad-browser-src/README.md browser-extension/README.md
           cp /tmp/xad-browser-src/_tmp/browser-extension-ci.yml .github/workflows/browser-extension-ci.yml
-          rm browser-extension-source.zip.b64
+          rm -rf browser-extension-source.parts browser-extension-source.ready browser-extension-source.zip.b64
           rm .github/workflows/expand-browser-source.yml
       - name: Commit expanded source
         shell: bash
