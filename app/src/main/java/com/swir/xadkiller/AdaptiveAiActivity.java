@@ -43,7 +43,8 @@ public class AdaptiveAiActivity extends Activity {
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(18),dp(18),dp(18),dp(30));scroll.addView(root,new ScrollView.LayoutParams(-1,-2));
 
         TextView title=tv("ADAPTIVE AI LAB",27,text,true);title.setLetterSpacing(.07f);root.addView(title);
-        root.addView(tv("xADKiller v1.4.1 • Local + Community + Benchmark Learning",12,blue,true));space(root,12);
+        root.addView(tv("xADKiller v1.5.0 • Local + Community + Benchmark Learning",12,blue,true));
+        root.addView(tv(I18n.languageStatus(this),10,muted,false));space(root,12);
 
         LinearLayout intro=card(surface,18);root.addView(intro,lpWrap());
         intro.addView(tv("JAK TO DZIAŁA",15,text,true));
@@ -52,9 +53,9 @@ public class AdaptiveAiActivity extends Activity {
 
         SharedPreferences prefs=getSharedPreferences(BlocklistManager.PREFS,MODE_PRIVATE);
         LinearLayout controls=card(surface,18);root.addView(controls,lpWrap());controls.addView(tv("TRYB UCZENIA",15,text,true));
-        Switch enabled=new Switch(this);enabled.setText("Adaptive AI aktywne");enabled.setTextColor(text);enabled.setChecked(prefs.getBoolean(AdaptiveLearningEngine.KEY_ENABLED,true));
+        Switch enabled=new Switch(this);enabled.setText(I18n.t(this,"Adaptive AI aktywne"));enabled.setTextColor(text);enabled.setChecked(prefs.getBoolean(AdaptiveLearningEngine.KEY_ENABLED,true));
         enabled.setOnCheckedChangeListener((x,on)->{prefs.edit().putBoolean(AdaptiveLearningEngine.KEY_ENABLED,on).apply();SystemLogStore.info(this,"AI_MODEL","Adaptive AI: "+on);refresh();});controls.addView(enabled,lpWrap());
-        Switch auto=new Switch(this);auto.setText("Ucz się lekko po udanym Auto-Skip");auto.setTextColor(text);auto.setChecked(prefs.getBoolean(AdaptiveLearningEngine.KEY_AUTO_LEARN,true));
+        Switch auto=new Switch(this);auto.setText(I18n.t(this,"Ucz się lekko po udanym Auto-Skip"));auto.setTextColor(text);auto.setChecked(prefs.getBoolean(AdaptiveLearningEngine.KEY_AUTO_LEARN,true));
         auto.setOnCheckedChangeListener((x,on)->{prefs.edit().putBoolean(AdaptiveLearningEngine.KEY_AUTO_LEARN,on).apply();SystemLogStore.info(this,"AI_MODEL","Auto-learning po Skip-Ad: "+on);});controls.addView(auto,lpWrap());
         space(controls,7);
         Button access=button("USTAWIENIA SMART ENGINE",surface2,text);access.setOnClickListener(v->{try{startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));}catch(Exception e){SystemLogStore.error(this,"AI_UI","Nie udało się otworzyć Accessibility",e);}});controls.addView(access,lpH(48));space(root,10);
@@ -87,53 +88,56 @@ public class AdaptiveAiActivity extends Activity {
         Button back=button("← WRÓĆ DO xADKILLER",surface2,text);back.setOnClickListener(v->finish());root.addView(back,lpH(50));space(root,8);
         TextView footer=tv("Adaptive AI • Benchmark Learning • on-device • BY SWIR",11,muted,false);footer.setGravity(Gravity.CENTER);root.addView(footer,lpWrap());
         setContentView(scroll);
+        localize();
     }
 
     private void feedback(boolean wasAd){
         AdaptiveLearningEngine.FeedbackResult r=AdaptiveLearningEngine.trainLastFeedback(this,wasAd);
-        Toast.makeText(this,r.message,Toast.LENGTH_LONG).show();
+        Toast.makeText(this,I18n.dynamic(this,r.message),Toast.LENGTH_LONG).show();
         refresh();
     }
 
     private void updateCommunity(){
-        if(updateCommunity!=null){updateCommunity.setEnabled(false);updateCommunity.setText("UCZENIE Z 6 ŹRÓDEŁ…");}
+        if(updateCommunity!=null){updateCommunity.setEnabled(false);updateCommunity.setText(I18n.t(this,"UCZENIE Z 6 ŹRÓDEŁ…"));}
         SystemLogStore.info(this,"AI_COMMUNITY","Ręczna aktualizacja Community/Benchmark AI rozpoczęta");
         new Thread(()->{
             try{
                 int n=CommunityLearningManager.update(getApplicationContext());
-                runOnUiThread(()->{if(updateCommunity!=null){updateCommunity.setEnabled(true);updateCommunity.setText("AKTUALIZUJ COMMUNITY + BENCHMARK AI");}Toast.makeText(this,"AI: "+n+" sygnałów.",Toast.LENGTH_LONG).show();refresh();});
+                runOnUiThread(()->{if(updateCommunity!=null){updateCommunity.setEnabled(true);updateCommunity.setText(I18n.t(this,"AKTUALIZUJ COMMUNITY + BENCHMARK AI"));}Toast.makeText(this,I18n.dynamic(this,"AI: "+n+" sygnałów."),Toast.LENGTH_LONG).show();refresh();});
             }catch(Throwable t){
                 SystemLogStore.error(this,"AI_COMMUNITY","Ręczna aktualizacja nieudana",t);
-                runOnUiThread(()->{if(updateCommunity!=null){updateCommunity.setEnabled(true);updateCommunity.setText("AKTUALIZUJ COMMUNITY + BENCHMARK AI");}Toast.makeText(this,"Błąd aktualizacji — zobacz SYSTEM CONSOLE.",Toast.LENGTH_LONG).show();refresh();});
+                runOnUiThread(()->{if(updateCommunity!=null){updateCommunity.setEnabled(true);updateCommunity.setText(I18n.t(this,"AKTUALIZUJ COMMUNITY + BENCHMARK AI"));}Toast.makeText(this,I18n.t(this,"Błąd aktualizacji — zobacz SYSTEM CONSOLE."),Toast.LENGTH_LONG).show();refresh();});
             }
         },"xADKiller-BenchmarkUpdate").start();
     }
 
     private void openUrl(String url){
         try{startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));}
-        catch(Exception e){SystemLogStore.error(this,"AI_UI","Nie udało się otworzyć testu",e);Toast.makeText(this,"Nie można otworzyć strony testowej.",Toast.LENGTH_LONG).show();}
+        catch(Exception e){SystemLogStore.error(this,"AI_UI","Nie udało się otworzyć testu",e);Toast.makeText(this,I18n.t(this,"Nie można otworzyć strony testowej."),Toast.LENGTH_LONG).show();}
     }
 
     private void confirmReset(){
-        new AlertDialog.Builder(this).setTitle("Zresetować Adaptive AI?").setMessage("Usunie tylko lokalnie nauczone wagi i feedback. Listy DNS i Community/Benchmark AI zostaną zachowane.").setNegativeButton("Anuluj",null).setPositiveButton("RESET",(d,w)->{AdaptiveLearningEngine.reset(this);refresh();Toast.makeText(this,"Model lokalny zresetowany.",Toast.LENGTH_LONG).show();}).show();
+        new AlertDialog.Builder(this).setTitle(I18n.t(this,"Zresetować Adaptive AI?")).setMessage(I18n.t(this,"Usunie tylko lokalnie nauczone wagi i feedback. Listy DNS i Community/Benchmark AI zostaną zachowane.")).setNegativeButton(I18n.t(this,"Anuluj"),null).setPositiveButton("RESET",(d,w)->{AdaptiveLearningEngine.reset(this);refresh();Toast.makeText(this,I18n.t(this,"Model lokalny zresetowany."),Toast.LENGTH_LONG).show();}).show();
     }
 
     private void refresh(){
         AdaptiveLearningEngine.Stats s=AdaptiveLearningEngine.stats(this);
         SharedPreferences p=getSharedPreferences(BlocklistManager.PREFS,MODE_PRIVATE);
         boolean enabled=p.getBoolean(AdaptiveLearningEngine.KEY_ENABLED,true);
-        statusText.setText(enabled?"● ADAPTIVE AI AKTYWNE":"○ ADAPTIVE AI WYŁĄCZONE");statusText.setTextColor(enabled?getColor(R.color.swir_green):getColor(R.color.swir_muted));
-        modelStats.setText("Próbki feedbacku: "+s.samples+" • reklamy: "+s.positive+" • false-positive: "+s.negative+"\nAktywne nauczone cechy: "+s.modelFeatures);
+        statusText.setText(enabled?I18n.dynamic(this,"● ADAPTIVE AI AKTYWNE"):I18n.dynamic(this,"○ ADAPTIVE AI WYŁĄCZONE"));statusText.setTextColor(enabled?getColor(R.color.swir_green):getColor(R.color.swir_muted));
+        modelStats.setText(I18n.dynamic(this,"Próbki feedbacku: "+s.samples+" • reklamy: "+s.positive+" • false-positive: "+s.negative+"\nAktywne nauczone cechy: "+s.modelFeatures));
         if(s.lastObservationTime>0){
             String dt=DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.MEDIUM,Locale.getDefault()).format(new Date(s.lastObservationTime));
-            lastObservation.setText("Ostatnia obserwacja: "+(s.lastPackage.isEmpty()?"nieznana aplikacja":s.lastPackage)+" • base score="+s.lastBaseScore+" • "+dt);
-        }else lastObservation.setText("Ostatnia obserwacja: brak — użyj aplikacji przy włączonym Smart Engine.");
+            lastObservation.setText(I18n.dynamic(this,"Ostatnia obserwacja: "+(s.lastPackage.isEmpty()?"nieznana aplikacja":s.lastPackage)+" • base score="+s.lastBaseScore+" • "+dt));
+        }else lastObservation.setText(I18n.dynamic(this,"Ostatnia obserwacja: brak — użyj aplikacji przy włączonym Smart Engine."));
         int count=CommunityLearningManager.count(this);long last=p.getLong(CommunityLearningManager.KEY_LAST_UPDATE,0);int ok=p.getInt(CommunityLearningManager.KEY_SOURCES_OK,0);int total=p.getInt(CommunityLearningManager.KEY_SOURCES_TOTAL,CommunityLearningManager.sourceCount());
-        communityStats.setText("Sygnały AI: "+count+" • źródła: "+(last>0?ok+"/"+total:"seed / "+total)+(last>0?" • aktualizacja: "+DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT,Locale.getDefault()).format(new Date(last)):""));
+        communityStats.setText(I18n.dynamic(this,"Sygnały AI: "+count+" • źródła: "+(last>0?ok+"/"+total:"seed / "+total)+(last>0?" • aktualizacja: "+DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT,Locale.getDefault()).format(new Date(last)):"")));
+        localize();
     }
 
-    private TextView tv(String s,float sp,int c,boolean bold){TextView v=new TextView(this);v.setText(s);v.setTextSize(sp);v.setTextColor(c);v.setLineSpacing(0,1.08f);if(bold)v.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return v;}
-    private Button button(String t,int bg,int fg){Button b=new Button(this);b.setText(t);b.setTextColor(fg);b.setTextSize(12);b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);b.setAllCaps(false);b.setPadding(dp(8),0,dp(8),0);b.setBackground(round(bg,13));return b;}
+    private void localize(){try{I18n.apply(this,getWindow().getDecorView());}catch(Throwable ignored){}}
+    private TextView tv(String s,float sp,int c,boolean bold){TextView v=new TextView(this);v.setText(I18n.t(this,s));v.setTextSize(sp);v.setTextColor(c);v.setLineSpacing(0,1.08f);if(bold)v.setTypeface(Typeface.DEFAULT,Typeface.BOLD);return v;}
+    private Button button(String t,int bg,int fg){Button b=new Button(this);b.setText(I18n.t(this,t));b.setTextColor(fg);b.setTextSize(12);b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);b.setAllCaps(false);b.setPadding(dp(8),0,dp(8),0);b.setBackground(round(bg,13));return b;}
     private LinearLayout card(int bg,int r){LinearLayout c=new LinearLayout(this);c.setOrientation(LinearLayout.VERTICAL);c.setPadding(dp(15),dp(13),dp(15),dp(13));c.setBackground(round(bg,r));return c;}
     private GradientDrawable round(int c,int r){GradientDrawable d=new GradientDrawable();d.setColor(c);d.setCornerRadius(dp(r));return d;}
     private LinearLayout.LayoutParams lpWrap(){return new LinearLayout.LayoutParams(-1,-2);}private LinearLayout.LayoutParams lpH(int h){return new LinearLayout.LayoutParams(-1,dp(h));}private void space(LinearLayout p,int d){Space s=new Space(this);p.addView(s,new LinearLayout.LayoutParams(1,dp(d)));}private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
