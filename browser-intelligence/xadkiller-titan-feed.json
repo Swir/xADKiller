@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "feed": "xADKiller TITAN Intelligence",
+  "feed_version": "2026.09.13.1",
+  "updated_at": "2026-09-13T17:25:00Z",
+  "maintainer": "SWIR",
+  "description": "Data-only signatures for xADKiller Browser TITAN Shield. No executable remote code.",
+  "regex_signatures": [
+    {"regex":"^https?://[^/]+/(?:[^/?#]+/){0,3}(?:ads?|adserver|adservice|adrequest|pagead|gampad|securepubads|prebid)(?:[._/-]|$)","types":["script","xmlhttprequest","sub_frame","image"]},
+    {"regex":"^https?://[^/]+/(?:[^/?#]+/){0,4}(?:vast|vmap|ima3)(?:[._/-]|$)","types":["xmlhttprequest","media","sub_frame"]},
+    {"regex":"^https?://[^/]+/[^?#]*[?&](?:ad_unit|adunit|ad_slot|adslot|gdfp_req|iu)=","types":["script","xmlhttprequest","sub_frame"]},
+    {"regex":"^https?://[^/]+/(?:collect|track|tracking|analytics|pixel|impression|conversion)(?:[._/-]|$)","types":["xmlhttprequest","ping","image"],"third_party":true}
+  ],
+  "path_signatures": [
+    "/ads/", "/ad/", "/adserver/", "/adservice/", "/adrequest", "/pagead/", "/gampad/", "/securepubads/", "/prebid/", "/prebid.js", "/prebid.min.js", "/vast/", "/vmap/", "/ima3/", "/commercial/", "/sponsor/", "/sponsored/", "/promoted/", "/advertising/", "/ad-loader.js", "/adloader.js", "/ads.js", "/pagead.js"
+  ],
+  "strong_tokens": [
+    "doubleclick", "googlesyndication", "googleadservices", "amazon-adsystem", "adnxs", "adsrvr", "pubmatic", "rubiconproject", "criteo", "taboola", "outbrain", "smartadserver", "adform", "prebid", "gampad", "securepubads", "adsbygoogle"
+  ]
+}
