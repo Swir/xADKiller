@@ -63,6 +63,7 @@
         "https://*/*"
       ],
       "js": [
+        "preflight-config.js",
         "cosmetic-data.js",
         "content.js",
         "shadow-sentinel.js"
