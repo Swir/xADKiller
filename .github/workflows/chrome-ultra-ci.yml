@@ -1,0 +1,63 @@
+name: Test xADKiller Chrome Ultra
+
+on:
+  push:
+    branches: [ chrome-ultra-dev ]
+    paths:
+      - "browser-extension/**"
+      - ".github/workflows/chrome-ultra-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Compile EasyList AdGuard and Ultra rules
+        run: npm run build
+      - name: Validate Chrome Ultra package
+        run: npm run validate
+      - name: JavaScript syntax
+        run: |
+          node --check dist/chrome/background.js
+          node --check dist/chrome/content.js
+          node --check dist/chrome/popup.js
+          node --check dist/chrome/cosmetic-data.js
+          node --check dist/chrome/build-meta.js
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Chromium runtime test
+        run: xvfb-run -a npm run test:chrome
+      - name: Package Chrome beta ZIP
+        run: |
+          rm -rf packages
+          mkdir -p packages
+          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.1.0-ULTRA-beta.zip .)
+      - name: Checksums
+        run: |
+          cd packages
+          sha256sum xADKiller-Chrome-v1.1.0-ULTRA-beta.zip > SHA256SUMS.txt
+      - name: Verify archive
+        run: |
+          unzip -tq packages/xADKiller-Chrome-v1.1.0-ULTRA-beta.zip
+          (cd packages && sha256sum -c SHA256SUMS.txt)
+      - name: Upload tested Chrome beta
+        uses: actions/upload-artifact@v4
+        with:
+          name: xADKiller-Chrome-v1.1.0-ULTRA-beta-tested
+          path: browser-extension/packages/*
+          if-no-files-found: error
+          retention-days: 30
