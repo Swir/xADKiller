@@ -8,7 +8,7 @@ const readJson = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
 
 const manifest = readJson(path.join(base, "manifest.json"));
 if (manifest.manifest_version !== 3) fail("manifest_version must be 3");
-if (manifest.version !== "1.1.0") fail(`unexpected version ${manifest.version}`);
+if (manifest.version !== "1.2.0") fail(`unexpected version ${manifest.version}`);
 if (Number(manifest.minimum_chrome_version) < 121) fail("minimum Chrome must be >=121");
 for (const p of ["storage","declarativeNetRequest","declarativeNetRequestFeedback","activeTab"]) {
   if (!manifest.permissions?.includes(p)) fail(`missing permission ${p}`);
@@ -21,7 +21,10 @@ if (!rs.some((x) => x.id === "ultra" && x.enabled === false)) fail("ultra rulese
 const contentJs = manifest.content_scripts?.[0]?.js || [];
 if (contentJs[0] !== "cosmetic-data.js" || !contentJs.includes("content.js")) fail("cosmetic data must load before content.js");
 
-for (const rel of ["background.js","content.js","cosmetic-data.js","build-meta.js","popup.html","popup.js","popup.css","rules/standard.json","rules/ultra.json","icons/icon128.png"]) {
+for (const rel of [
+  "background.js","content.js","cosmetic-data.js","build-meta.js","dynamic-intel-meta.json",
+  "popup.html","popup.js","popup.css","rules/standard.json","rules/ultra.json","rules/dynamic-intel.json","icons/icon128.png"
+]) {
   if (!fs.existsSync(path.join(base, rel))) fail(`missing ${rel}`);
 }
 
@@ -54,9 +57,19 @@ function validateRules(name, min, max) {
   }
   return rules.length;
 }
+
 const standard = validateRules("standard", 1000, 20000);
 const ultra = validateRules("ultra", 1000, 10000);
-if (standard + ultra > 30000) fail(`total rules exceed guaranteed 30k: ${standard + ultra}`);
+if (standard + ultra > 30000) fail(`total static rules exceed guaranteed 30k: ${standard + ultra}`);
+
+const intel = readJson(path.join(base, "rules", "dynamic-intel.json"));
+if (!Array.isArray(intel)) fail("dynamic intelligence pack must be an array");
+if (intel.length < 18000) fail(`dynamic intelligence pack too small: ${intel.length}`);
+if (intel.length > 24000) fail(`dynamic intelligence pack too large: ${intel.length}`);
+if (new Set(intel).size !== intel.length) fail("dynamic intelligence pack contains duplicates");
+for (const domain of intel.slice(0, 200)) {
+  if (!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,63}$/i.test(domain)) fail(`invalid dynamic intelligence domain: ${domain}`);
+}
 
 for (const lang of ["en","pl","es","de","fr"]) {
   const messages = readJson(path.join(base, "_locales", lang, "messages.json"));
@@ -71,4 +84,4 @@ for (const rel of ["background.js","content.js","popup.js"]) {
   if (/importScripts\s*\(\s*["']https?:/i.test(code)) fail(`${rel}: remote hosted code forbidden`);
 }
 
-if (!process.exitCode) console.log(`OK: Chrome Ultra validated: ${standard} STANDARD + ${ultra} ULTRA rules, 5 locales, adaptive DOM engine`);
+if (!process.exitCode) console.log(`OK: Chrome Ultra v1.2.0 validated: ${standard} STANDARD + ${ultra} ULTRA static, ${intel.length} dynamic intelligence domains, 5 locales`);
