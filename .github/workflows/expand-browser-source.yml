@@ -1,0 +1,48 @@
+name: Expand xADKiller Browser Source
+
+on:
+  push:
+    branches: [ browser-extension-dev ]
+    paths:
+      - "browser-extension-source.zip.b64"
+
+permissions:
+  contents: write
+
+jobs:
+  expand:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Expand source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f browser-extension-source.zip.b64 || exit 0
+          rm -rf /tmp/xad-browser-src
+          mkdir -p /tmp/xad-browser-src
+          base64 -d browser-extension-source.zip.b64 > /tmp/xad-browser-source.zip
+          unzip -q /tmp/xad-browser-source.zip -d /tmp/xad-browser-src
+          rm -rf browser-extension
+          mkdir -p browser-extension .github/workflows
+          cp -a /tmp/xad-browser-src/common browser-extension/
+          cp -a /tmp/xad-browser-src/chrome browser-extension/
+          cp -a /tmp/xad-browser-src/firefox browser-extension/
+          cp -a /tmp/xad-browser-src/tools browser-extension/
+          cp -a /tmp/xad-browser-src/tests browser-extension/
+          cp /tmp/xad-browser-src/package.json browser-extension/package.json
+          cp /tmp/xad-browser-src/README.md browser-extension/README.md
+          cp /tmp/xad-browser-src/_tmp/browser-extension-ci.yml .github/workflows/browser-extension-ci.yml
+          rm browser-extension-source.zip.b64
+          rm .github/workflows/expand-browser-source.yml
+      - name: Commit expanded source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "Add xADKiller Chrome and Firefox extension sources"
+          git push
