@@ -16,12 +16,10 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * xADKiller Smart Ad Engine v1.3.
+ * xADKiller Smart Ad Engine v1.4.
  *
- * Phase 1 is intentionally local and lightweight: it scores the accessibility
- * tree for advertising signals, can press explicit Skip/Close-Ad controls and
- * optionally mutes STREAM_MUSIC while an ad is strongly detected. No screen,
- * audio or accessibility content is uploaded anywhere.
+ * Layer 2 combines deterministic UI signals, curated Community Intelligence
+ * and a tiny on-device online-learning model. Full screen text is never stored.
  */
 public class SmartAdAccessibilityService extends AccessibilityService {
     static final String KEY_SMART_ENABLED = "smart_engine_enabled";
@@ -36,7 +34,8 @@ public class SmartAdAccessibilityService extends AccessibilityService {
     private static final long DUPLICATE_LOG_MS = 4500;
     private static final long ACTION_COOLDOWN_MS = 1700;
     private static final long MUTE_FAILSAFE_MS = 18000;
-    private static final int MAX_NODES = 420;
+    private static final int MAX_NODES = 460;
+    private static final int MAX_STRUCTURAL_FEATURES = 24;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private long lastAnalyzeAt;
@@ -62,8 +61,20 @@ public class SmartAdAccessibilityService extends AccessibilityService {
 
     @Override protected void onServiceConnected() {
         super.onServiceConnected();
+        AdaptiveLearningEngine.load(this);
+        int community = CommunityLearningManager.load(this);
         getPrefs().edit().putLong(KEY_HEARTBEAT, System.currentTimeMillis()).apply();
-        SystemLogStore.info(this, "SMART", "Smart Ad Engine v1.3 połączony z AccessibilityService");
+        SystemLogStore.info(this, "SMART", "Smart Ad Engine v1.4 połączony • Community=" + community + " sygnałów");
+        if (CommunityLearningManager.shouldAutoRefresh(this)) {
+            new Thread(() -> {
+                try {
+                    int n = CommunityLearningManager.update(getApplicationContext());
+                    SystemLogStore.info(this, "AI_COMMUNITY", "Automatyczne odświeżenie Community AI OK • " + n);
+                } catch (Throwable t) {
+                    SystemLogStore.error(this, "AI_COMMUNITY", "Automatyczne odświeżenie Community AI nieudane", t);
+                }
+            }, "xADKiller-CommunityAI").start();
+        }
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -91,7 +102,14 @@ public class SmartAdAccessibilityService extends AccessibilityService {
         if (root == null) return;
 
         ScanResult scan = scanTree(root);
-        if (scan.score < 60) return;
+        int aiAdjustment = AdaptiveLearningEngine.predictAdjustment(this, pkg, scan.features);
+        int finalScore = clamp(scan.baseScore + aiAdjustment, 0, 99);
+
+        // Always remember a useful snapshot, even when the ad was missed. That is
+        // what makes the "To była reklama" button capable of teaching the model.
+        AdaptiveLearningEngine.observe(this, pkg, scan.features, scan.baseScore);
+
+        if (finalScore < 60) return;
 
         lastDetectionAt = now;
         handler.removeCallbacks(restoreRunnable);
@@ -106,19 +124,21 @@ public class SmartAdAccessibilityService extends AccessibilityService {
             long d = prefs.getLong(KEY_DETECTIONS, 0) + 1;
             prefs.edit().putLong(KEY_DETECTIONS, d).putString(KEY_LAST_APP, app + " • " + pkg).apply();
             SystemLogStore.add(this, "SMART", "AD_DETECTED",
-                    app + " • score=" + scan.score + "%",
-                    "package=" + pkg + " • signals=" + scan.signature);
+                    app + " • score=" + finalScore + "%",
+                    "package=" + pkg + " • base=" + scan.baseScore + " • ai=" + signed(aiAdjustment) +
+                            " • community=" + scan.communityBonus + " • signals=" + scan.signature);
         }
 
         boolean acted = false;
-        if (prefs.getBoolean(KEY_AUTO_SKIP, true) && scan.skipNode != null && scan.score >= 70 && now - lastActionAt >= ACTION_COOLDOWN_MS) {
+        if (prefs.getBoolean(KEY_AUTO_SKIP, true) && scan.skipNode != null && finalScore >= 70 && now - lastActionAt >= ACTION_COOLDOWN_MS) {
             AccessibilityNodeInfo clickable = findClickable(scan.skipNode);
             if (clickable != null) {
                 try {
                     if (clickable.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                         lastActionAt = now;
                         acted = true;
-                        SystemLogStore.info(this, "SMART_ACTION", "AUTO-SKIP • " + app + " • " + pkg + " • score=" + scan.score + "%");
+                        AdaptiveLearningEngine.reinforceSuccessfulAction(this, pkg, scan.features);
+                        SystemLogStore.info(this, "SMART_ACTION", "AUTO-SKIP • " + app + " • " + pkg + " • score=" + finalScore + "%");
                     }
                 } catch (Throwable t) {
                     SystemLogStore.error(this, "SMART_ACTION", "Auto-skip nieudany dla " + pkg, t);
@@ -126,8 +146,8 @@ public class SmartAdAccessibilityService extends AccessibilityService {
             }
         }
 
-        if (prefs.getBoolean(KEY_MUTE_ADS, false) && scan.score >= 78) {
-            if (muteAudio(app, pkg, scan.score)) acted = true;
+        if (prefs.getBoolean(KEY_MUTE_ADS, false) && finalScore >= 78) {
+            if (muteAudio(app, pkg, finalScore)) acted = true;
         }
 
         if (acted) prefs.edit().putLong(KEY_ACTIONS, prefs.getLong(KEY_ACTIONS, 0) + 1).apply();
@@ -150,8 +170,11 @@ public class SmartAdAccessibilityService extends AccessibilityService {
         q.add(root);
         int nodes = 0;
         int score = 0;
+        int communityScore = 0;
+        int structural = 0;
         AccessibilityNodeInfo skip = null;
         Set<String> signals = new HashSet<>();
+        Set<String> features = new HashSet<>();
 
         while (!q.isEmpty() && nodes++ < MAX_NODES) {
             AccessibilityNodeInfo n = q.removeFirst();
@@ -160,31 +183,52 @@ public class SmartAdAccessibilityService extends AccessibilityService {
             String idLow = id == null ? "" : id.toLowerCase(Locale.ROOT);
 
             if (!text.isEmpty()) {
+                // Persisted model sees only a fingerprint, not the text itself.
+                if (features.size() < 40) features.add("txtfp:" + fingerprint(text));
                 if (containsAny(text,
                         "skip ad", "skip ads", "pomiń reklamę", "pomin reklamę", "pomiń reklamy",
                         "close ad", "zamknij reklamę", "zamknij reklame", "przejdź dalej po reklamie")) {
-                    score += 75; signals.add("skip-control"); if (skip == null) skip = n;
+                    score += 75; signals.add("skip-control"); features.add("signal:skip-control"); if (skip == null) skip = n;
                 }
                 if (containsAny(text, "advertisement", "reklama")) {
-                    score += 62; signals.add("ad-label");
+                    score += 62; signals.add("ad-label"); features.add("signal:ad-label");
                 }
                 if (containsAny(text, "sponsored", "sponsorowane", "promoted", "promowane")) {
-                    score += 38; signals.add("sponsored-label");
+                    score += 38; signals.add("sponsored-label"); features.add("signal:sponsored-label");
                 }
                 if (containsAny(text, "ad choices", "ads by", "why this ad", "dlaczego ta reklama", "treść sponsorowana", "tresc sponsorowana")) {
-                    score += 45; signals.add("ad-metadata");
+                    score += 45; signals.add("ad-metadata"); features.add("signal:ad-metadata");
                 }
                 if (containsAny(text, "video will resume", "film zostanie wznowiony", "music will resume", "muzyka zostanie wznowiona")) {
-                    score += 40; signals.add("resume-label");
+                    score += 40; signals.add("resume-label"); features.add("signal:resume-label");
+                }
+                if (communityScore < 30) {
+                    int bonus = CommunityLearningManager.matchBonus(this, text, features);
+                    if (bonus > 0) { communityScore = Math.min(30, communityScore + bonus); signals.add("community-text"); }
                 }
             }
 
             if (!idLow.isEmpty()) {
-                if (containsAny(idLow, "skip_ad", "ad_skip", "skipad", "close_ad", "ad_close")) {
-                    score += 80; signals.add("ad-view-id"); if (skip == null) skip = n;
-                } else if (containsAny(idLow, "advertisement", "ad_badge", "sponsored")) {
-                    score += 35; signals.add("ad-view-id-label");
+                String idFeature = viewIdFeature(idLow);
+                if (!idFeature.isEmpty() && structural++ < MAX_STRUCTURAL_FEATURES) features.add("id:" + idFeature);
+                if (containsAny(idLow, "skip_ad", "ad_skip", "skipad", "skip-ad", "close_ad", "close-ad", "ad_close")) {
+                    score += 80; signals.add("ad-view-id"); features.add("signal:ad-view-id"); if (skip == null) skip = n;
+                } else if (containsAny(idLow, "advertisement", "ad_badge", "sponsored", "adslot", "ad_slot", "adunit")) {
+                    score += 35; signals.add("ad-view-id-label"); features.add("signal:ad-view-id-label");
                 }
+                if (communityScore < 30) {
+                    int bonus = CommunityLearningManager.matchBonus(this, idLow, features);
+                    if (bonus > 0) { communityScore = Math.min(30, communityScore + bonus); signals.add("community-id"); }
+                }
+            }
+
+            CharSequence cls = n.getClassName();
+            if (cls != null && structural < MAX_STRUCTURAL_FEATURES) {
+                String c = cls.toString();
+                int dot = c.lastIndexOf('.');
+                if (dot >= 0 && dot + 1 < c.length()) c = c.substring(dot + 1);
+                features.add("class:" + c.toLowerCase(Locale.ROOT));
+                structural++;
             }
 
             int childCount = n.getChildCount();
@@ -192,12 +236,13 @@ public class SmartAdAccessibilityService extends AccessibilityService {
                 AccessibilityNodeInfo child = n.getChild(i);
                 if (child != null) q.addLast(child);
             }
-            if (score >= 100 && skip != null) break;
+            if (score + communityScore >= 100 && skip != null) break;
         }
 
-        score = Math.min(99, score);
-        String signature = signals.isEmpty() ? "unknown" : String.join(",", signals);
-        return new ScanResult(score, signature, skip);
+        int base = Math.min(99, score + communityScore);
+        if (features.isEmpty()) features.add("shape:nodes-" + Math.min(10, nodes / 40));
+        String signature = signals.isEmpty() ? "adaptive-only" : String.join(",", signals);
+        return new ScanResult(base, communityScore, signature, skip, features);
     }
 
     private static String normalized(AccessibilityNodeInfo n) {
@@ -206,7 +251,22 @@ public class SmartAdAccessibilityService extends AccessibilityService {
         CharSequence d = n.getContentDescription();
         if (t != null) b.append(t).append(' ');
         if (d != null) b.append(d);
-        return b.toString().trim().toLowerCase(Locale.ROOT);
+        String out = b.toString().trim().toLowerCase(Locale.ROOT);
+        return out.length() > 160 ? out.substring(0, 160) : out;
+    }
+
+    private static String viewIdFeature(String id) {
+        if (id == null) return "";
+        int slash = id.lastIndexOf('/');
+        String out = slash >= 0 && slash + 1 < id.length() ? id.substring(slash + 1) : id;
+        if (out.length() > 72) out = out.substring(out.length() - 72);
+        return out;
+    }
+
+    private static String fingerprint(String value) {
+        long h = 0xcbf29ce484222325L;
+        for (int i=0;i<value.length();i++) { h ^= value.charAt(i); h *= 0x100000001b3L; }
+        return Long.toUnsignedString(h, 16);
     }
 
     private static boolean containsAny(String value, String... needles) {
@@ -267,18 +327,18 @@ public class SmartAdAccessibilityService extends AccessibilityService {
         } catch (Exception e) { return pkg; }
     }
 
-    private SharedPreferences getPrefs() {
-        return getSharedPreferences(BlocklistManager.PREFS, MODE_PRIVATE);
-    }
+    private SharedPreferences getPrefs() { return getSharedPreferences(BlocklistManager.PREFS, MODE_PRIVATE); }
+    private static int clamp(int v,int min,int max){return Math.max(min,Math.min(max,v));}
+    private static String signed(int v){return v>0?"+"+v:Integer.toString(v);}
 
     private static final class ScanResult {
-        final int score;
+        final int baseScore;
+        final int communityBonus;
         final String signature;
         final AccessibilityNodeInfo skipNode;
-        ScanResult(int score, String signature, AccessibilityNodeInfo skipNode) {
-            this.score = score;
-            this.signature = signature;
-            this.skipNode = skipNode;
+        final Set<String> features;
+        ScanResult(int baseScore, int communityBonus, String signature, AccessibilityNodeInfo skipNode, Set<String> features) {
+            this.baseScore=baseScore; this.communityBonus=communityBonus; this.signature=signature; this.skipNode=skipNode; this.features=features;
         }
     }
 }
