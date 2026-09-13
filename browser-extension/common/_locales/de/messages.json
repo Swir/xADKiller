@@ -1,44 +1,9 @@
 {
-  "extName": {
-    "message": "xADKiller Browser"
-  },
-  "extDescription": {
-    "message": "Blockiert Werbung und Tracker mit Manifest-V3-Regeln, lokalem kosmetischem Filter und Smart Auto-Skip."
-  },
-  "protection": {
-    "message": "Schutz"
-  },
-  "currentSite": {
-    "message": "Aktuelle Website"
-  },
-  "autoSkip": {
-    "message": "Smart Auto-Skip"
-  },
-  "autoSkipHint": {
-    "message": "Klickt nur eindeutige Werbung-überspringen-Schaltflächen"
-  },
-  "hiddenAds": {
-    "message": "ausgeblendete Elemente"
-  },
-  "skippedAds": {
-    "message": "Auto-Skips"
-  },
-  "testButton": {
-    "message": "Blockierung testen"
-  },
-  "unsupportedPage": {
-    "message": "Browserseite"
-  },
-  "statusOn": {
-    "message": "AKTIV"
-  },
-  "statusOff": {
-    "message": "DEAKTIVIERT"
-  },
-  "allowSite": {
-    "message": "Diese Website erlauben"
-  },
-  "protectSite": {
-    "message": "Diese Website schützen"
-  }
+  "extName":{"message":"xADKiller Browser"},
+  "extDescription":{"message":"Blockiert Werbung und Tracker mit Manifest-V3-Regeln, lokalem adaptivem Smart DOM und Auto-Skip."},
+  "protection":{"message":"Schutz"},"currentSite":{"message":"Aktuelle Website"},"filterMode":{"message":"Filtermodus"},"modeStandard":{"message":"STANDARD"},"modeUltra":{"message":"ULTRA"},
+  "networkRules":{"message":"Netzwerkregeln"},"cosmeticRules":{"message":"Kosmetikregeln"},"smartEngine":{"message":"Smart DOM Engine"},"smartHint":{"message":"Lokale adaptive Elementerkennung"},
+  "autoSkip":{"message":"Smart Auto-Skip"},"autoSkipHint":{"message":"Klickt nur eindeutige Werbung-überspringen-Schaltflächen"},"networkBlocks":{"message":"Netzwerktreffer"},"hiddenAds":{"message":"ausgeblendete Elemente"},"smartBlocks":{"message":"Smart-Ausblendungen"},"learnedSignals":{"message":"gelernte Signale"},
+  "adaptiveLab":{"message":"Adaptive Werkzeuge"},"pickElement":{"message":"Element blockieren / lernen"},"falsePositive":{"message":"Fehlalarm"},"adaptiveHint":{"message":"Das Lernen bleibt lokal in diesem Browserprofil."},
+  "customDomain":{"message":"Eigene blockierte Domain"},"customDomainsCount":{"message":"eigene Domains"},"add":{"message":"Hinzufügen"},"testButton":{"message":"Blockierung testen"},"unsupportedPage":{"message":"Browserseite"},"statusOn":{"message":"AKTIV"},"statusOff":{"message":"DEAKTIVIERT"},"allowSite":{"message":"Diese Website erlauben"},"protectSite":{"message":"Diese Website schützen"}
 }
