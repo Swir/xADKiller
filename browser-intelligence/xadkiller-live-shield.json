@@ -1,14 +1,67 @@
 {
   "schema": 1,
   "feed": "xADKiller Live Shield",
-  "feed_version": "2026.09.13.1",
-  "updated_at": "2026-09-13T15:05:00Z",
+  "feed_version": "2026.09.13.2",
+  "updated_at": "2026-09-13T16:18:00Z",
   "maintainer": "SWIR",
-  "description": "Data-only domain intelligence for xADKiller Browser. Logic stays inside the extension package.",
+  "description": "Data-only domain, URL-signature and cosmetic intelligence for xADKiller Browser. All execution logic stays inside the extension package.",
   "standard_domains": [
     "amazon-adsystem.com","doubleclick.net","googleadservices.com","googlesyndication.com","googletagservices.com","google-analytics.com","adcolony.com","media.net","adnxs.com","adsrvr.org","pubmatic.com","rubiconproject.com","openx.net","casalemedia.com","contextweb.com","criteo.com","criteo.net","taboola.com","outbrain.com","quantserve.com","scorecardresearch.com","bluekai.com","mathtag.com","rlcdn.com","demdex.net","exelator.com","tapad.com","lijit.com","yieldmo.com","bidswitch.net","smartadserver.com","adform.net","advertising.com","yieldlab.net","adition.com","indexww.com","sharethrough.com","33across.com","gumgum.com","sovrn.com","teads.tv","zemanta.com","revcontent.com","mgid.com","zedo.com","moatads.com","adsafeprotected.com","serving-sys.com","sizmek.com","flashtalking.com","innovid.com","spotxchange.com","spotx.tv","freewheel.tv","springserve.com","lkqd.net","undertone.com","unrulymedia.com","imrworldwide.com","krxd.net","chartbeat.com","parsely.com","mixpanel.com","segment.io","hotjar.com","hotjar.io","mouseflow.com","luckyorange.com","fullstory.com","logrocket.com","heapanalytics.com","amplitude.com","branch.io","appsflyer.com","adjust.com","kochava.com","singular.net","sentry.io","bugsnag.com","nr-data.net"
   ],
   "ultra_domains": [
     "googletagmanager.com","connect.facebook.net","graph.facebook.com","ads-twitter.com","analytics.twitter.com","px.ads.linkedin.com","snap.licdn.com","ct.pinterest.com","trk.pinterest.com","events.redditmedia.com","alb.reddit.com","ads.tiktok.com","analytics.tiktok.com","business-api.tiktok.com","analytics.yahoo.com","ads.yahoo.com","yandexadexchange.net","mc.yandex.ru","an.yandex.ru","metrika.yandex.ru","unityads.unity3d.com","ads.unity.com","config.unityads.unity3d.com","auction.unityads.unity3d.com","data.mistat.xiaomi.com","tracking.miui.com","sa.api.intl.miui.com","globalapi.ad.xiaomi.com","sdkconfig.ad.xiaomi.com","api.ad.xiaomi.com","adsfs.oppomobile.com","adx.ads.oppomobile.com","bdapi.ads.oppomobile.com","data.ads.oppomobile.com","adx.ads.heytapmobi.com","stg-data.ads.heytapmobi.com","ads.heytapmobi.com","metrics.data.hicloud.com","logservice.hicloud.com","ads.huawei.com","samsungads.com","config.samsungads.com","ads.samsung.com","iadsdk.apple.com","iadcontent.apple.com","tr.iadsdk.apple.com","notify.bugsnag.com","sessions.bugsnag.com","browser.sentry-cdn.com","analytics.edgekey.net","pixel.quantserve.com","secure.adnxs.com","ib.adnxs.com","pixel.rubiconproject.com","sync.outbrain.com","sync.taboola.com","static.criteo.net","gum.criteo.com","rtb.gumgum.com","sync.mathtag.com","idsync.rlcdn.com"
+  ],
+  "standard_signatures": [
+    {"filter":"/ads.js","types":["script"]},
+    {"filter":"/pagead.js","types":["script"]},
+    {"filter":"/adsbygoogle.js","types":["script"]},
+    {"filter":"/prebid.js","types":["script"]},
+    {"filter":"/prebid.min.js","types":["script"]},
+    {"filter":"/adserver/","types":["script","xmlhttprequest","sub_frame"]},
+    {"filter":"/adservice/","types":["script","xmlhttprequest","sub_frame"]},
+    {"filter":"/gampad/","types":["script","xmlhttprequest","sub_frame"]},
+    {"filter":"/securepubads/","types":["script","xmlhttprequest"]},
+    {"filter":"/advertising/","types":["script","xmlhttprequest","sub_frame"]},
+    {"filter":"/ad-loader/","types":["script","xmlhttprequest"]},
+    {"filter":"/adloader/","types":["script","xmlhttprequest"]},
+    {"filter":"/ad-script/","types":["script"]},
+    {"filter":"/adscript/","types":["script"]},
+    {"filter":"/widget/ads.","types":["script","sub_frame"]},
+    {"filter":"?ad_unit=","types":["script","xmlhttprequest","sub_frame"]},
+    {"filter":"&ad_unit=","types":["script","xmlhttprequest","sub_frame"]},
+    {"filter":"?ad_slot=","types":["script","xmlhttprequest","sub_frame"]},
+    {"filter":"&ad_slot=","types":["script","xmlhttprequest","sub_frame"]}
+  ],
+  "ultra_signatures": [
+    {"filter":"/vast/","types":["xmlhttprequest","media","sub_frame"]},
+    {"filter":"/vmap/","types":["xmlhttprequest","media"]},
+    {"filter":"/ima3/","types":["script","xmlhttprequest"]},
+    {"filter":"/adrequest","types":["script","xmlhttprequest","sub_frame"]},
+    {"filter":"/commercial/","types":["script","xmlhttprequest","sub_frame","media"]},
+    {"filter":"/sponsored/","types":["script","xmlhttprequest","sub_frame"]},
+    {"filter":"/promoted/","types":["script","xmlhttprequest","sub_frame"]},
+    {"filter":"/analytics/collect","types":["xmlhttprequest","ping"],"third_party":true},
+    {"filter":"/analytics/","types":["script","xmlhttprequest","ping"],"third_party":true},
+    {"filter":"/telemetry/","types":["xmlhttprequest","ping"],"third_party":true},
+    {"filter":"/tracking/","types":["script","image","xmlhttprequest","ping"],"third_party":true},
+    {"filter":"/tracker/","types":["script","image","xmlhttprequest","ping"],"third_party":true},
+    {"filter":"/pixel/","types":["image","xmlhttprequest","ping"],"third_party":true},
+    {"filter":"/beacon/","types":["image","xmlhttprequest","ping"],"third_party":true},
+    {"filter":"/conversion/","types":["image","xmlhttprequest","ping"],"third_party":true},
+    {"filter":"/impression/","types":["image","xmlhttprequest","ping"],"third_party":true},
+    {"filter":"/session-replay/","types":["script","xmlhttprequest"],"third_party":true},
+    {"filter":"/heatmap/","types":["script","xmlhttprequest"],"third_party":true},
+    {"filter":"?adunit=","types":["script","xmlhttprequest","sub_frame"]},
+    {"filter":"&adunit=","types":["script","xmlhttprequest","sub_frame"]},
+    {"filter":"?adslot=","types":["script","xmlhttprequest","sub_frame"]},
+    {"filter":"&adslot=","types":["script","xmlhttprequest","sub_frame"]},
+    {"filter":"?gdfp_req=","types":["xmlhttprequest","sub_frame"]},
+    {"filter":"&gdfp_req=","types":["xmlhttprequest","sub_frame"]}
+  ],
+  "standard_cosmetic": [
+    ".adsbygoogle",".adbox.banner_ads.adsbox",".textads","ins.adsbygoogle","[data-ad-client]","[data-ad-slot]","[data-ad-unit]","[data-sponsored='true']","[aria-label='Advertisement']","[aria-label='Sponsored']","[id^='google_ads_']","[id*='google_ads_iframe']","[id^='div-gpt-ad']","[id^='ad-container']","[id^='ad-slot']","[class~='ad-container']","[class~='ad-wrapper']","[class~='ad-slot']","[class~='ad-banner']","iframe[src*='doubleclick.net']","iframe[src*='googlesyndication.com']"
+  ],
+  "ultra_cosmetic": [
+    ".advertisement",".advertising",".sponsored-content",".sponsor-block",".ad-placement",".ad-unit",".advert-banner",".advert-wrapper","[data-testid*='ad-container']","[data-testid*='sponsored']","[class*='sponsored-content']","[class*='promoted-content']","[id*='sponsored-content']","[id*='promoted-content']"
   ]
 }
