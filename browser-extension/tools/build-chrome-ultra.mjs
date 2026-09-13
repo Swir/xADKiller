@@ -35,6 +35,26 @@ function normalizeSelector(v) {
   if (/\{\}|\{.+\}|:style\(|:remove\(|:remove-attr\(|:xpath\(|\+js\(|##\^|#\$#|#\?#|#%#/i.test(s)) return "";
   return s;
 }
+function validDnrUrlFilter(pattern) {
+  if (!pattern || pattern.length > 300 || /[^\x21-\x7E]/.test(pattern)) return false;
+  // Chrome explicitly rejects a domain anchor followed by a wildcard.
+  if (pattern.startsWith("||*")) return false;
+
+  // In DNR, | is only legal as the optional left/right anchor, while || is
+  // only legal at the beginning as the domain anchor. ABP/AdGuard syntax is
+  // broader, so reject patterns with internal pipe tokens instead of emitting
+  // a static ruleset that Chrome refuses to install.
+  let body = pattern;
+  if (body.startsWith("||")) {
+    body = body.slice(2);
+    if (!/^[a-z0-9]/i.test(body)) return false;
+  } else if (body.startsWith("|")) {
+    body = body.slice(1);
+  }
+  if (body.endsWith("|")) body = body.slice(0, -1);
+  if (!body || body.includes("|")) return false;
+  return true;
+}
 function parseOptions(raw) {
   const condition = {};
   if (!raw) return { ok: true, condition: { resourceTypes: [...ALL_TYPES] } };
@@ -65,16 +85,12 @@ function parseOptions(raw) {
     if (mapped) (neg ? negatives : positives).push(mapped);
   }
 
-  // Chrome DNR rejects a condition when the same resource appears in both
-  // resourceTypes and excludedResourceTypes. Compile exclusions into the
-  // effective positive type set instead of emitting overlapping arrays.
   const negativeTypes = new Set(negatives);
   const baseTypes = positives.length ? [...new Set(positives)] : [...ALL_TYPES];
   const effectiveTypes = baseTypes.filter((type) => !negativeTypes.has(type));
   if (!effectiveTypes.length) return { ok: false };
   condition.resourceTypes = effectiveTypes;
 
-  // Likewise, never emit the same initiator in include and exclude arrays.
   const excludedSet = new Set(excludedInitiators);
   const uniqueInitiators = [...new Set(initiators)].filter((d) => !excludedSet.has(d));
   if (initiators.length && !uniqueInitiators.length) return { ok: false };
@@ -94,7 +110,7 @@ function parseNetworkLine(line0) {
   const dollar = line.indexOf("$");
   if (dollar >= 0) { pattern = line.slice(0, dollar); options = line.slice(dollar + 1); }
   pattern = pattern.trim();
-  if (!pattern || pattern.length > 300 || /[^\x20-\x7E]/.test(pattern)) return null;
+  if (!validDnrUrlFilter(pattern)) return null;
   const anchored = pattern.startsWith("||") || pattern.startsWith("|http://") || pattern.startsWith("|https://");
   if (!anchored && !GENERIC_HINT.test(pattern)) return null;
   if (!anchored && pattern.length < 6) return null;
@@ -166,8 +182,6 @@ for (const source of SOURCES) {
     const text = await fetchText(source.url);
     const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
 
-    // Cosmetic rules must be scanned across the WHOLE source. Network budgets must
-    // never stop us before EasyList/AdGuard cosmetic sections are reached.
     if (source.cosmetic) {
       for (const line of lines) parseCosmeticLine(line, genericSelectors, scopedSelectors);
     }
