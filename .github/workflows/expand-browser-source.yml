@@ -31,7 +31,7 @@ jobs:
           mkdir -p /tmp/xad-browser-src
           unzip -q /tmp/xad-browser-source.zip -d /tmp/xad-browser-src
           rm -rf browser-extension
-          mkdir -p browser-extension .github/workflows
+          mkdir -p browser-extension
           cp -a /tmp/xad-browser-src/common browser-extension/
           cp -a /tmp/xad-browser-src/chrome browser-extension/
           cp -a /tmp/xad-browser-src/firefox browser-extension/
@@ -39,9 +39,7 @@ jobs:
           cp -a /tmp/xad-browser-src/tests browser-extension/
           cp /tmp/xad-browser-src/package.json browser-extension/package.json
           cp /tmp/xad-browser-src/README.md browser-extension/README.md
-          cp /tmp/xad-browser-src/_tmp/browser-extension-ci.yml .github/workflows/browser-extension-ci.yml
           rm -rf browser-extension-source.parts browser-extension-source.ready browser-extension-source.zip.b64
-          rm .github/workflows/expand-browser-source.yml
       - name: Commit expanded source
         shell: bash
         run: |
