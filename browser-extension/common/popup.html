@@ -12,7 +12,7 @@
       <img src="icons/icon128.png" alt="">
       <div>
         <h1>xADKiller</h1>
-        <p>Browser Shield • BY SWIR</p>
+        <p>CHROME ULTRA • BY SWIR</p>
       </div>
     </header>
 
@@ -27,6 +27,14 @@
           <span></span>
         </label>
       </div>
+      <div class="modeRow">
+        <label for="mode" data-i18n="filterMode">Filter mode</label>
+        <select id="mode">
+          <option value="standard" data-i18n="modeStandard">STANDARD</option>
+          <option value="ultra" data-i18n="modeUltra">ULTRA</option>
+        </select>
+      </div>
+      <small id="rulesInfo">—</small>
     </section>
 
     <section class="card">
@@ -38,6 +46,16 @@
     <section class="card">
       <div class="row">
         <div>
+          <strong data-i18n="smartEngine">Smart DOM Engine</strong>
+          <small data-i18n="smartHint">Local adaptive element detection</small>
+        </div>
+        <label class="switch">
+          <input id="smartEnabled" type="checkbox">
+          <span></span>
+        </label>
+      </div>
+      <div class="row topGap">
+        <div>
           <strong data-i18n="autoSkip">Smart Auto-Skip</strong>
           <small data-i18n="autoSkipHint">Clicks only clear Skip Ad buttons</small>
         </div>
@@ -48,16 +66,36 @@
       </div>
     </section>
 
-    <section class="card stats">
+    <section class="card stats four">
+      <div><b id="networkCount">0</b><span data-i18n="networkBlocks">network hits</span></div>
       <div><b id="hiddenCount">0</b><span data-i18n="hiddenAds">hidden elements</span></div>
-      <div><b id="skipCount">0</b><span data-i18n="skippedAds">auto-skips</span></div>
+      <div><b id="smartCount">0</b><span data-i18n="smartBlocks">smart hides</span></div>
+      <div><b id="learnedCount">0</b><span data-i18n="learnedSignals">learned signals</span></div>
+    </section>
+
+    <section class="card">
+      <strong data-i18n="adaptiveLab">Adaptive tools</strong>
+      <div class="actions full">
+        <button id="pickerBtn" data-i18n="pickElement">Block / teach element</button>
+        <button id="falseBtn" class="secondary" data-i18n="falsePositive">False positive</button>
+      </div>
+      <small data-i18n="adaptiveHint">Everything is learned locally in this browser profile.</small>
+    </section>
+
+    <section class="card">
+      <strong data-i18n="customDomain">Custom blocked domain</strong>
+      <div class="inputRow">
+        <input id="domainInput" type="text" placeholder="ads.example.com" autocomplete="off" spellcheck="false">
+        <button id="addDomainBtn" data-i18n="add">Add</button>
+      </div>
+      <small id="customInfo">—</small>
     </section>
 
     <div class="actions">
       <button id="testBtn" data-i18n="testButton">Test blocking</button>
       <button id="githubBtn" class="secondary">GitHub</button>
     </div>
-    <footer>v1.0.0 • Manifest V3 • local processing</footer>
+    <footer>v1.1.0 • Chrome MV3 • local processing</footer>
   </main>
   <script src="popup.js"></script>
 </body>
