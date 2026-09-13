@@ -33,15 +33,23 @@ final class BlocklistManager {
             "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
             "https://adaway.org/hosts.txt"
     };
-    private static final String PRO_URL = "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists-legacy@latest/domains/pro.txt";
+
+    // v1.3.1 Ultra: maintained aggressive DNS lists. The parser below accepts
+    // plain domains, hosts files and ABP/AdGuard rules such as ||example.com^.
+    private static final String ULTIMATE_URL =
+            "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/ultimate-onlydomains.txt";
+    private static final String ADGUARD_DNS_URL =
+            "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_15_DnsFilter/filter.txt";
+    private static final String ANTI_BYPASS_URL =
+            "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/doh-vpn-proxy-bypass-onlydomains.txt";
+
     private static final String CACHE_FILE = "remote_blocklist.txt";
-    private static final int MAX_REMOTE_DOMAINS = 500_000;
+    private static final int MAX_REMOTE_DOMAINS = 750_000;
 
     /*
-     * v1.2.1: Instead of keeping hundreds of thousands of Java Strings in a
-     * HashSet, we keep sorted 64-bit hashes. 500k entries use ~4 MB for the
-     * final array and lookups are O(log n). This prevents the PRO list from
-     * exhausting the app heap on phones with aggressive memory management.
+     * Memory-safe representation: instead of keeping hundreds of thousands of
+     * Java Strings in a HashSet, we keep sorted 64-bit FNV-1a hashes. 750k
+     * entries are only a few MB plus the temporary collector during reload.
      */
     private static volatile long[] BLOCKED = new long[0];
     private static volatile Set<String> ALLOWED = Collections.emptySet();
@@ -49,7 +57,7 @@ final class BlocklistManager {
 
     private BlocklistManager() {}
 
-    /** Fast startup: bundled list + user rules only. Safe to call on UI thread. */
+    /** Fast startup: bundled list + user rules only. Safe on UI thread. */
     static synchronized int bootstrap(Context context) {
         try {
             LongCollector c = new LongCollector(8192);
@@ -91,7 +99,6 @@ final class BlocklistManager {
             fullLoaded = true;
             return result.length;
         } catch (OutOfMemoryError oom) {
-            // Keep the previously working/bootstrap list instead of crash-looping.
             fullLoaded = false;
             try { SystemLogStore.error(context, "BLOCKLIST", "Brak pamięci podczas ładowania pełnej listy — pozostaje lista awaryjna", oom); } catch (Throwable ignored) {}
             return BLOCKED.length;
@@ -129,23 +136,32 @@ final class BlocklistManager {
 
     static int currentCount() { return BLOCKED.length; }
 
-    /** Downloads lists without building a huge String HashSet in RAM. */
+    /** Downloads lists without building a giant String HashSet in RAM. */
     static synchronized int updateRemote(Context context) throws IOException {
         File tmp = new File(context.getFilesDir(), CACHE_FILE + ".tmp");
         File dst = new File(context.getFilesDir(), CACHE_FILE);
         int written = 0;
+        boolean ultra = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(KEY_STRICT, false);
 
-        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(tmp), StandardCharsets.UTF_8), 64 * 1024)) {
-            for (String url : NORMAL_URLS) {
-                if (written >= MAX_REMOTE_DOMAINS) break;
-                written += downloadInto(url, writer, MAX_REMOTE_DOMAINS - written);
-            }
-            boolean pro = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_STRICT, false);
-            if (pro && written < MAX_REMOTE_DOMAINS) {
-                written += downloadInto(PRO_URL, writer, MAX_REMOTE_DOMAINS - written);
+        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
+                new FileOutputStream(tmp), StandardCharsets.UTF_8), 64 * 1024)) {
+
+            if (ultra) {
+                // Use curated aggressive lists first so a size cap can never cut
+                // off the strongest source after large overlapping normal lists.
+                written += downloadInto(ULTIMATE_URL, writer, MAX_REMOTE_DOMAINS - written);
+                if (written < MAX_REMOTE_DOMAINS)
+                    written += downloadInto(ADGUARD_DNS_URL, writer, MAX_REMOTE_DOMAINS - written);
+                if (written < MAX_REMOTE_DOMAINS)
+                    written += downloadInto(ANTI_BYPASS_URL, writer, MAX_REMOTE_DOMAINS - written);
+            } else {
+                for (String url : NORMAL_URLS) {
+                    if (written >= MAX_REMOTE_DOMAINS) break;
+                    written += downloadInto(url, writer, MAX_REMOTE_DOMAINS - written);
+                }
             }
         } catch (Throwable t) {
-            // Do not replace a known-good cache with a partial download.
             tmp.delete();
             if (t instanceof IOException) throw (IOException)t;
             throw new IOException("Błąd pobierania list: " + t.getClass().getSimpleName(), t);
@@ -166,7 +182,13 @@ final class BlocklistManager {
 
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putLong(KEY_LAST_UPDATE, System.currentTimeMillis()).apply();
-        return load(context);
+        int count = load(context);
+        try {
+            SystemLogStore.info(context, "BLOCKLIST",
+                    "Lista v1.3.1 załadowana • mode=" + (ultra ? "ULTRA" : "STANDARD") +
+                            " • downloaded=" + written + " • unique=" + count);
+        } catch (Throwable ignored) {}
+        return count;
     }
 
     static synchronized void clearRemoteCache(Context context) {
@@ -197,15 +219,14 @@ final class BlocklistManager {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .remove(KEY_CUSTOM_BLOCK).remove(KEY_ALLOW).apply();
         ALLOWED = Collections.emptySet();
-        // Full reload is intentionally not performed here on the caller/UI thread.
     }
 
     private static int downloadInto(String source, BufferedWriter writer, int max) throws IOException {
         if (max <= 0) return 0;
         HttpURLConnection conn = (HttpURLConnection) new URL(source).openConnection();
-        conn.setConnectTimeout(12_000);
-        conn.setReadTimeout(35_000);
-        conn.setRequestProperty("User-Agent", "xADKiller/1.2.1");
+        conn.setConnectTimeout(15_000);
+        conn.setReadTimeout(50_000);
+        conn.setRequestProperty("User-Agent", "xADKiller/1.3.1");
         conn.setInstanceFollowRedirects(true);
         int code = conn.getResponseCode();
         if (code < 200 || code >= 300) {
@@ -213,7 +234,8 @@ final class BlocklistManager {
             throw new IOException("HTTP " + code + " z " + source);
         }
         int count = 0;
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8), 64 * 1024)) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                conn.getInputStream(), StandardCharsets.UTF_8), 64 * 1024)) {
             String line;
             while (count < max && (line = reader.readLine()) != null) {
                 String n = normalizeLine(line);
@@ -229,7 +251,8 @@ final class BlocklistManager {
     }
 
     private static void parseDomainStream(InputStream input, LongCollector out, int max) throws IOException {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8), 64 * 1024)) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                input, StandardCharsets.UTF_8), 64 * 1024)) {
             String line;
             int accepted = 0;
             while (accepted < max && (line = reader.readLine()) != null) {
@@ -241,13 +264,44 @@ final class BlocklistManager {
         }
     }
 
+    /**
+     * Accepts:
+     *   example.com
+     *   0.0.0.0 example.com
+     *   *.example.com
+     *   ||example.com^
+     *   ||example.com^$important
+     * Ignores AdGuard/ABP exception, regex and cosmetic rules because a DNS
+     * engine cannot apply their request-context semantics safely.
+     */
     private static String normalizeLine(String line) {
         if (line == null) return null;
         line = line.trim();
-        if (line.isEmpty() || line.charAt(0) == '#') return null;
+        if (line.isEmpty()) return null;
+
+        // Comments / metadata / cosmetic rules / exceptions.
+        if (line.charAt(0) == '#' || line.charAt(0) == '!' || line.charAt(0) == '[') return null;
+        if (line.startsWith("@@")) return null;
+        if (line.contains("##") || line.contains("#@#") || line.contains("#$#")) return null;
+
         int hash = line.indexOf('#');
         if (hash >= 0) line = line.substring(0, hash).trim();
         if (line.isEmpty()) return null;
+
+        // AdGuard / ABP DNS rule: ||domain.example^ or ||domain.example^$...
+        if (line.startsWith("||")) {
+            String d = line.substring(2);
+            int cut = d.length();
+            int p = d.indexOf('^'); if (p >= 0 && p < cut) cut = p;
+            p = d.indexOf('$'); if (p >= 0 && p < cut) cut = p;
+            p = d.indexOf('/'); if (p >= 0 && p < cut) cut = p;
+            p = d.indexOf('|'); if (p >= 0 && p < cut) cut = p;
+            if (cut <= 0) return null;
+            return normalize(d.substring(0, cut));
+        }
+
+        // Skip regex / URL-path rules that cannot be represented at DNS level.
+        if (line.startsWith("/") || line.startsWith("|") || line.contains("://")) return null;
 
         int firstWs = firstWhitespace(line);
         String first = firstWs < 0 ? line : line.substring(0, firstWs);
@@ -332,11 +386,13 @@ final class BlocklistManager {
         }
         while (d.startsWith("*.")) d = d.substring(2);
         while (d.endsWith(".")) d = d.substring(0, d.length() - 1);
-        if (d.isEmpty() || d.length() > 253 || d.equals("localhost") || d.equals("localhost.localdomain") || d.equals("broadcasthost")) return null;
+        if (d.isEmpty() || d.length() > 253 || d.equals("localhost") ||
+                d.equals("localhost.localdomain") || d.equals("broadcasthost")) return null;
         if (!d.contains(".")) return null;
         for (int i = 0; i < d.length(); i++) {
             char c = d.charAt(i);
-            boolean ok = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
+            boolean ok = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+                    c == '.' || c == '_' || c == '-';
             if (!ok) return null;
         }
         return d;
@@ -357,7 +413,8 @@ final class BlocklistManager {
 
         LongCollector(int initial) { data = new long[Math.max(16, initial)]; }
         void add(long v) {
-            if (size == data.length) data = Arrays.copyOf(data, data.length + (data.length >> 1) + 1024);
+            if (size == data.length)
+                data = Arrays.copyOf(data, data.length + (data.length >> 1) + 1024);
             data[size++] = v;
         }
         long[] toSortedUnique() {
