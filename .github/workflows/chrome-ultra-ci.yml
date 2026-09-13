@@ -1,8 +1,8 @@
-name: Test xADKiller Chrome Ultra
+name: Test xADKiller Chrome Shield
 
 on:
   push:
-    branches: [ chrome-ultra-dev ]
+    branches: [ chrome-shield-v130 ]
     paths:
       - "browser-extension/**"
       - ".github/workflows/chrome-ultra-ci.yml"
@@ -14,7 +14,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: browser-extension
@@ -27,38 +27,40 @@ jobs:
           node-version: "24"
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-      - name: Compile EasyList AdGuard and Ultra Shield rules
+      - name: Compile network and intelligence rules
         run: npm run build
-      - name: Validate Chrome Ultra Shield package
+      - name: Validate Chrome Shield package
         run: npm run validate
       - name: JavaScript syntax
         run: |
           node --check dist/chrome/background.js
+          node --check dist/chrome/early-guard.js
           node --check dist/chrome/content.js
+          node --check dist/chrome/shadow-sentinel.js
           node --check dist/chrome/popup.js
           node --check dist/chrome/cosmetic-data.js
           node --check dist/chrome/build-meta.js
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Chromium runtime test
-        run: timeout --signal=TERM --kill-after=10s 180s npm run test:chrome
+        run: timeout --signal=TERM --kill-after=10s 240s npm run test:chrome
       - name: Package Chrome beta ZIP
         run: |
           rm -rf packages
           mkdir -p packages
-          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.2.0-ULTRA-Shield-beta.zip .)
+          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.3.0-XAD-Shield-beta.zip .)
       - name: Checksums
         run: |
           cd packages
-          sha256sum xADKiller-Chrome-v1.2.0-ULTRA-Shield-beta.zip > SHA256SUMS.txt
+          sha256sum xADKiller-Chrome-v1.3.0-XAD-Shield-beta.zip > SHA256SUMS.txt
       - name: Verify archive
         run: |
-          unzip -tq packages/xADKiller-Chrome-v1.2.0-ULTRA-Shield-beta.zip
+          unzip -tq packages/xADKiller-Chrome-v1.3.0-XAD-Shield-beta.zip
           (cd packages && sha256sum -c SHA256SUMS.txt)
       - name: Upload tested Chrome beta
         uses: actions/upload-artifact@v4
         with:
-          name: xADKiller-Chrome-v1.2.0-ULTRA-Shield-beta-tested
+          name: xADKiller-Chrome-v1.3.0-XAD-Shield-beta-tested
           path: browser-extension/packages/*
           if-no-files-found: error
           retention-days: 30
