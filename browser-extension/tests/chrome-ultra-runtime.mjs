@@ -92,12 +92,16 @@ const processState = { exited: false, code: null, signal: null };
 
 try {
   const bundledChrome = chromium.executablePath();
-  const chromeExecutable = fs.existsSync(bundledChrome)
-    ? bundledChrome
-    : ["/usr/bin/chromium-browser", "/usr/bin/chromium", "/usr/bin/google-chrome-stable", "/usr/bin/google-chrome"].find((p) => fs.existsSync(p));
+  const chromeExecutable = [
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    bundledChrome
+  ].find((p) => p && fs.existsSync(p));
   if (!chromeExecutable) throw new Error("No Chrome/Chromium executable found");
 
-  log("Launching Chromium headless through DevTools port", `${chromeExecutable} / ${debugPort}`);
+  log("Launching Chrome headless through DevTools port", `${chromeExecutable} / ${debugPort}`);
   chromeProcess = spawn(chromeExecutable, [
     "--headless=new",
     `--user-data-dir=${userDataDir}`,
@@ -144,6 +148,25 @@ try {
   const extensionId = new URL(worker.url()).host;
   if (!extensionId) throw new Error("could not resolve extension id");
   log("Service worker ready", extensionId);
+
+  const runtimeProbe = await withTimeout(worker.evaluate(() => {
+    const manifest = chrome.runtime?.getManifest?.() || null;
+    return {
+      href: self.location.href,
+      id: chrome.runtime?.id || "",
+      name: manifest?.name || "",
+      version: manifest?.version || "",
+      permissions: manifest?.permissions || [],
+      hasStorage: !!chrome.storage?.local,
+      hasDnr: !!chrome.declarativeNetRequest,
+      dnrMethods: chrome.declarativeNetRequest ? Object.keys(chrome.declarativeNetRequest).sort() : []
+    };
+  }), 8000, "extension API probe");
+  log("Extension API probe", JSON.stringify(runtimeProbe));
+  if (runtimeProbe.id !== extensionId || runtimeProbe.version !== "1.1.0") throw new Error(`Unexpected extension worker: ${JSON.stringify(runtimeProbe)}`);
+  if (!runtimeProbe.permissions.includes("declarativeNetRequest")) throw new Error(`Manifest permission missing at runtime: ${JSON.stringify(runtimeProbe)}`);
+  if (!runtimeProbe.hasStorage) throw new Error("chrome.storage.local unavailable in extension worker");
+  if (!runtimeProbe.hasDnr) throw new Error(`chrome.declarativeNetRequest unavailable in loaded xADKiller worker: ${JSON.stringify(runtimeProbe)}`);
 
   const initialRulesets = await withTimeout(worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets()), 8000, "initial enabled rulesets");
   if (!initialRulesets.includes("standard")) throw new Error(`STANDARD ruleset not enabled at startup: ${initialRulesets.join(",")}`);
