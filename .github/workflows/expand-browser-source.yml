@@ -1,52 +1,61 @@
-name: Expand xADKiller Browser Source
+name: Test xADKiller Browser Extensions
 
 on:
   push:
-    branches: [ browser-extension-dev ]
+    branches: [ main, browser-extension-dev ]
     paths:
-      - "browser-extension-source.ready"
-
-permissions:
-  contents: write
+      - "browser-extension/**"
+      - ".github/workflows/expand-browser-source.yml"
+  pull_request:
+    paths:
+      - "browser-extension/**"
+      - ".github/workflows/expand-browser-source.yml"
+  workflow_dispatch:
 
 jobs:
-  expand:
+  test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: browser-extension
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Reassemble and verify source bundle
-        shell: bash
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build browser packages
+        run: npm run build
+      - name: Validate manifests, locales and DNR
+        run: npm run validate
+      - name: JavaScript syntax
         run: |
-          set -euo pipefail
-          cat browser-extension-source.parts/part-*.b64 > /tmp/xad-browser-source.b64
-          base64 -d /tmp/xad-browser-source.b64 > /tmp/xad-browser-source.zip
-          echo "46b17cbc0df7c43e7e759e1ce04786827fba727114fd7ff50f65a1a3b969b197  /tmp/xad-browser-source.zip" | sha256sum -c -
-          unzip -tq /tmp/xad-browser-source.zip
-      - name: Expand source bundle
-        shell: bash
+          node --check dist/chrome/background.js
+          node --check dist/chrome/content.js
+          node --check dist/chrome/popup.js
+          node --check dist/firefox/background.js
+          node --check dist/firefox/content.js
+          node --check dist/firefox/popup.js
+      - name: Firefox web-ext lint
+        run: npx web-ext lint --source-dir dist/firefox --warnings-as-errors
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Chromium runtime test
+        run: xvfb-run -a npm run test:chrome
+      - name: Package store ZIPs
         run: |
-          set -euo pipefail
-          rm -rf /tmp/xad-browser-src
-          mkdir -p /tmp/xad-browser-src
-          unzip -q /tmp/xad-browser-source.zip -d /tmp/xad-browser-src
-          rm -rf browser-extension
-          mkdir -p browser-extension
-          cp -a /tmp/xad-browser-src/common browser-extension/
-          cp -a /tmp/xad-browser-src/chrome browser-extension/
-          cp -a /tmp/xad-browser-src/firefox browser-extension/
-          cp -a /tmp/xad-browser-src/tools browser-extension/
-          cp -a /tmp/xad-browser-src/tests browser-extension/
-          cp /tmp/xad-browser-src/package.json browser-extension/package.json
-          cp /tmp/xad-browser-src/README.md browser-extension/README.md
-          rm -rf browser-extension-source.parts browser-extension-source.ready browser-extension-source.zip.b64
-      - name: Commit expanded source
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --quiet && exit 0
-          git commit -m "Add xADKiller Chrome and Firefox extension sources"
-          git push
+          mkdir -p packages
+          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.0.0.zip .)
+          (cd dist/firefox && zip -qr ../../packages/xADKiller-Firefox-v1.0.0.zip .)
+      - name: Checksums
+        run: sha256sum packages/*.zip | tee packages/SHA256SUMS.txt
+      - name: Upload tested packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: xADKiller-browser-v1.0.0-tested
+          path: browser-extension/packages/*
+          if-no-files-found: error
+          retention-days: 30
