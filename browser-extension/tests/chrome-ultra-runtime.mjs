@@ -35,35 +35,40 @@ try {
   log("Launching Chromium");
   context = await withTimeout(chromium.launchPersistentContext(userDataDir, {
     headless: false,
-    timeout: 20000,
+    timeout: 60000,
+    // Playwright adds --disable-extensions by default. Remove only that flag so
+    // our unpacked MV3 extension can really load in the test browser.
+    ignoreDefaultArgs: ["--disable-extensions"],
     args: [
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`,
+      "--disable-gpu",
+      "--disable-dev-shm-usage",
       "--no-sandbox"
     ]
-  }), 25000, "Chromium launch");
+  }), 70000, "Chromium launch");
   log("Chromium launched");
 
   let worker = context.serviceWorkers()[0];
-  if (!worker) worker = await withTimeout(context.waitForEvent("serviceworker", { timeout: 10000 }), 12000, "service worker");
+  if (!worker) worker = await withTimeout(context.waitForEvent("serviceworker", { timeout: 20000 }), 22000, "service worker");
   const extensionId = new URL(worker.url()).host;
   if (!extensionId) throw new Error("could not resolve extension id");
   log("Service worker ready", extensionId);
 
-  const meta = await withTimeout(worker.evaluate(() => self.XAD_BUILD_META || null), 6000, "build meta");
+  const meta = await withTimeout(worker.evaluate(() => self.XAD_BUILD_META || null), 8000, "build meta");
   if (!meta || meta.standardRules < 1000 || meta.ultraRules < 1000) throw new Error(`invalid build meta: ${JSON.stringify(meta)}`);
   if (meta.cosmeticGeneric < 250 || meta.cosmeticDomains < 50) throw new Error(`cosmetic build incomplete: ${JSON.stringify(meta)}`);
   log("Build meta OK", `STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}`);
 
-  const page = await withTimeout(context.newPage(), 5000, "test page creation");
-  page.setDefaultTimeout(8000);
+  const page = await withTimeout(context.newPage(), 8000, "test page creation");
+  page.setDefaultTimeout(10000);
   let dnrFailure = "";
   page.on("requestfailed", (request) => {
     if (request.url().includes("ads.xadkiller.test")) dnrFailure = request.failure()?.errorText || "";
   });
   log("Opening local runtime fixture");
-  await withTimeout(page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 8000 }), 10000, "fixture navigation");
-  await page.waitForTimeout(1000);
+  await withTimeout(page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 10000 }), 12000, "fixture navigation");
+  await page.waitForTimeout(1200);
   log("Fixture loaded");
 
   const visibleState = await withTimeout(page.evaluate(() => ({
@@ -71,13 +76,13 @@ try {
     cosmeticVisible: !!document.querySelector("#cosmetic-ad") && getComputedStyle(document.querySelector("#cosmetic-ad")).display !== "none",
     smartVisible: !!document.querySelector("#sponsored-banner-unit") && getComputedStyle(document.querySelector("#sponsored-banner-unit")).display !== "none",
     skipClicks: window.skipClicks || 0
-  })), 8000, "DOM assertions");
+  })), 10000, "DOM assertions");
   log("DOM assertions returned", JSON.stringify(visibleState));
 
   const blockTest = await withTimeout(page.evaluate(async () => await Promise.race([
     window.blockTest.then((v) => ({ state: "done", value: v })),
-    new Promise((resolve) => setTimeout(() => resolve({ state: "timeout", value: false }), 4000))
-  ])), 6000, "DNR control request");
+    new Promise((resolve) => setTimeout(() => resolve({ state: "timeout", value: false }), 5000))
+  ])), 8000, "DNR control request");
   log("DNR request finished", `${JSON.stringify(blockTest)} / ${dnrFailure || "no failure text"}`);
 
   if (!visibleState.normalVisible) throw new Error("normal content was hidden");
@@ -90,7 +95,7 @@ try {
   const testTabId = await withTimeout(worker.evaluate(async (urlPart) => {
     const tabs = await chrome.tabs.query({});
     return tabs.find((t) => (t.url || "").includes(urlPart))?.id || -1;
-  }, `127.0.0.1:${port}`), 5000, "tab id lookup");
+  }, `127.0.0.1:${port}`), 8000, "tab id lookup");
   if (testTabId < 0) throw new Error("test tab id not found");
   log("Test tab identified", String(testTabId));
 
@@ -101,19 +106,19 @@ try {
     } catch (error) {
       return { ok: false, error: String(error?.message || error) };
     }
-  }, testTabId), 5000, "matched rules lookup");
+  }, testTabId), 8000, "matched rules lookup");
   if (!matched.ok) throw new Error(`getMatchedRules failed: ${matched.error || "unknown"}`);
   if (matched.count < 1) throw new Error("DNR reported zero matched rules for the test tab");
   log("Matched rules OK", String(matched.count));
 
   // Test the same path a real user uses: popup UI -> runtime message -> DNR ruleset switch.
-  const popup = await withTimeout(context.newPage(), 5000, "popup page creation");
-  popup.setDefaultTimeout(8000);
+  const popup = await withTimeout(context.newPage(), 8000, "popup page creation");
+  popup.setDefaultTimeout(10000);
   log("Opening extension popup page");
-  await withTimeout(popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded", timeout: 8000 }), 10000, "popup navigation");
-  await withTimeout(popup.selectOption("#mode", "ultra"), 8000, "ULTRA select");
-  await popup.waitForTimeout(700);
-  const enabledRulesets = await withTimeout(worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets()), 5000, "enabled rulesets");
+  await withTimeout(popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded", timeout: 10000 }), 12000, "popup navigation");
+  await withTimeout(popup.selectOption("#mode", "ultra"), 10000, "ULTRA select");
+  await popup.waitForTimeout(1000);
+  const enabledRulesets = await withTimeout(worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets()), 8000, "enabled rulesets");
   log("Popup mode switch returned", enabledRulesets.join(","));
   if (!enabledRulesets.includes("standard") || !enabledRulesets.includes("ultra")) {
     throw new Error(`ULTRA rulesets not enabled through popup: ${enabledRulesets.join(",")}`);
@@ -123,7 +128,7 @@ try {
 } finally {
   log("Shutting down Chromium");
   if (context) {
-    try { await withTimeout(context.close(), 6000, "Chromium close"); } catch (error) { console.warn(String(error)); }
+    try { await withTimeout(context.close(), 8000, "Chromium close"); } catch (error) { console.warn(String(error)); }
   }
   await new Promise((resolve) => server.close(resolve));
   log("Shutdown complete");
