@@ -8,6 +8,7 @@
     "validate": "node tools/validate-chrome-ultra.mjs && node tools/validate-titan-boost.mjs",
     "test:chrome": "node tests/chrome-ultra-runtime.mjs",
     "test:boost": "node tests/chrome-static-boost-runtime.mjs",
+    "test:compat": "node tests/chrome-compat-runtime.mjs",
     "build:legacy": "node tools/build.mjs"
   },
   "devDependencies": {
