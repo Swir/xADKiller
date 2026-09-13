@@ -35,6 +35,7 @@ jobs:
         run: |
           node --check dist/chrome/background.js
           node --check dist/chrome/early-guard.js
+          node --check dist/chrome/preflight-config.js
           node --check dist/chrome/content.js
           node --check dist/chrome/shadow-sentinel.js
           node --check dist/chrome/popup.js
