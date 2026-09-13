@@ -94,6 +94,17 @@ async function waitShield(worker, minimums, timeoutMs = 45000) {
   }
   throw new Error(`TITAN Shield timeout: ${JSON.stringify(last)} expected=${JSON.stringify(minimums)}`);
 }
+async function waitAlarms(worker, expected, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  let names = [];
+  while (Date.now() < deadline) {
+    const alarms = await worker.evaluate(async () => await chrome.alarms.getAll());
+    names = alarms.map((a) => a.name);
+    if (expected.every((name) => names.includes(name))) return names;
+    await delay(200);
+  }
+  throw new Error(`startup alarms timeout: expected=${expected.join(",")} seen=${names.join(",")}`);
+}
 
 const meta = readBuildMeta();
 if (meta.version !== "1.4.0") throw new Error(`build metadata version mismatch: ${meta.version}`);
@@ -135,11 +146,7 @@ try {
   log("TITAN worker ready", `${found.probe.version} • ${found.probe.href}`);
   if (!found.probe.hasStorage || !found.probe.hasAlarms || !found.probe.hasDnr || !found.probe.hasSession || !found.probe.hasRegexCheck) throw new Error(`required TITAN API missing: ${JSON.stringify(found.probe)}`);
 
-  const alarms = await worker.evaluate(async () => await chrome.alarms.getAll());
-  const alarmNames = alarms.map((a) => a.name);
-  for (const expected of ["xadkiller-live-shield-refresh","xadkiller-live-matrix-refresh","xadkiller-titan-refresh"]) {
-    if (!alarmNames.includes(expected)) throw new Error(`alarm missing: ${expected} / ${alarmNames.join(",")}`);
-  }
+  const alarmNames = await waitAlarms(worker, ["xadkiller-live-shield-refresh","xadkiller-live-matrix-refresh","xadkiller-titan-refresh"], 10000);
   log("Update alarms OK", alarmNames.join(","));
 
   const initialRulesets = await worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets());
