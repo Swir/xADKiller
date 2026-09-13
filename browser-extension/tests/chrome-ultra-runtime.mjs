@@ -42,8 +42,8 @@ async function probeWorker(target) {
         version: manifest?.version || "",
         permissions: manifest?.permissions || [],
         hasStorage: !!chrome.storage?.local,
-        hasDnr: !!chrome.declarativeNetRequest,
-        dnrMethods: chrome.declarativeNetRequest ? Object.keys(chrome.declarativeNetRequest).sort() : []
+        hasAlarms: !!chrome.alarms,
+        hasDnr: !!chrome.declarativeNetRequest
       };
     });
     return { worker, probe };
@@ -61,26 +61,28 @@ async function findXadWorker(browser, timeoutMs = 20000) {
       if (!result) continue;
       const { probe } = result;
       seen.set(probe.href, probe);
-      if (probe.version === "1.2.0" && probe.permissions.includes("declarativeNetRequest")) return { ...result, target };
+      if (probe.version === "1.3.0" && probe.permissions.includes("declarativeNetRequest")) return { ...result, target };
     }
     await delay(250);
   }
   throw new Error(`xADKiller service worker not found. Seen: ${JSON.stringify([...seen.values()])}`);
 }
-async function waitDynamicShield(worker, minimumIntel, minimumCore = 0, timeoutMs = 20000) {
+async function waitDynamicShield(worker, { intel = 0, live = 0, core = 0 }, timeoutMs = 25000) {
   const deadline = Date.now() + timeoutMs;
-  let last = { total: 0, intel: 0, core: 0 };
+  let last = { total:0, intel:0, live:0, core:0, custom:0 };
   while (Date.now() < deadline) {
     last = await worker.evaluate(async () => {
       const rules = await chrome.declarativeNetRequest.getDynamicRules();
       return {
         total: rules.length,
         intel: rules.filter((r) => r.id >= 100000 && r.id <= 123999).length,
-        core: rules.filter((r) => r.id >= 130000 && r.id <= 130099).length
+        core: rules.filter((r) => r.id >= 130000 && r.id <= 130199).length,
+        live: rules.filter((r) => r.id >= 140000 && r.id <= 140899).length,
+        custom: rules.filter((r) => r.id >= 910000 && r.id <= 914999).length
       };
     });
-    if (last.intel >= minimumIntel && last.core >= minimumCore) return last;
-    await delay(250);
+    if (last.intel >= intel && last.live >= live && last.core >= core) return last;
+    await delay(300);
   }
   throw new Error(`Dynamic Shield timeout: ${JSON.stringify(last)}`);
 }
@@ -89,9 +91,9 @@ const meta = readBuildMeta();
 if (meta.standardRules < 1000 || meta.ultraRules < 1000) throw new Error(`invalid build meta: ${JSON.stringify(meta)}`);
 if (meta.cosmeticGeneric < 250 || meta.cosmeticDomains < 50) throw new Error(`cosmetic build incomplete: ${JSON.stringify(meta)}`);
 if (!Array.isArray(intelDomains) || intelDomains.length < 18000) throw new Error(`dynamic intelligence pack incomplete: ${intelDomains?.length || 0}`);
-if (meta.version !== "1.2.0") throw new Error(`build metadata version mismatch: ${meta.version}`);
+if (meta.version !== "1.3.0") throw new Error(`build metadata version mismatch: ${meta.version}`);
 if (meta.dynamicIntelDomains !== intelDomains.length) throw new Error(`build metadata dynamic count mismatch: ${meta.dynamicIntelDomains}`);
-log("Build artifact meta OK", `v=${meta.version}, STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, dynamic=${intelDomains.length}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}`);
+log("Build artifact meta OK", `v=${meta.version}, STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, packaged=${intelDomains.length}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}`);
 
 const server = http.createServer((req, res) => {
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -117,9 +119,6 @@ try {
   }), 70000, "Puppeteer Chrome launch");
   log("Chrome launched");
 
-  const extensionList = await withTimeout(browser.extensions(), 8000, "extension inventory");
-  log("Installed extension inventory", JSON.stringify([...extensionList.values()].map((e) => ({ id: e.id, name: e.name, version: e.version }))));
-
   const found = await withTimeout(findXadWorker(browser), 22000, "xADKiller service worker");
   const worker = found.worker;
   const runtimeProbe = found.probe;
@@ -127,22 +126,30 @@ try {
   log("xADKiller service worker ready", `${extensionId} / ${runtimeProbe.href}`);
   log("Extension API probe", JSON.stringify(runtimeProbe));
   if (!runtimeProbe.hasStorage) throw new Error("chrome.storage.local unavailable in xADKiller worker");
+  if (!runtimeProbe.hasAlarms) throw new Error("chrome.alarms unavailable in xADKiller worker");
   if (!runtimeProbe.hasDnr) throw new Error("chrome.declarativeNetRequest unavailable in xADKiller worker");
+
+  const alarm = await worker.evaluate(async () => await chrome.alarms.get("xadkiller-live-shield-refresh"));
+  if (!alarm) throw new Error("Live Shield refresh alarm not installed");
+  log("Live Shield alarm OK", `period=${alarm.periodInMinutes}`);
 
   const initialRulesets = await withTimeout(worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets()), 8000, "initial rulesets");
   if (!initialRulesets.includes("standard")) throw new Error(`STANDARD ruleset not enabled: ${initialRulesets.join(",")}`);
   if (initialRulesets.includes("ultra")) throw new Error(`ULTRA unexpectedly enabled initially: ${initialRulesets.join(",")}`);
   log("Initial DNR rulesets OK", initialRulesets.join(","));
 
-  const standardShield = await waitDynamicShield(worker, 15000, 0, 25000);
-  log("STANDARD Dynamic Shield", JSON.stringify(standardShield));
+  const standardShield = await waitDynamicShield(worker, { intel:15000, live:20, core:10 }, 30000);
+  log("STANDARD Shield", JSON.stringify(standardShield));
 
-  const sampleDomain = intelDomains[0];
-  const samplePresent = await worker.evaluate(async (domain) => {
+  const liveState = await worker.evaluate(async () => await chrome.storage.local.get({ liveFeedVersion:"", liveStandardDomains:[], liveUltraDomains:[] }));
+  if (!liveState.liveFeedVersion || (liveState.liveStandardDomains?.length || 0) < 20) throw new Error(`Live Shield feed not cached: ${JSON.stringify(liveState)}`);
+  log("Live Shield feed", `${liveState.liveFeedVersion} • standard=${liveState.liveStandardDomains.length} ultra=${liveState.liveUltraDomains.length}`);
+
+  const ownLiveRule = await worker.evaluate(async () => {
     const rules = await chrome.declarativeNetRequest.getDynamicRules();
-    return rules.some((r) => Array.isArray(r.condition?.requestDomains) && r.condition.requestDomains.includes(domain));
-  }, sampleDomain);
-  if (!samplePresent) throw new Error(`dynamic intelligence sample not installed: ${sampleDomain}`);
+    return rules.some((r) => r.id >= 140000 && r.id <= 140899 && r.condition?.requestDomains?.includes("amazon-adsystem.com"));
+  });
+  if (!ownLiveRule) throw new Error("Own Live Shield domain was not materialized into DNR");
 
   const page = await browser.newPage();
   page.setDefaultTimeout(10000);
@@ -152,26 +159,40 @@ try {
   });
   log("Opening local runtime fixture");
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: "domcontentloaded", timeout: 12000 });
-  await delay(1500);
+  await delay(1700);
 
-  const visibleState = await page.evaluate(() => ({
-    normalVisible: !!document.querySelector("#normal") && getComputedStyle(document.querySelector("#normal")).display !== "none",
-    cosmeticVisible: !!document.querySelector("#cosmetic-ad") && getComputedStyle(document.querySelector("#cosmetic-ad")).display !== "none",
-    smartVisible: !!document.querySelector("#sponsored-banner-unit") && getComputedStyle(document.querySelector("#sponsored-banner-unit")).display !== "none",
-    skipClicks: window.skipClicks || 0
-  }));
+  const visibleState = await page.evaluate(() => {
+    const shadowAd = document.querySelector("#shadow-host")?.shadowRoot?.querySelector("#shadow-ad");
+    const dynamicAd = document.querySelector("#dynamic-text-ad");
+    return {
+      normalVisible: !!document.querySelector("#normal") && getComputedStyle(document.querySelector("#normal")).display !== "none",
+      cosmeticVisible: !!document.querySelector("#cosmetic-ad") && getComputedStyle(document.querySelector("#cosmetic-ad")).display !== "none",
+      smartVisible: !!document.querySelector("#sponsored-banner-unit") && getComputedStyle(document.querySelector("#sponsored-banner-unit")).display !== "none",
+      shadowVisible: !!shadowAd && getComputedStyle(shadowAd).display !== "none" && getComputedStyle(shadowAd).visibility !== "hidden",
+      dynamicTextVisible: !!dynamicAd && getComputedStyle(dynamicAd).display !== "none" && getComputedStyle(dynamicAd).visibility !== "hidden",
+      skipClicks: window.skipClicks || 0
+    };
+  });
   log("DOM assertions", JSON.stringify(visibleState));
 
   const blockTest = await page.evaluate(async () => await Promise.race([
-    window.blockTest.then((v) => ({ state: "done", value: v })),
-    new Promise((resolve) => setTimeout(() => resolve({ state: "timeout", value: false }), 5000))
+    window.blockTest.then((v) => ({ state:"done", value:v })),
+    new Promise((resolve) => setTimeout(() => resolve({ state:"timeout", value:false }), 5000))
+  ]));
+  const preflightTest = await page.evaluate(async () => await Promise.race([
+    window.preflightTest.then((v) => ({ state:"done", value:v })),
+    new Promise((resolve) => setTimeout(() => resolve({ state:"timeout", value:false }), 5000))
   ]));
   log("DNR request", `${JSON.stringify(blockTest)} / ${dnrFailure || "no failure text"}`);
+  log("Preflight request", JSON.stringify(preflightTest));
 
   if (!visibleState.normalVisible) throw new Error("normal content was hidden");
   if (visibleState.cosmeticVisible) throw new Error("cosmetic ad was not hidden");
   if (visibleState.smartVisible) throw new Error("Smart DOM did not hide strong ad candidate");
+  if (visibleState.shadowVisible) throw new Error("Shadow DOM Sentinel did not hide ad candidate");
+  if (visibleState.dynamicTextVisible) throw new Error("dynamic cosmetic ad was not hidden");
   if (visibleState.skipClicks < 1) throw new Error("Smart Auto-Skip did not click Skip Ad");
+  if (preflightTest.state !== "done" || !preflightTest.value) throw new Error("XAD Preflight Guard did not block same-origin ad signature");
   if (blockTest.state === "timeout") throw new Error("DNR request timed out instead of being blocked");
   if (!blockTest.value || !/ERR_BLOCKED_BY_CLIENT/i.test(dnrFailure)) throw new Error(`DNR block failed: ${dnrFailure || "no failure captured"}`);
 
@@ -184,9 +205,9 @@ try {
   const matched = await worker.evaluate(async (tabId) => {
     try {
       const details = await chrome.declarativeNetRequest.getMatchedRules({ tabId });
-      return { ok: true, count: details?.rulesMatchedInfo?.length || 0 };
+      return { ok:true, count:details?.rulesMatchedInfo?.length || 0 };
     } catch (error) {
-      return { ok: false, error: String(error?.message || error) };
+      return { ok:false, error:String(error?.message || error) };
     }
   }, testTabId);
   if (!matched.ok) throw new Error(`getMatchedRules failed: ${matched.error}`);
@@ -194,11 +215,11 @@ try {
   log("Matched DNR rules", String(matched.count));
 
   const popup = await browser.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded", timeout: 12000 });
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil:"domcontentloaded", timeout:12000 });
   await popup.select("#mode", "ultra");
 
-  const ultraShield = await waitDynamicShield(worker, 23000, 10, 30000);
-  log("ULTRA Dynamic Shield", JSON.stringify(ultraShield));
+  const ultraShield = await waitDynamicShield(worker, { intel:23000, live:100, core:25 }, 35000);
+  log("ULTRA Shield", JSON.stringify(ultraShield));
 
   const enabledRulesets = await worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets());
   log("Popup ULTRA switch", enabledRulesets.join(","));
@@ -206,7 +227,7 @@ try {
     throw new Error(`ULTRA rulesets not enabled through popup: ${enabledRulesets.join(",")}`);
   }
 
-  log("PASS", `STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, dynamic=${ultraShield.intel}, core=${ultraShield.core}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}, matched=${matched.count}`);
+  log("PASS", `STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, packaged=${ultraShield.intel}, live=${ultraShield.live}, core=${ultraShield.core}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}, matched=${matched.count}`);
 } finally {
   log("Shutting down Chrome");
   if (browser) {
