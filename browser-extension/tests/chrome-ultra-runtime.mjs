@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -10,6 +11,7 @@ const testHtml = fs.readFileSync(path.join(root, "tests", "test-page.html"));
 function log(stage, extra = "") {
   console.log(`[xADKiller CI] ${stage}${extra ? ` • ${extra}` : ""}`);
 }
+function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 function withTimeout(promise, ms, label) {
   let timer;
   return Promise.race([
@@ -18,6 +20,46 @@ function withTimeout(promise, ms, label) {
       timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
     })
   ]);
+}
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const s = http.createServer();
+    s.once("error", reject);
+    s.listen(0, "127.0.0.1", () => {
+      const port = s.address().port;
+      s.close((error) => error ? reject(error) : resolve(port));
+    });
+  });
+}
+function getJson(url) {
+  return new Promise((resolve, reject) => {
+    const req = http.get(url, { timeout: 1500 }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => { body += chunk; });
+      res.on("end", () => {
+        if ((res.statusCode || 0) < 200 || (res.statusCode || 0) >= 300) return reject(new Error(`HTTP ${res.statusCode}`));
+        try { resolve(JSON.parse(body)); } catch (error) { reject(error); }
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error("request timeout")));
+    req.on("error", reject);
+  });
+}
+async function waitForDevTools(port, timeoutMs, processState) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = "not ready";
+  while (Date.now() < deadline) {
+    if (processState.exited) throw new Error(`Chrome exited before DevTools became ready (code=${processState.code}, signal=${processState.signal})`);
+    try {
+      const version = await getJson(`http://127.0.0.1:${port}/json/version`);
+      if (version?.webSocketDebuggerUrl) return version;
+    } catch (error) {
+      lastError = String(error?.message || error);
+    }
+    await delay(250);
+  }
+  throw new Error(`DevTools endpoint timed out after ${timeoutMs}ms: ${lastError}`);
 }
 
 const server = http.createServer((req, res) => {
@@ -29,25 +71,61 @@ const port = server.address().port;
 log("HTTP fixture ready", String(port));
 
 const userDataDir = fs.mkdtempSync("/tmp/xadkiller-chrome-ultra-");
+const debugPort = await getFreePort();
+let chromeProcess = null;
+let browser = null;
 let context = null;
+let stderrTail = "";
+const processState = { exited: false, code: null, signal: null };
 
 try {
-  log("Launching Chromium");
-  context = await withTimeout(chromium.launchPersistentContext(userDataDir, {
-    headless: false,
-    timeout: 60000,
-    // Playwright adds --disable-extensions by default. Remove only that flag so
-    // our unpacked MV3 extension can really load in the test browser.
-    ignoreDefaultArgs: ["--disable-extensions"],
-    args: [
-      `--disable-extensions-except=${extensionPath}`,
-      `--load-extension=${extensionPath}`,
-      "--disable-gpu",
-      "--disable-dev-shm-usage",
-      "--no-sandbox"
-    ]
-  }), 70000, "Chromium launch");
-  log("Chromium launched");
+  const bundledChrome = chromium.executablePath();
+  const chromeExecutable = fs.existsSync(bundledChrome)
+    ? bundledChrome
+    : ["/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium"].find((p) => fs.existsSync(p));
+  if (!chromeExecutable) throw new Error("No Chrome/Chromium executable found");
+
+  log("Launching Chromium through DevTools port", `${chromeExecutable} / ${debugPort}`);
+  chromeProcess = spawn(chromeExecutable, [
+    `--user-data-dir=${userDataDir}`,
+    `--remote-debugging-port=${debugPort}`,
+    "--remote-debugging-address=127.0.0.1",
+    `--disable-extensions-except=${extensionPath}`,
+    `--load-extension=${extensionPath}`,
+    "--disable-gpu",
+    "--disable-dev-shm-usage",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-background-networking",
+    "--disable-component-update",
+    "--password-store=basic",
+    "--use-mock-keychain",
+    "--no-sandbox",
+    "about:blank"
+  ], {
+    detached: true,
+    env: process.env,
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  chromeProcess.stdout?.on("data", (chunk) => { process.stdout.write(`[chrome] ${chunk}`); });
+  chromeProcess.stderr?.on("data", (chunk) => {
+    const text = String(chunk);
+    stderrTail = (stderrTail + text).slice(-12000);
+    process.stderr.write(`[chrome] ${text}`);
+  });
+  chromeProcess.once("exit", (code, signal) => {
+    processState.exited = true;
+    processState.code = code;
+    processState.signal = signal;
+  });
+
+  const version = await waitForDevTools(debugPort, 60000, processState);
+  log("DevTools endpoint ready", version.Browser || "Chrome");
+
+  browser = await withTimeout(chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`), 15000, "CDP connection");
+  context = browser.contexts()[0];
+  if (!context) throw new Error("Chrome default browser context not found over CDP");
+  log("CDP connected");
 
   let worker = context.serviceWorkers()[0];
   if (!worker) worker = await withTimeout(context.waitForEvent("serviceworker", { timeout: 20000 }), 22000, "service worker");
@@ -111,7 +189,6 @@ try {
   if (matched.count < 1) throw new Error("DNR reported zero matched rules for the test tab");
   log("Matched rules OK", String(matched.count));
 
-  // Test the same path a real user uses: popup UI -> runtime message -> DNR ruleset switch.
   const popup = await withTimeout(context.newPage(), 8000, "popup page creation");
   popup.setDefaultTimeout(10000);
   log("Opening extension popup page");
@@ -125,10 +202,24 @@ try {
   }
 
   log("PASS", `STANDARD=${meta.standardRules}, ULTRA=${meta.ultraRules}, cosmetic=${meta.cosmeticGeneric}, scoped=${meta.cosmeticDomains}, matched=${matched.count}`);
+} catch (error) {
+  if (stderrTail) console.error("[xADKiller CI] Chrome stderr tail:\n" + stderrTail);
+  throw error;
 } finally {
   log("Shutting down Chromium");
-  if (context) {
-    try { await withTimeout(context.close(), 8000, "Chromium close"); } catch (error) { console.warn(String(error)); }
+  if (browser) {
+    try { await withTimeout(browser.close(), 6000, "CDP browser close"); } catch (error) { console.warn(String(error)); }
+  }
+  if (chromeProcess && !processState.exited) {
+    try { process.kill(-chromeProcess.pid, "SIGTERM"); } catch (_) {
+      try { chromeProcess.kill("SIGTERM"); } catch (_) {}
+    }
+    await delay(700);
+    if (!processState.exited) {
+      try { process.kill(-chromeProcess.pid, "SIGKILL"); } catch (_) {
+        try { chromeProcess.kill("SIGKILL"); } catch (_) {}
+      }
+    }
   }
   await new Promise((resolve) => server.close(resolve));
   log("Shutdown complete");
