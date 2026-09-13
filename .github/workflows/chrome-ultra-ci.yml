@@ -33,11 +33,14 @@ jobs:
         run: npm run validate
       - name: JavaScript syntax
         run: |
+          node --check dist/chrome/service-worker.js
           node --check dist/chrome/background.js
+          node --check dist/chrome/live-signatures.js
           node --check dist/chrome/early-guard.js
           node --check dist/chrome/preflight-config.js
           node --check dist/chrome/content.js
           node --check dist/chrome/shadow-sentinel.js
+          node --check dist/chrome/live-cosmetic.js
           node --check dist/chrome/popup.js
           node --check dist/chrome/cosmetic-data.js
           node --check dist/chrome/build-meta.js
@@ -49,19 +52,19 @@ jobs:
         run: |
           rm -rf packages
           mkdir -p packages
-          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.3.0-XAD-Shield-beta.zip .)
+          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.3.1-XAD-Live-Matrix-beta.zip .)
       - name: Checksums
         run: |
           cd packages
-          sha256sum xADKiller-Chrome-v1.3.0-XAD-Shield-beta.zip > SHA256SUMS.txt
+          sha256sum xADKiller-Chrome-v1.3.1-XAD-Live-Matrix-beta.zip > SHA256SUMS.txt
       - name: Verify archive
         run: |
-          unzip -tq packages/xADKiller-Chrome-v1.3.0-XAD-Shield-beta.zip
+          unzip -tq packages/xADKiller-Chrome-v1.3.1-XAD-Live-Matrix-beta.zip
           (cd packages && sha256sum -c SHA256SUMS.txt)
       - name: Upload tested Chrome beta
         uses: actions/upload-artifact@v4
         with:
-          name: xADKiller-Chrome-v1.3.0-XAD-Shield-beta-tested
+          name: xADKiller-Chrome-v1.3.1-XAD-Live-Matrix-beta-tested
           path: browser-extension/packages/*
           if-no-files-found: error
           retention-days: 30
