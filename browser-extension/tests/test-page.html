@@ -3,9 +3,26 @@
 <div class="adsbygoogle" id="cosmetic-ad">TEST AD</div>
 <div id="sponsored-banner-unit" style="width:320px;height:120px">Advertisement</div>
 <button id="skip-ad">Skip Ad</button>
+<div id="shadow-host"></div>
 <script>
 window.skipClicks=0;
 document.getElementById("skip-ad").addEventListener("click",()=>window.skipClicks++);
 window.blockTest = fetch("https://ads.xadkiller.test/pixel").then(()=>false).catch(()=>true);
+window.preflightTest = fetch("/api/content?ad_unit=xad-ci").then(()=>false).catch(()=>true);
+const root=document.getElementById("shadow-host").attachShadow({mode:"open"});
+const shadowAd=document.createElement("div");
+shadowAd.id="shadow-ad";
+shadowAd.className="adbox banner_ads adsbox";
+shadowAd.style.cssText="width:300px;height:100px";
+shadowAd.textContent="SHADOW AD";
+root.appendChild(shadowAd);
+setTimeout(()=>{
+  const dynamic=document.createElement("div");
+  dynamic.id="dynamic-text-ad";
+  dynamic.className="textads";
+  dynamic.style.cssText="width:300px;height:80px";
+  dynamic.textContent="DYNAMIC AD";
+  document.body.appendChild(dynamic);
+},80);
 </script>
 </body></html>
