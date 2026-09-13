@@ -104,8 +104,6 @@ function parseNetworkLine(line0) {
   const dollar = line.indexOf("$");
   if (dollar >= 0) { pattern = line.slice(0, dollar); options = line.slice(dollar + 1); }
   pattern = pattern.trim();
-  // ABP regex rules use /.../. Ordinary substring rules such as /ads.js and
-  // /pagead.js also begin with slash and MUST NOT be discarded.
   if (pattern.length > 2 && pattern.startsWith("/") && pattern.endsWith("/")) return null;
   if (!validDnrUrlFilter(pattern)) return null;
   const anchored = pattern.startsWith("||") || pattern.startsWith("|http://") || pattern.startsWith("|https://");
@@ -161,6 +159,7 @@ function selectBest(parsedRules, budget) {
 function addRules(target, seen, rules, cap) {
   let added = 0;
   for (const parsed of rules) {
+    if (!parsed) continue;
     if (target.length >= cap) break;
     const key = ruleKey(parsed);
     if (seen.has(key)) continue;
@@ -199,7 +198,7 @@ async function fetchText(url) {
   } finally { clearTimeout(timer); }
 }
 function materialize(rawRules, startId = 1) {
-  return rawRules.map((r, i) => ({ id: startId + i, priority: r.priority, action: { type: r.action }, condition: r.condition }));
+  return rawRules.filter(Boolean).map((r, i) => ({ id: startId + i, priority: r.priority, action: { type: r.action }, condition: r.condition }));
 }
 
 const standard = [];
