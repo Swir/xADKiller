@@ -87,12 +87,31 @@ const domainInput = document.getElementById("domainInput");
 const liveInfo = document.getElementById("liveInfo");
 const liveRefresh = document.getElementById("liveRefresh");
 const titanInfo = document.getElementById("titanInfo");
+const memoryBadge = document.getElementById("memoryBadge");
+const memoryInfo = document.getElementById("memoryInfo");
+const resetMemoryBtn = document.getElementById("resetMemoryBtn");
 
 let activeTab = null;
 let host = "";
 let siteAllowed = false;
 let stateBusy = false;
 let languageBusy = false;
+
+function renderMemory(titan) {
+  if (!titan?.ok) {
+    memoryBadge.textContent = "—";
+    memoryBadge.className = "memoryBadge off";
+    memoryInfo.textContent = t("adaptiveHint", "Everything is learned locally in this browser profile.");
+    return;
+  }
+  const remembered = Number(titan.memory || 0);
+  const promoted = Number(titan.promoted || 0);
+  const ttl = Number(titan.memoryTtlDays || 21);
+  memoryBadge.textContent = formatNumber(promoted);
+  memoryBadge.className = promoted > 0 ? "memoryBadge hot" : "memoryBadge";
+  memoryBadge.title = `${t("adaptiveMemory", "Adaptive Memory")}: ${formatNumber(promoted)}`;
+  memoryInfo.textContent = `${t("adaptiveMemory", "Adaptive Memory")}: ${formatNumber(remembered)} ${t("memoryRemembered", "remembered")} • ${formatNumber(promoted)} ${t("memoryPromoted", "promoted")} • ${ttl} ${t("memoryDays", "days")}`;
+}
 
 async function refresh() {
   activeTab = await currentTab();
@@ -119,7 +138,7 @@ async function refresh() {
     const live = state.liveShield || {};
     if (live.version) {
       const count = state.mode === "ultra" ? Number(live.standard || 0) + Number(live.ultra || 0) : Number(live.standard || 0);
-      liveInfo.textContent = `${live.version} • ${formatNumber(count)} ${t("liveDomains", "own live domains")}`;
+      liveInfo.textContent = `${live.version} • ${formatNumber(count)} ${t("liveDomains", "live domains")}`;
     } else {
       liveInfo.textContent = t("liveShieldWaiting", "Waiting for intelligence feed…");
     }
@@ -143,6 +162,7 @@ async function refresh() {
   } else {
     titanInfo.textContent = t("titanWaiting", "TITAN engine waiting…");
   }
+  renderMemory(titan);
 
   const stats = activeTab ? await tabMessage(activeTab.id, { type:"getPageStats" }) : null;
   hiddenCount.textContent = Number.isFinite(stats?.hidden) ? formatNumber(stats.hidden) : "0";
@@ -220,6 +240,17 @@ document.getElementById("pickerBtn").addEventListener("click", async () => {
 });
 document.getElementById("falseBtn").addEventListener("click", async () => {
   if (activeTab) await tabMessage(activeTab.id, { type:"markFalsePositive" });
+  refresh();
+});
+resetMemoryBtn.addEventListener("click", async () => {
+  if (stateBusy) return;
+  const ok = confirm(t("resetMemoryConfirm", "Clear TITAN Adaptive Memory? Current filter lists and your custom domains will not be removed."));
+  if (!ok) return;
+  stateBusy = true;
+  resetMemoryBtn.disabled = true;
+  await send({ type:"resetTitanMemory" });
+  resetMemoryBtn.disabled = false;
+  stateBusy = false;
   refresh();
 });
 document.getElementById("addDomainBtn").addEventListener("click", async () => {
