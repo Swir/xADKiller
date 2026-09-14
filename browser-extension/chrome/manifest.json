@@ -36,11 +36,6 @@
         "path": "rules/standard.json"
       },
       {
-        "id": "compat",
-        "enabled": false,
-        "path": "rules/compat.json"
-      },
-      {
         "id": "ultra",
         "enabled": false,
         "path": "rules/ultra.json"
