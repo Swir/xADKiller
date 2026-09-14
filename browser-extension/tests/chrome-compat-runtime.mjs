@@ -37,23 +37,25 @@ async function findWorker(browser, timeout = 22000) {
 async function state(worker) {
   return await worker.evaluate(async () => ({
     enabled: await chrome.declarativeNetRequest.getEnabledRulesets(),
-    prefs: await chrome.storage.local.get({ enabled:true, mode:"standard" })
+    prefs: await chrome.storage.local.get({ enabled:true, mode:"standard", compatEnabled:false })
   }));
 }
 
-async function waitMode(worker, mode, timeout = 18000) {
+async function waitPolicy(worker, { mode, compat }, timeout = 18000) {
   const deadline = Date.now() + timeout;
   let last = null;
   while (Date.now() < deadline) {
     last = await state(worker);
     const set = new Set(last.enabled);
-    const ok = mode === "ultra"
-      ? set.has("standard") && set.has("ultra") && !set.has("compat") && last.prefs.mode === "ultra"
-      : set.has("standard") && set.has("compat") && !set.has("ultra") && last.prefs.mode === "standard";
-    if (ok) return last;
+    const modeOk = mode === "ultra"
+      ? set.has("standard") && set.has("ultra")
+      : set.has("standard") && !set.has("ultra");
+    const compatOk = compat ? set.has("compat") : !set.has("compat");
+    const prefsOk = last.prefs.mode === mode && last.prefs.compatEnabled === compat;
+    if (modeOk && compatOk && prefsOk) return last;
     await delay(250);
   }
-  throw new Error(`COMPAT transition timeout for ${mode}: ${JSON.stringify(last)}`);
+  throw new Error(`COMPAT policy timeout: mode=${mode}, compat=${compat}, state=${JSON.stringify(last)}`);
 }
 
 async function openPopup(browser, extensionId, expectedMode = null) {
@@ -71,7 +73,7 @@ async function openPopup(browser, extensionId, expectedMode = null) {
 assertPack("STANDARD", standardRules, "block", 15000);
 assertPack("COMPAT", compatRules, "allow", 1000);
 assertPack("ULTRA", ultraRules, "block", 7000);
-log("Static policy", `STANDARD=${standardRules.length} BLOCK, COMPAT=${compatRules.length} ALLOW, ULTRA=${ultraRules.length} BLOCK`);
+log("Static policy", `STANDARD=${standardRules.length} BLOCK, COMPAT=${compatRules.length} ALLOW(opt-in), ULTRA=${ultraRules.length} BLOCK`);
 
 let browser = null;
 try {
@@ -86,29 +88,38 @@ try {
   const worker = await findWorker(browser);
   const extensionId = await worker.evaluate(() => chrome.runtime.id);
 
-  const initial = await waitMode(worker, "standard", 18000);
-  log("STANDARD mode", initial.enabled.join(","));
+  const initial = await waitPolicy(worker, { mode:"standard", compat:false }, 18000);
+  log("STANDARD default", initial.enabled.join(","));
+
+  const enableCompat = await worker.evaluate(async () => await chrome.runtime.sendMessage({ type:"setCompatEnabled", compatEnabled:true }));
+  if (!enableCompat?.ok) throw new Error(`could not opt in COMPAT: ${JSON.stringify(enableCompat)}`);
+  const compatOn = await waitPolicy(worker, { mode:"standard", compat:true }, 18000);
+  log("STANDARD + explicit COMPAT", compatOn.enabled.join(","));
 
   let popup = await openPopup(browser, extensionId, "standard");
   await popup.select("#mode", "ultra");
-  const ultra = await waitMode(worker, "ultra", 22000);
-  log("ULTRA mode", ultra.enabled.join(","));
+  const ultra = await waitPolicy(worker, { mode:"ultra", compat:true }, 22000);
+  if (ultra.enabled.includes("compat")) throw new Error(`COMPAT must be suppressed in ULTRA: ${ultra.enabled.join(",")}`);
+  log("ULTRA suppresses COMPAT", ultra.enabled.join(","));
   await popup.close();
 
-  // Reopen like a real user and wait until popup.js has hydrated the persisted
-  // mode from storage. Reading the select immediately after DOMContentLoaded can
-  // observe the HTML default before async refresh() has finished.
   popup = await openPopup(browser, extensionId, "ultra");
   await popup.select("#mode", "standard");
-  const standard = await waitMode(worker, "standard", 22000);
-  log("STANDARD restored", standard.enabled.join(","));
+  const standardRestored = await waitPolicy(worker, { mode:"standard", compat:true }, 22000);
+  if (!standardRestored.enabled.includes("compat")) throw new Error(`explicit COMPAT did not return in STANDARD: ${standardRestored.enabled.join(",")}`);
+  log("STANDARD explicit COMPAT restored", standardRestored.enabled.join(","));
+
+  const disableCompat = await popup.evaluate(async () => await chrome.runtime.sendMessage({ type:"setCompatEnabled", compatEnabled:false }));
+  if (!disableCompat?.ok) throw new Error(`could not disable COMPAT: ${JSON.stringify(disableCompat)}`);
+  const finalState = await waitPolicy(worker, { mode:"standard", compat:false }, 18000);
+  if (finalState.enabled.includes("compat")) throw new Error(`COMPAT still active after opt-out: ${finalState.enabled.join(",")}`);
 
   const compatStats = await popup.evaluate(async () => await chrome.runtime.sendMessage({ type:"getCompatStats" }));
-  if (!compatStats?.ok || compatStats.active !== true || compatStats.mode !== "standard") {
+  if (!compatStats?.ok || compatStats.active !== false || compatStats.requested !== false || compatStats.mode !== "standard") {
     throw new Error(`COMPAT stats mismatch: ${JSON.stringify(compatStats)}`);
   }
   await popup.close();
-  log("PASS", `foreign exceptions isolated from ULTRA; own whitelist remains dynamic and separate`);
+  log("PASS", "COMPAT ships OFF, only explicit opt-in can enable it, ULTRA always suppresses it");
 } finally {
   if (browser) { try { await browser.close(); } catch (_) {} }
 }
