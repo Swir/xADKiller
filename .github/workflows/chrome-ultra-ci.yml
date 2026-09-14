@@ -2,7 +2,7 @@ name: Test xADKiller Chrome TITAN
 
 on:
   push:
-    branches: [ main, chrome-titan-v140, chrome-v141-pl-en ]
+    branches: [ main, chrome-titan-v140, chrome-v141-pl-en, chrome-v150-adaptive-memory ]
     paths:
       - "browser-extension/**"
       - ".github/workflows/chrome-ultra-ci.yml"
@@ -14,7 +14,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 24
     defaults:
       run:
         working-directory: browser-extension
@@ -48,6 +48,7 @@ jobs:
           node --check dist/chrome/popup.js
           node --check dist/chrome/cosmetic-data.js
           node --check dist/chrome/build-meta.js
+          node --check tests/chrome-adaptive-memory-runtime.mjs
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Chromium TITAN runtime test
@@ -58,23 +59,25 @@ jobs:
         run: timeout --signal=TERM --kill-after=10s 120s npm run test:compat
       - name: Chromium PL EN language switch test
         run: timeout --signal=TERM --kill-after=10s 120s npm run test:language
-      - name: Package Chrome TITAN PL EN ZIP
+      - name: Chromium Adaptive Memory persistence test
+        run: timeout --signal=TERM --kill-after=10s 180s npm run test:memory
+      - name: Package Chrome TITAN Adaptive Memory ZIP
         run: |
           rm -rf packages
           mkdir -p packages
-          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.4.0-TITAN-PL-EN.zip .)
+          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip .)
       - name: Checksums
         run: |
           cd packages
-          sha256sum xADKiller-Chrome-v1.4.0-TITAN-PL-EN.zip > SHA256SUMS.txt
+          sha256sum xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip > SHA256SUMS.txt
       - name: Verify archive
         run: |
-          unzip -tq packages/xADKiller-Chrome-v1.4.0-TITAN-PL-EN.zip
+          unzip -tq packages/xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip
           (cd packages && sha256sum -c SHA256SUMS.txt)
-      - name: Upload tested Chrome TITAN PL EN package
+      - name: Upload tested Chrome TITAN Adaptive Memory package
         uses: actions/upload-artifact@v4
         with:
-          name: xADKiller-Chrome-v1.4.0-TITAN-PL-EN-tested
+          name: xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory-tested
           path: browser-extension/packages/*
           if-no-files-found: error
           retention-days: 30
