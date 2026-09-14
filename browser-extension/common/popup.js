@@ -1,5 +1,17 @@
+let uiLanguage = "en";
+let uiMessages = {};
+
+function storageGet(defaults) {
+  return new Promise((resolve) => chrome.storage.local.get(defaults, (value) => resolve(value || defaults)));
+}
+function storageSet(values) {
+  return new Promise((resolve) => chrome.storage.local.set(values, resolve));
+}
 function t(key, fallback) {
-  return chrome.i18n.getMessage(key) || fallback || key;
+  return uiMessages[key] || chrome.i18n.getMessage(key) || fallback || key;
+}
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString(uiLanguage === "pl" ? "pl-PL" : "en-US");
 }
 function send(message) {
   return new Promise((resolve) => {
@@ -22,14 +34,44 @@ function tabMessage(tabId, message) {
     });
   });
 }
-document.querySelectorAll("[data-i18n]").forEach((el) => {
-  const key = el.getAttribute("data-i18n");
-  const value = t(key, el.textContent);
-  if (value) el.textContent = value;
-});
+function applyI18n() {
+  document.documentElement.lang = uiLanguage;
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    const value = t(key, el.textContent);
+    if (value) el.textContent = value;
+  });
+  const languageEl = document.getElementById("language");
+  if (languageEl) languageEl.value = uiLanguage;
+}
+async function loadLanguage(lang) {
+  const safe = lang === "pl" ? "pl" : "en";
+  let loaded = {};
+  try {
+    const response = await fetch(chrome.runtime.getURL(`_locales/${safe}/messages.json`), { cache:"no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const raw = await response.json();
+    for (const [key, entry] of Object.entries(raw || {})) {
+      if (typeof entry?.message === "string" && entry.message) loaded[key] = entry.message;
+    }
+  } catch (_) {
+    loaded = {};
+  }
+  uiLanguage = safe;
+  uiMessages = loaded;
+  applyI18n();
+}
+async function initializeLanguage() {
+  const stored = await storageGet({ uiLanguage:"" });
+  const remembered = stored.uiLanguage === "pl" || stored.uiLanguage === "en" ? stored.uiLanguage : "";
+  const chromeLanguage = String(chrome.i18n.getUILanguage?.() || "").toLowerCase();
+  const detected = chromeLanguage === "pl" || chromeLanguage.startsWith("pl-") ? "pl" : "en";
+  await loadLanguage(remembered || detected);
+}
 
 const enabledEl = document.getElementById("enabled");
 const modeEl = document.getElementById("mode");
+const languageEl = document.getElementById("language");
 const smartEl = document.getElementById("smartEnabled");
 const autoSkipEl = document.getElementById("autoSkip");
 const statusText = document.getElementById("statusText");
@@ -50,6 +92,7 @@ let activeTab = null;
 let host = "";
 let siteAllowed = false;
 let stateBusy = false;
+let languageBusy = false;
 
 async function refresh() {
   activeTab = await currentTab();
@@ -70,13 +113,13 @@ async function refresh() {
     const b = state.build;
     if (b) {
       const total = state.mode === "ultra" ? Number(b.standardRules || 0) + Number(b.ultraRules || 0) : Number(b.standardRules || 0);
-      rulesInfo.textContent = `${total.toLocaleString()} ${t("networkRules", "network rules")} • ${(b.cosmeticGeneric || 0).toLocaleString()}+ ${t("cosmeticRules", "cosmetic rules")}`;
+      rulesInfo.textContent = `${formatNumber(total)} ${t("networkRules", "network rules")} • ${formatNumber(b.cosmeticGeneric || 0)}+ ${t("cosmeticRules", "cosmetic rules")}`;
     }
-    customInfo.textContent = `${(state.customDomains || []).length} ${t("customDomainsCount", "custom domains")}`;
+    customInfo.textContent = `${formatNumber((state.customDomains || []).length)} ${t("customDomainsCount", "custom domains")}`;
     const live = state.liveShield || {};
     if (live.version) {
       const count = state.mode === "ultra" ? Number(live.standard || 0) + Number(live.ultra || 0) : Number(live.standard || 0);
-      liveInfo.textContent = `${live.version} • ${count.toLocaleString()} ${t("liveDomains", "own live domains")}`;
+      liveInfo.textContent = `${live.version} • ${formatNumber(count)} ${t("liveDomains", "own live domains")}`;
     } else {
       liveInfo.textContent = t("liveShieldWaiting", "Waiting for intelligence feed…");
     }
@@ -89,29 +132,39 @@ async function refresh() {
   ]);
   if (shield?.ok && rulesInfo.textContent !== "—") {
     const dynamicTotal = Number(shield.total || 0) + Number(matrix?.signatures || 0) + Number(titan?.regex || 0);
-    rulesInfo.textContent += ` • ${dynamicTotal.toLocaleString()} ${t("dynamicRules", "dynamic")}`;
+    rulesInfo.textContent += ` • ${formatNumber(dynamicTotal)} ${t("dynamicRules", "dynamic")}`;
   }
   if (matrix?.ok && matrix.version) {
     const cosmetic = modeEl.value === "ultra" ? Number(matrix.cosmeticStandard || 0) + Number(matrix.cosmeticUltra || 0) : Number(matrix.cosmeticStandard || 0);
-    liveInfo.textContent += ` • ${Number(matrix.signatures || 0)} sig • ${cosmetic} CSS`;
+    liveInfo.textContent += ` • ${formatNumber(matrix.signatures || 0)} ${t("signaturesShort", "sig")} • ${formatNumber(cosmetic)} ${t("cssShort", "CSS")}`;
   }
   if (titan?.ok) {
-    titanInfo.textContent = `${Number(titan.session || 0).toLocaleString()} session • ${Number(titan.regex || 0)} regex • ${Number(titan.learned || 0)} learned${titan.version ? ` • ${titan.version}` : ""}`;
+    titanInfo.textContent = `${formatNumber(titan.session || 0)} ${t("sessionRules", "session")} • ${formatNumber(titan.regex || 0)} ${t("regexRules", "regex")} • ${formatNumber(titan.learned || 0)} ${t("learnedRules", "learned")}${titan.version ? ` • ${titan.version}` : ""}`;
   } else {
-    titanInfo.textContent = "TITAN engine waiting…";
+    titanInfo.textContent = t("titanWaiting", "TITAN engine waiting…");
   }
 
   const stats = activeTab ? await tabMessage(activeTab.id, { type:"getPageStats" }) : null;
-  hiddenCount.textContent = Number.isFinite(stats?.hidden) ? stats.hidden : "0";
-  smartCount.textContent = Number.isFinite(stats?.smart) ? stats.smart : "0";
-  learnedCount.textContent = Number.isFinite(stats?.learned) ? stats.learned : "0";
+  hiddenCount.textContent = Number.isFinite(stats?.hidden) ? formatNumber(stats.hidden) : "0";
+  smartCount.textContent = Number.isFinite(stats?.smart) ? formatNumber(stats.smart) : "0";
+  learnedCount.textContent = Number.isFinite(stats?.learned) ? formatNumber(stats.learned) : "0";
   const net = activeTab ? await send({ type:"getNetworkStats", tabId:activeTab.id }) : null;
-  networkCount.textContent = Number.isFinite(net?.count) ? net.count : "0";
+  networkCount.textContent = Number.isFinite(net?.count) ? formatNumber(net.count) : "0";
 }
 
 async function rescan() {
   if (activeTab) await tabMessage(activeTab.id, { type:"rescan" });
 }
+
+languageEl.addEventListener("change", async () => {
+  if (languageBusy) return;
+  languageBusy = true;
+  const next = languageEl.value === "pl" ? "pl" : "en";
+  await storageSet({ uiLanguage:next });
+  await loadLanguage(next);
+  await refresh();
+  languageBusy = false;
+});
 enabledEl.addEventListener("change", async () => {
   if (stateBusy) return;
   stateBusy = true;
@@ -185,4 +238,9 @@ document.getElementById("testBtn").addEventListener("click", () => {
 document.getElementById("githubBtn").addEventListener("click", () => {
   chrome.tabs.create({ url:"https://github.com/Swir/xADKiller" });
 });
-refresh();
+
+async function init() {
+  await initializeLanguage();
+  await refresh();
+}
+init();
