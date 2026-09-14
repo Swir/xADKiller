@@ -2,7 +2,7 @@ name: Test xADKiller Chrome TITAN
 
 on:
   push:
-    branches: [ chrome-titan-v140 ]
+    branches: [ main, chrome-titan-v140 ]
     paths:
       - "browser-extension/**"
       - ".github/workflows/chrome-ultra-ci.yml"
@@ -35,7 +35,6 @@ jobs:
         run: |
           node --check dist/chrome/service-worker.js
           node --check dist/chrome/background.js
-          node --check dist/chrome/compat-engine.js
           node --check dist/chrome/live-signatures.js
           node --check dist/chrome/titan-engine.js
           node --check dist/chrome/static-boost.js
@@ -55,25 +54,25 @@ jobs:
         run: timeout --signal=TERM --kill-after=10s 300s npm run test:chrome
       - name: Chromium adaptive static boost test
         run: timeout --signal=TERM --kill-after=10s 180s npm run test:boost
-      - name: Chromium COMPAT isolation test
+      - name: Chromium no-COMPAT regression test
         run: timeout --signal=TERM --kill-after=10s 120s npm run test:compat
-      - name: Package Chrome TITAN beta ZIP
+      - name: Package Chrome TITAN ZIP
         run: |
           rm -rf packages
           mkdir -p packages
-          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.4.0-TITAN-beta.zip .)
+          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.4.0-TITAN.zip .)
       - name: Checksums
         run: |
           cd packages
-          sha256sum xADKiller-Chrome-v1.4.0-TITAN-beta.zip > SHA256SUMS.txt
+          sha256sum xADKiller-Chrome-v1.4.0-TITAN.zip > SHA256SUMS.txt
       - name: Verify archive
         run: |
-          unzip -tq packages/xADKiller-Chrome-v1.4.0-TITAN-beta.zip
+          unzip -tq packages/xADKiller-Chrome-v1.4.0-TITAN.zip
           (cd packages && sha256sum -c SHA256SUMS.txt)
-      - name: Upload tested Chrome TITAN beta
+      - name: Upload tested Chrome TITAN package
         uses: actions/upload-artifact@v4
         with:
-          name: xADKiller-Chrome-v1.4.0-TITAN-beta-tested
+          name: xADKiller-Chrome-v1.4.0-TITAN-tested
           path: browser-extension/packages/*
           if-no-files-found: error
           retention-days: 30
