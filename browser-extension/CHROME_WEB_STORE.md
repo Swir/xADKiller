@@ -25,7 +25,8 @@ Key features:
 - custom blocked domains
 - local adaptive network learning
 - xADKiller Live Shield / Live Matrix rule-data updates
-- interface localization: English, Polish, Spanish, German and French
+- built-in English / Polish interface switch with locally saved preference
+- Polish is selected automatically when Chrome UI is Polish; other browser languages fall back to English
 
 Privacy first:
 
@@ -45,7 +46,9 @@ https://github.com/Swir/xADKiller/blob/main/browser-extension/PRIVACY.md
 Privacy & Security
 
 ## Language
-English (default). Extension UI also supports Polish, Spanish, German and French.
+English (default) and Polish. Users can switch language directly inside the xADKiller popup and the selected language is saved locally. No browser restart is required.
+
+For the initial Chrome Web Store submission, use a single English Store Listing. Separate localized Store Listing entries are not required for the built-in Polish interface.
 
 ## Homepage
 https://github.com/Swir/xADKiller
@@ -62,7 +65,7 @@ xADKiller's single purpose is to protect web browsing by blocking advertising an
 ## Permission justifications
 
 ### storage
-Required to save protection mode, Smart DOM/Auto-Skip settings, allowlisted sites, custom block entries, cached rule-data versions and local adaptive-protection state.
+Required to save protection mode, English/Polish UI language, Smart DOM/Auto-Skip settings, allowlisted sites, custom block entries, cached rule-data versions and local adaptive-protection state.
 
 ### alarms
 Required to schedule periodic refreshes of xADKiller Live Shield / Live Matrix protection data.
