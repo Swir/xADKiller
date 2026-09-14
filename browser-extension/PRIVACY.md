@@ -51,6 +51,10 @@ xADKiller does not use remotely hosted executable code. Extension logic ships in
 
 xADKiller does not sell user data and does not share browsing data with advertisers or data brokers.
 
+## Chrome Web Store Limited Use
+
+The use of information received from Google APIs will adhere to the Chrome Web Store User Data Policy, including the Limited Use requirements. xADKiller uses website and browsing-related information only as necessary to provide or improve its disclosed ad/tracker-blocking and related user-facing protection features. It is not used or transferred for personalized advertising, credit decisions, data brokerage or unrelated profiling, and humans are not given access to read users' browsing data through an xADKiller backend.
+
 ## Retention and removal
 
 Local extension data remains in the user's Chrome profile until it is changed, cleared, or the extension is removed. Removing xADKiller through Chrome removes extension-local storage according to Chrome's extension storage behavior.
