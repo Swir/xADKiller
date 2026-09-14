@@ -17,7 +17,7 @@ if (!manifest.host_permissions?.includes("<all_urls>")) fail("missing host acces
 if (manifest.background?.service_worker !== "service-worker.js") fail("composite service worker missing");
 const rs = manifest.declarative_net_request?.rule_resources || [];
 if (!rs.some((x) => x.id === "standard" && x.enabled === true)) fail("standard ruleset missing/enabled state wrong");
-if (!rs.some((x) => x.id === "compat" && x.enabled === true)) fail("compat ruleset missing/enabled state wrong");
+if (!rs.some((x) => x.id === "compat" && x.enabled === false)) fail("compat ruleset must ship disabled/opt-in");
 if (!rs.some((x) => x.id === "ultra" && x.enabled === false)) fail("ultra ruleset missing/enabled state wrong");
 
 const scripts = manifest.content_scripts || [];
@@ -106,7 +106,7 @@ const liveMatrix = fs.readFileSync(path.join(base, "live-signatures.js"), "utf8"
 const titan = fs.readFileSync(path.join(base, "titan-engine.js"), "utf8");
 const titanMain = fs.readFileSync(path.join(base, "titan-main.js"), "utf8");
 if (!background.includes("xadkiller-live-shield.json")) fail("Live Shield domain feed endpoint missing");
-if (!compatEngine.includes("COMPAT_RULESET") || !compatEngine.includes("updateEnabledRulesets") || !compatEngine.includes('prefs.mode !== "ultra"')) fail("mode-aware COMPAT engine incomplete");
+if (!compatEngine.includes("COMPAT_RULESET") || !compatEngine.includes("updateEnabledRulesets") || !compatEngine.includes('prefs.compatEnabled === true') || !compatEngine.includes('prefs.mode !== "ultra"')) fail("opt-in mode-aware COMPAT engine incomplete");
 if (!liveMatrix.includes("raw.githubusercontent.com/Swir/xADKiller/main/")) fail("Live Matrix must use official main-branch feed");
 if (!titan.includes("xadkiller-titan-feed.json")) fail("TITAN data feed endpoint missing");
 if (!titan.includes("updateSessionRules") || !titan.includes("isRegexSupported")) fail("TITAN session/regex engines missing");
@@ -131,4 +131,4 @@ for (const rel of ["service-worker.js","background.js","compat-engine.js","live-
   if (/importScripts\s*\(\s*["']https?:/i.test(code)) fail(`${rel}: remote hosted code forbidden`);
 }
 
-if (!process.exitCode) console.log(`OK: xADKiller TITAN v1.4.0 validated: ${standard} STANDARD block + ${compat} COMPAT allow + ${ultra} ULTRA block, ${intel.length} consensus dynamic domains, ${session.length} session rules`);
+if (!process.exitCode) console.log(`OK: xADKiller TITAN v1.4.0 validated: ${standard} STANDARD block + ${compat} COMPAT allow (opt-in/off by default) + ${ultra} ULTRA block, ${intel.length} consensus dynamic domains, ${session.length} session rules`);
