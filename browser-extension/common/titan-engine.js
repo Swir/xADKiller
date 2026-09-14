@@ -12,6 +12,11 @@
   const STANDARD_SESSION_LIMIT = 2800;
   const ULTRA_SESSION_LIMIT = 4500;
 
+  const MEMORY_KEY = "xadTitanHostMemoryV1";
+  const MEMORY_MAX = 180;
+  const MEMORY_TTL_MS = 21 * 24 * 60 * 60 * 1000;
+  const MEMORY_PROMOTE_SEEN = 2;
+
   const RESOURCE_TYPES = ["script","image","stylesheet","xmlhttprequest","sub_frame","media","font","ping","websocket","other"];
   const STRONG_HOST = /(doubleclick|googlesyndication|googleadservices|amazon-adsystem|adnxs|adsrvr|pubmatic|rubicon|criteo|taboola|outbrain|smartadserver|adform|prebid|hotjar|mouseflow|luckyorange|fullstory|logrocket|appsflyer|adjust|branch|kochava|unityads|samsungads|xiaomi|huawei|oppomobile)/i;
   const STRONG_PATH = /\/(?:ads?|adserver|adservice|adrequest|pagead|gampad|securepubads|prebid|vast|vmap|ima3|commercial|sponsor|sponsored|promoted)(?:[._\/-]|$)/i;
@@ -47,14 +52,16 @@
   function normalizeHost(value) {
     return String(value || "").trim().toLowerCase().replace(/^\.+|\.+$/g, "");
   }
-  function fnv1a(text) {
-    let h = 0x811c9dc5;
-    for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); }
-    return h >>> 0;
+  function validHost(value) {
+    const host = normalizeHost(value);
+    return !!host && host.length <= 253 && host.includes(".") && /^[a-z0-9.-]+$/.test(host) && !host.includes("..");
   }
   function sameSite(a, b) {
     a = normalizeHost(a); b = normalizeHost(b);
     return !!a && !!b && (a === b || a.endsWith("." + b) || b.endsWith("." + a));
+  }
+  function canonicalCondition(condition) {
+    return JSON.stringify(condition, Object.keys(condition || {}).sort());
   }
 
   async function loadPackagedSessionRules() {
@@ -159,55 +166,204 @@
     return { count:addRules.length, version:feed.version };
   }
 
-  function learningRuleFrom(urlValue, pageHost) {
+  function cleanMemory(raw) {
+    const now = Date.now();
+    const byHost = new Map();
+    for (const item of Array.isArray(raw) ? raw : []) {
+      const host = normalizeHost(item?.host);
+      const lastSeen = Number(item?.lastSeen || 0);
+      if (!validHost(host) || !lastSeen || now - lastSeen > MEMORY_TTL_MS) continue;
+      const next = {
+        host,
+        seen:Math.max(1, Math.min(9999, Number(item?.seen || 1))),
+        firstSeen:Number(item?.firstSeen || lastSeen),
+        lastSeen
+      };
+      const prev = byHost.get(host);
+      if (!prev || next.lastSeen > prev.lastSeen) byHost.set(host, next);
+    }
+    return [...byHost.values()].sort((a,b) => b.lastSeen - a.lastSeen).slice(0, MEMORY_MAX);
+  }
+
+  async function loadMemory(writeBack = true) {
+    const stored = await getLocal({ [MEMORY_KEY]:[] });
+    const raw = Array.isArray(stored[MEMORY_KEY]) ? stored[MEMORY_KEY] : [];
+    const clean = cleanMemory(raw);
+    if (writeBack && JSON.stringify(raw) !== JSON.stringify(clean)) await setLocal({ [MEMORY_KEY]:clean });
+    return clean;
+  }
+
+  async function rememberHost(hostValue) {
+    const host = normalizeHost(hostValue);
+    if (!validHost(host)) return null;
+    const memory = await loadMemory(false);
+    const now = Date.now();
+    const existing = memory.find((item) => item.host === host);
+    if (existing) {
+      existing.seen = Math.min(9999, existing.seen + 1);
+      existing.lastSeen = now;
+    } else {
+      memory.push({ host, seen:1, firstSeen:now, lastSeen:now });
+    }
+    const clean = cleanMemory(memory);
+    await setLocal({ [MEMORY_KEY]:clean });
+    return clean.find((item) => item.host === host) || null;
+  }
+
+  function memoryRule(host, id) {
+    return {
+      id,
+      priority:96,
+      action:{ type:"block" },
+      condition:{ requestDomains:[host], resourceTypes:RESOURCE_TYPES }
+    };
+  }
+
+  async function applyPersistentMemory() {
+    const [prefs, current, memory] = await Promise.all([
+      getLocal({ enabled:true, mode:"standard" }),
+      getSessionRules(),
+      loadMemory(true)
+    ]);
+    const removeRuleIds = current.filter((r) => r.id >= LEARN_MIN && r.id <= LEARN_MAX).map((r) => r.id);
+    const promoted = memory
+      .filter((item) => item.seen >= MEMORY_PROMOTE_SEEN)
+      .sort((a,b) => (b.seen - a.seen) || (b.lastSeen - a.lastSeen))
+      .slice(0, LEARN_MAX - LEARN_MIN + 1);
+    if (prefs.enabled === false || prefs.mode !== "ultra") {
+      if (removeRuleIds.length) await updateSessionRules({ removeRuleIds, addRules:[] });
+      return { count:0, memory:memory.length, promoted:promoted.length };
+    }
+    const addRules = promoted.map((item, index) => memoryRule(item.host, LEARN_MIN + index));
+    await updateSessionRules({ removeRuleIds, addRules });
+    return { count:addRules.length, memory:memory.length, promoted:promoted.length };
+  }
+
+  function learningCandidateFrom(urlValue, pageHostValue) {
     let u;
     try { u = new URL(String(urlValue || "")); } catch (_) { return null; }
     if (!/^https?:$/.test(u.protocol)) return null;
     const host = normalizeHost(u.hostname);
+    const pageHost = normalizeHost(pageHostValue);
     const own = sameSite(host, pageHost);
     const pathQuery = `${u.pathname}${u.search}`;
+
     if (!own && STRONG_HOST.test(host)) {
-      return { priority:95, action:{type:"block"}, condition:{ requestDomains:[host], resourceTypes:RESOURCE_TYPES } };
+      return {
+        persistentHost:host,
+        rule:{ priority:95, action:{type:"block"}, condition:{ requestDomains:[host], resourceTypes:RESOURCE_TYPES } }
+      };
     }
+
     const pathMatch = pathQuery.match(STRONG_PATH);
-    if (own && pathMatch) {
-      return { priority:92, action:{type:"block"}, condition:{ urlFilter:pathMatch[0], domainType:"firstParty", resourceTypes:["script","xmlhttprequest","sub_frame","image","media"] } };
+    if (own && pathMatch && validHost(pageHost)) {
+      return {
+        persistentHost:"",
+        rule:{
+          priority:92,
+          action:{type:"block"},
+          condition:{
+            urlFilter:pathMatch[0],
+            domainType:"firstParty",
+            initiatorDomains:[pageHost],
+            resourceTypes:["script","xmlhttprequest","sub_frame","image","media"]
+          }
+        }
+      };
     }
+
     const queryMatch = pathQuery.match(STRONG_QUERY);
-    if (queryMatch) {
-      return { priority:90, action:{type:"block"}, condition:{ urlFilter:queryMatch[0], resourceTypes:["script","xmlhttprequest","sub_frame","image","ping"] } };
+    if (queryMatch && validHost(pageHost)) {
+      return {
+        persistentHost:"",
+        rule:{
+          priority:90,
+          action:{type:"block"},
+          condition:{
+            urlFilter:queryMatch[0],
+            initiatorDomains:[pageHost],
+            resourceTypes:["script","xmlhttprequest","sub_frame","image","ping"]
+          }
+        }
+      };
     }
     return null;
+  }
+
+  async function addEphemeralLearnedRule(rule) {
+    const current = await getSessionRules();
+    const learned = current.filter((r) => r.id >= LEARN_MIN && r.id <= LEARN_MAX);
+    const key = canonicalCondition(rule.condition);
+    if (learned.some((r) => canonicalCondition(r.condition) === key)) return { duplicate:true, count:learned.length };
+    const used = new Set(learned.map((r) => r.id));
+    let id = LEARN_MIN;
+    while (id <= LEARN_MAX && used.has(id)) id++;
+    if (id > LEARN_MAX) return { full:true, count:learned.length };
+    await updateSessionRules({ removeRuleIds:[], addRules:[{ id, ...rule }] });
+    return { learned:true, id, count:learned.length + 1 };
   }
 
   async function learnResource(url, pageHost) {
     const prefs = await getLocal({ enabled:true, mode:"standard" });
     if (prefs.enabled === false || prefs.mode !== "ultra") return { ok:false, ignored:true };
-    const rule = learningRuleFrom(url, pageHost);
-    if (!rule) return { ok:false, ignored:true };
+    const candidate = learningCandidateFrom(url, pageHost);
+    if (!candidate) return { ok:false, ignored:true };
+
+    let memoryEntry = null;
+    if (candidate.persistentHost) memoryEntry = await rememberHost(candidate.persistentHost);
+
+    if (memoryEntry && memoryEntry.seen >= MEMORY_PROMOTE_SEEN) {
+      const state = await applyPersistentMemory();
+      return { ok:true, learned:true, promoted:true, memorySeen:memoryEntry.seen, memory:state.memory, persistent:state.count };
+    }
+
+    const ephemeral = await addEphemeralLearnedRule(candidate.rule);
+    return {
+      ok:true,
+      ...ephemeral,
+      promoted:false,
+      memorySeen:memoryEntry?.seen || 0
+    };
+  }
+
+  async function resetMemory() {
     const current = await getSessionRules();
-    const key = JSON.stringify(rule.condition);
-    const learned = current.filter((r) => r.id >= LEARN_MIN && r.id <= LEARN_MAX);
-    if (learned.some((r) => JSON.stringify(r.condition) === key)) return { ok:true, duplicate:true };
-    const id = LEARN_MIN + (fnv1a(key) % (LEARN_MAX - LEARN_MIN + 1));
-    const removeRuleIds = current.some((r) => r.id === id) ? [id] : [];
-    await updateSessionRules({ removeRuleIds, addRules:[{ id, ...rule }] });
-    return { ok:true, learned:true };
+    const removeRuleIds = current.filter((r) => r.id >= LEARN_MIN && r.id <= LEARN_MAX).map((r) => r.id);
+    await setLocal({ [MEMORY_KEY]:[] });
+    if (removeRuleIds.length) await updateSessionRules({ removeRuleIds, addRules:[] });
+    return { ok:true, removed:removeRuleIds.length };
   }
 
   async function refresh(force = false) {
     const [session, regex] = await Promise.all([applySessionShield(), applyRegexShield(force)]);
-    return { ok:true, session:session.count, regex:regex.count, version:regex.version };
+    const memory = await applyPersistentMemory();
+    return {
+      ok:true,
+      session:session.count,
+      regex:regex.count,
+      learned:memory.count,
+      memory:memory.memory,
+      promoted:memory.promoted,
+      version:regex.version
+    };
   }
 
   async function stats() {
-    const [session, dynamic, feed] = await Promise.all([getSessionRules(), getDynamicRules(), fetchTitanFeed(false)]);
+    const [session, dynamic, feed, memory] = await Promise.all([
+      getSessionRules(),
+      getDynamicRules(),
+      fetchTitanFeed(false),
+      loadMemory(true)
+    ]);
     return {
       ok:true,
       version:feed.version,
       session:session.filter((r) => r.id >= SESSION_MIN && r.id <= SESSION_MAX).length,
       learned:session.filter((r) => r.id >= LEARN_MIN && r.id <= LEARN_MAX).length,
-      regex:dynamic.filter((r) => r.id >= REGEX_MIN && r.id <= REGEX_MAX).length
+      regex:dynamic.filter((r) => r.id >= REGEX_MIN && r.id <= REGEX_MAX).length,
+      memory:memory.length,
+      promoted:memory.filter((item) => item.seen >= MEMORY_PROMOTE_SEEN).length,
+      memoryTtlDays:Math.round(MEMORY_TTL_MS / 86400000)
     };
   }
 
@@ -224,6 +380,10 @@
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg?.type === "titanLearnResource") {
       learnResource(msg.url, msg.pageHost).then(sendResponse).catch((error) => sendResponse({ok:false,error:String(error?.message||error)}));
+      return true;
+    }
+    if (msg?.type === "resetTitanMemory") {
+      resetMemory().then(sendResponse).catch((error) => sendResponse({ok:false,error:String(error?.message||error)}));
       return true;
     }
     if (msg?.type === "refreshTitan") {
