@@ -1,22 +1,29 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>xADKiller</title>
+  <title>xADKiller TITAN</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <main>
     <header>
-      <img src="icons/icon128.png" alt="">
-      <div>
+      <img src="icons/icon128.png" alt="xADKiller">
+      <div class="brand">
         <h1>xADKiller</h1>
         <p>XAD TITAN SHIELD • BY SWIR</p>
       </div>
+      <label class="languageBox" for="language">
+        <span data-i18n="language">Language</span>
+        <select id="language" aria-label="Language">
+          <option value="en" data-i18n="languageEnglish">English</option>
+          <option value="pl" data-i18n="languagePolish">Polski</option>
+        </select>
+      </label>
     </header>
 
-    <section class="card">
+    <section class="card primaryCard">
       <div class="row">
         <div>
           <strong data-i18n="protection">Protection</strong>
@@ -37,23 +44,23 @@
       <small id="rulesInfo">—</small>
     </section>
 
-    <section class="card">
+    <section class="card compactCard">
       <div class="row">
         <div>
           <strong data-i18n="liveShield">XAD Live Shield</strong>
           <small id="liveInfo" data-i18n="liveShieldWaiting">Waiting for intelligence feed…</small>
         </div>
-        <button id="liveRefresh" class="secondary" data-i18n="updateNow">Update</button>
+        <button id="liveRefresh" class="secondary smallButton" data-i18n="updateNow">Update</button>
       </div>
       <small data-i18n="liveShieldHint">Own SWIR intelligence updates from GitHub without remote executable code.</small>
     </section>
 
-    <section class="card">
-      <strong>XAD TITAN Engine</strong>
-      <small id="titanInfo">Session Guard • Regex Brain • Adaptive Network Learner • Closed Shadow Shield</small>
+    <section class="card compactCard titanCard">
+      <strong data-i18n="titanEngine">XAD TITAN Engine</strong>
+      <small id="titanInfo" data-i18n="titanHint">Session Guard • Regex Brain • Adaptive Network Learner • Closed Shadow Shield</small>
     </section>
 
-    <section class="card">
+    <section class="card compactCard">
       <strong data-i18n="currentSite">Current site</strong>
       <div id="host" class="host">—</div>
       <button id="siteToggle" class="secondary" disabled>—</button>
@@ -112,7 +119,7 @@
       <button id="testBtn" data-i18n="testButton">Test blocking</button>
       <button id="githubBtn" class="secondary">GitHub</button>
     </div>
-    <footer>v1.4.0 • TITAN + Live Matrix + Closed Shadow • BY SWIR</footer>
+    <footer>v1.4.1 • PL / EN • TITAN + Live Matrix • BY SWIR</footer>
   </main>
   <script src="popup.js"></script>
 </body>
