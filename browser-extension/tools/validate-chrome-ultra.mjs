@@ -10,9 +10,10 @@ const manifest = readJson(path.join(base, "manifest.json"));
 if (manifest.manifest_version !== 3) fail("manifest_version must be 3");
 if (manifest.version !== "1.4.0") fail(`unexpected version ${manifest.version}`);
 if (Number(manifest.minimum_chrome_version) < 121) fail("minimum Chrome must be >=121");
-for (const p of ["storage","alarms","declarativeNetRequest","declarativeNetRequestFeedback","activeTab"]) {
+for (const p of ["storage","alarms","declarativeNetRequest","activeTab"]) {
   if (!manifest.permissions?.includes(p)) fail(`missing permission ${p}`);
 }
+if (manifest.permissions?.includes("declarativeNetRequestFeedback")) fail("store build must not request declarativeNetRequestFeedback");
 if (!manifest.host_permissions?.includes("<all_urls>")) fail("missing host access");
 if (manifest.background?.service_worker !== "service-worker.js") fail("composite service worker missing");
 const rs = manifest.declarative_net_request?.rule_resources || [];
@@ -136,4 +137,4 @@ for (const rel of ["service-worker.js","background.js","live-signatures.js","tit
   if (/importScripts\s*\(\s*["']https?:/i.test(code)) fail(`${rel}: remote hosted code forbidden`);
 }
 
-if (!process.exitCode) console.log(`OK: xADKiller TITAN v1.4.0 validated: ${standard} STANDARD block + ${ultra} ULTRA block, no active COMPAT allow ruleset, ${intel.length} consensus dynamic domains, ${session.length} session rules${dormantCompat ? `, ${dormantCompat} dormant COMPAT source rules not referenced` : ""}`);
+if (!process.exitCode) console.log(`OK: xADKiller TITAN v1.4.0 store build validated: ${standard} STANDARD block + ${ultra} ULTRA block, no active COMPAT allow ruleset, no declarativeNetRequestFeedback permission, ${intel.length} consensus dynamic domains, ${session.length} session rules${dormantCompat ? `, ${dormantCompat} dormant COMPAT source rules not referenced` : ""}`);
