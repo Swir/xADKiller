@@ -1,5 +1,6 @@
 (() => {
   const STORAGE_KEY = "xadTemporaryPauseSitesV1";
+  const INJECTED_KEY = "xadTemporaryPauseInjectedAllowSitesV1";
   const ALARM = "xadkiller-temporary-site-pause-expiry";
   const RULE_MIN = 905000;
   const RULE_MAX = 905199;
@@ -41,6 +42,9 @@
     }
     return out;
   }
+  function cleanHosts(raw, max = 450) {
+    return [...new Set((Array.isArray(raw) ? raw : []).map(normalizeHost).filter(Boolean))].slice(0, max);
+  }
   async function readMap(writeBack = false) {
     const stored = await getLocal({ [STORAGE_KEY]:{} });
     const raw = stored[STORAGE_KEY] || {};
@@ -54,8 +58,46 @@
     if (!times.length) return;
     try { chrome.alarms.create(ALARM, { when:Math.min(...times) + 250 }); } catch (_) {}
   }
+
+  // Existing content engines already honor allowSites. During a temporary pause we
+  // mirror only the paused host into allowSites and remember exactly which entries
+  // we injected. Expiry/resume removes only entries owned by this module, so a
+  // user's pre-existing permanent allowlist is never removed.
+  async function syncCompatibilityBridge(map) {
+    const stored = await getLocal({ allowSites:[], [INJECTED_KEY]:[] });
+    const allow = new Set(cleanHosts(stored.allowSites, 450));
+    const oldInjected = new Set(cleanHosts(stored[INJECTED_KEY], MAX_SITES));
+    const active = new Set(Object.keys(map || {}).map(normalizeHost).filter(Boolean));
+
+    for (const host of oldInjected) {
+      if (!active.has(host)) allow.delete(host);
+    }
+
+    const nextInjected = new Set();
+    for (const host of active) {
+      if (oldInjected.has(host)) {
+        allow.add(host);
+        nextInjected.add(host);
+        continue;
+      }
+      if (!allow.has(host)) {
+        allow.add(host);
+        nextInjected.add(host);
+      }
+    }
+
+    const allowSites = [...allow].slice(0, 450);
+    const injected = [...nextInjected].slice(0, MAX_SITES);
+    if (JSON.stringify(cleanHosts(stored.allowSites, 450)) !== JSON.stringify(allowSites) ||
+        JSON.stringify(cleanHosts(stored[INJECTED_KEY], MAX_SITES)) !== JSON.stringify(injected)) {
+      await setLocal({ allowSites, [INJECTED_KEY]:injected });
+    }
+    return { allowSites, injected };
+  }
+
   async function apply() {
     const [map, current] = await Promise.all([readMap(true), getDynamicRules()]);
+    await syncCompatibilityBridge(map);
     const removeRuleIds = current.filter((r) => r.id >= RULE_MIN && r.id <= RULE_MAX).map((r) => r.id);
     const hosts = Object.entries(map).sort((a,b) => a[1] - b[1]).slice(0, MAX_SITES);
     const addRules = hosts.map(([host], index) => ({
