@@ -52,12 +52,17 @@
         </div>
         <button id="liveRefresh" class="secondary smallButton" data-i18n="updateNow">Update</button>
       </div>
-      <small data-i18n="liveShieldHint">Own SWIR intelligence updates from GitHub without remote executable code.</small>
+      <small data-i18n="liveShieldHint">SWIR protection data updates from GitHub without remote executable code.</small>
     </section>
 
     <section class="card compactCard titanCard">
-      <strong data-i18n="titanEngine">XAD TITAN Engine</strong>
-      <small id="titanInfo" data-i18n="titanHint">Session Guard • Regex Brain • Adaptive Network Learner • Closed Shadow Shield</small>
+      <div class="row">
+        <div>
+          <strong data-i18n="titanEngine">XAD TITAN Engine</strong>
+          <small id="titanInfo" data-i18n="titanHint">Session Guard • Regex Brain • Adaptive Network Learner • Closed Shadow Shield</small>
+        </div>
+        <span id="memoryBadge" class="memoryBadge" title="Adaptive Memory">0</span>
+      </div>
     </section>
 
     <section class="card compactCard">
@@ -103,7 +108,8 @@
         <button id="pickerBtn" data-i18n="pickElement">Block / teach element</button>
         <button id="falseBtn" class="secondary" data-i18n="falsePositive">False positive</button>
       </div>
-      <small data-i18n="adaptiveHint">Everything is learned locally in this browser profile.</small>
+      <button id="resetMemoryBtn" class="secondary memoryAction" data-i18n="resetMemory">Reset network memory</button>
+      <small id="memoryInfo" data-i18n="adaptiveHint">Everything is learned locally in this browser profile.</small>
     </section>
 
     <section class="card">
@@ -119,7 +125,7 @@
       <button id="testBtn" data-i18n="testButton">Test blocking</button>
       <button id="githubBtn" class="secondary">GitHub</button>
     </div>
-    <footer>v1.4.0 • PL / EN • TITAN + Live Matrix • BY SWIR</footer>
+    <footer>v1.5.0-dev • PL / EN • TITAN Adaptive Memory • BY SWIR</footer>
   </main>
   <script src="popup.js"></script>
 </body>
