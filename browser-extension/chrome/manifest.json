@@ -37,7 +37,7 @@
       },
       {
         "id": "compat",
-        "enabled": true,
+        "enabled": false,
         "path": "rules/compat.json"
       },
       {
