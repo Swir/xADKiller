@@ -65,10 +65,19 @@
       </div>
     </section>
 
-    <section class="card compactCard">
-      <strong data-i18n="currentSite">Current site</strong>
-      <div id="host" class="host">—</div>
-      <button id="siteToggle" class="secondary" disabled>—</button>
+    <section class="card compactCard siteCard">
+      <div class="row">
+        <div>
+          <strong data-i18n="currentSite">Current site</strong>
+          <div id="host" class="host">—</div>
+        </div>
+        <span id="pauseBadge" class="pauseBadge off" data-i18n="siteProtected">PROTECTED</span>
+      </div>
+      <div class="siteActions">
+        <button id="siteToggle" class="secondary" disabled>—</button>
+        <button id="tempPauseBtn" class="secondary warningButton" data-i18n="pauseSite15" disabled>Pause 15 min</button>
+      </div>
+      <small id="tempPauseInfo" data-i18n="pauseSiteHint">Temporary pause is for fixing a broken site and resumes automatically.</small>
     </section>
 
     <section class="card">
@@ -125,7 +134,7 @@
       <button id="testBtn" data-i18n="testButton">Test blocking</button>
       <button id="githubBtn" class="secondary">GitHub</button>
     </div>
-    <footer>v1.5.0-dev • PL / EN • TITAN Adaptive Memory • BY SWIR</footer>
+    <footer>v1.5.0-dev • PL / EN • Adaptive Memory + Breakage Guard • BY SWIR</footer>
   </main>
   <script src="popup.js"></script>
 </body>
