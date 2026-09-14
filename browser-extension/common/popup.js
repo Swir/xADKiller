@@ -77,6 +77,9 @@ const autoSkipEl = document.getElementById("autoSkip");
 const statusText = document.getElementById("statusText");
 const hostEl = document.getElementById("host");
 const siteToggle = document.getElementById("siteToggle");
+const tempPauseBtn = document.getElementById("tempPauseBtn");
+const tempPauseInfo = document.getElementById("tempPauseInfo");
+const pauseBadge = document.getElementById("pauseBadge");
 const networkCount = document.getElementById("networkCount");
 const hiddenCount = document.getElementById("hiddenCount");
 const smartCount = document.getElementById("smartCount");
@@ -94,6 +97,9 @@ const resetMemoryBtn = document.getElementById("resetMemoryBtn");
 let activeTab = null;
 let host = "";
 let siteAllowed = false;
+let temporaryPaused = false;
+let temporaryMinutesLeft = 0;
+let protectionEnabled = true;
 let stateBusy = false;
 let languageBusy = false;
 
@@ -113,22 +119,60 @@ function renderMemory(titan) {
   memoryInfo.textContent = `${t("adaptiveMemory", "Adaptive Memory")}: ${formatNumber(remembered)} ${t("memoryRemembered", "remembered")} • ${formatNumber(promoted)} ${t("memoryPromoted", "promoted")} • ${ttl} ${t("memoryDays", "days")}`;
 }
 
+function renderSiteControls() {
+  const usable = !!host;
+  const persistentAllowed = siteAllowed && !temporaryPaused;
+  siteToggle.disabled = !usable || temporaryPaused;
+  siteToggle.textContent = persistentAllowed ? t("protectSite", "Protect this site") : t("allowSite", "Allow this site");
+
+  tempPauseBtn.disabled = !usable || persistentAllowed || !protectionEnabled;
+  tempPauseBtn.textContent = temporaryPaused ? t("resumeSiteNow", "Resume now") : t("pauseSite15", "Pause 15 min");
+  tempPauseBtn.className = temporaryPaused ? "secondary warningButton active" : "secondary warningButton";
+
+  if (!usable) {
+    pauseBadge.textContent = t("siteUnavailable", "N/A");
+    pauseBadge.className = "pauseBadge off";
+    tempPauseInfo.textContent = t("pauseUnsupported", "Temporary pause is available on normal HTTP/HTTPS websites.");
+  } else if (temporaryPaused) {
+    pauseBadge.textContent = t("sitePaused", "PAUSED");
+    pauseBadge.className = "pauseBadge paused";
+    tempPauseInfo.textContent = `${t("pauseActive", "Protection temporarily paused")} • ${formatNumber(temporaryMinutesLeft)} ${t("minutesLeft", "min left")}`;
+  } else if (persistentAllowed) {
+    pauseBadge.textContent = t("siteAllowedStatus", "ALLOWED");
+    pauseBadge.className = "pauseBadge paused";
+    tempPauseInfo.textContent = t("persistentAllowHint", "This site is on your permanent allowlist. Re-enable protection to use temporary pause.");
+  } else if (!protectionEnabled) {
+    pauseBadge.textContent = t("statusOff", "DISABLED");
+    pauseBadge.className = "pauseBadge off";
+    tempPauseInfo.textContent = t("globalProtectionOffHint", "Global protection is disabled.");
+  } else {
+    pauseBadge.textContent = t("siteProtected", "PROTECTED");
+    pauseBadge.className = "pauseBadge off";
+    tempPauseInfo.textContent = t("pauseSiteHint", "Temporary pause is for fixing a broken site and resumes automatically.");
+  }
+}
+
 async function refresh() {
   activeTab = await currentTab();
   host = "";
   try { if (activeTab && /^https?:/i.test(activeTab.url || "")) host = new URL(activeTab.url).hostname; } catch (_) {}
   hostEl.textContent = host || t("unsupportedPage", "Browser page");
 
-  const state = await send({ type:"getState", host });
+  const [state, pause] = await Promise.all([
+    send({ type:"getState", host }),
+    host ? send({ type:"getTemporarySitePause", host }) : Promise.resolve({ ok:true, paused:false, minutesLeft:0 })
+  ]);
+  temporaryPaused = !!pause?.paused;
+  temporaryMinutesLeft = Number(pause?.minutesLeft || 0);
+
   if (state?.ok) {
-    enabledEl.checked = !!state.enabled;
+    protectionEnabled = !!state.enabled;
+    enabledEl.checked = protectionEnabled;
     modeEl.value = state.mode === "ultra" ? "ultra" : "standard";
     smartEl.checked = !!state.smartEnabled;
     autoSkipEl.checked = !!state.autoSkip;
     siteAllowed = !!state.siteAllowed;
     statusText.textContent = state.enabled ? t("statusOn", "ACTIVE") : t("statusOff", "DISABLED");
-    siteToggle.disabled = !host;
-    siteToggle.textContent = siteAllowed ? t("protectSite", "Protect this site") : t("allowSite", "Allow this site");
     const b = state.build;
     if (b) {
       const total = state.mode === "ultra" ? Number(b.standardRules || 0) + Number(b.ultraRules || 0) : Number(b.standardRules || 0);
@@ -143,6 +187,7 @@ async function refresh() {
       liveInfo.textContent = t("liveShieldWaiting", "Waiting for intelligence feed…");
     }
   }
+  renderSiteControls();
 
   const [shield, matrix, titan] = await Promise.all([
     send({ type:"getDynamicShieldStats" }),
@@ -210,10 +255,22 @@ autoSkipEl.addEventListener("change", async () => {
   await rescan();
 });
 siteToggle.addEventListener("click", async () => {
-  if (!host || stateBusy) return;
+  if (!host || stateBusy || temporaryPaused) return;
   stateBusy = true;
   await send({ type:"setSiteAllowed", host, allowed:!siteAllowed });
   await rescan();
+  stateBusy = false;
+  refresh();
+});
+tempPauseBtn.addEventListener("click", async () => {
+  if (!host || stateBusy) return;
+  stateBusy = true;
+  tempPauseBtn.disabled = true;
+  const result = await send({ type:"setTemporarySitePause", host, minutes:temporaryPaused ? 0 : 15 });
+  if (result?.ok) {
+    await rescan();
+    try { if (activeTab?.id) chrome.tabs.reload(activeTab.id); } catch (_) {}
+  }
   stateBusy = false;
   refresh();
 });
@@ -273,5 +330,6 @@ document.getElementById("githubBtn").addEventListener("click", () => {
 async function init() {
   await initializeLanguage();
   await refresh();
+  setInterval(() => { if (temporaryPaused) refresh(); }, 30000);
 }
 init();
