@@ -31,7 +31,7 @@ async function snapshot(worker){
   return await worker.evaluate(async()=>({
     enabled:await chrome.declarativeNetRequest.getEnabledRulesets(),
     available:await chrome.declarativeNetRequest.getAvailableStaticRuleCount(),
-    prefs:await chrome.storage.local.get({mode:"standard",enabled:true})
+    prefs:await chrome.storage.local.get({mode:"standard",enabled:true,compatEnabled:false})
   }));
 }
 async function waitState(worker,{minBoost=0,mode="standard"},timeout=18000){
@@ -41,7 +41,7 @@ async function waitState(worker,{minBoost=0,mode="standard"},timeout=18000){
     const active=last.enabled.filter((x)=>x.startsWith("titan_boost_"));
     const correctCore = mode === "ultra"
       ? last.enabled.includes("standard") && last.enabled.includes("ultra") && !last.enabled.includes("compat")
-      : last.enabled.includes("standard") && last.enabled.includes("compat") && !last.enabled.includes("ultra");
+      : last.enabled.includes("standard") && !last.enabled.includes("ultra") && !last.enabled.includes("compat");
     if(active.length>=minBoost && correctCore)return {...last,active};
     await delay(250);
   }
@@ -65,12 +65,11 @@ try{
   const standard=await waitState(worker,{minBoost:expectedStandard,mode:"standard"},18000);
   const standardActive=standard.enabled.filter((x)=>ids.includes(x));
   if(standardActive.length!==expectedStandard)throw new Error(`STANDARD adaptive boost mismatch: expected=${expectedStandard}, state=${JSON.stringify(standard)}`);
-  log("STANDARD adaptive boost",JSON.stringify({active:standardActive,compatRules,available:standard.available}));
+  if(standard.prefs.compatEnabled===true)throw new Error("COMPAT unexpectedly enabled by default");
+  log("STANDARD adaptive boost",JSON.stringify({active:standardActive,compatPackaged:compatRules,compatActive:false,available:standard.available}));
 
-  // ULTRA disables COMPAT, so the allow-pack quota is released and may be used
-  // by core ULTRA and then by optional boost packs.
   const currentBoostCost=standardActive.reduce((s,id)=>s+Number(meta.counts[ids.indexOf(id)]||0),0);
-  const totalBudget=Number(standard.available||0)+currentBoostCost+compatRules-coreUltraRules;
+  const totalBudget=Number(standard.available||0)+currentBoostCost-coreUltraRules;
   let expectedUltra=0,remaining=Math.max(0,totalBudget);
   for(let i=0;i<ids.length;i++){
     const cost=Number(meta.counts[i]||0);if(cost>0&&cost<=remaining){expectedUltra++;remaining-=cost;}else break;
@@ -86,7 +85,7 @@ try{
   if(ultraActive.length!==expectedUltra)throw new Error(`ULTRA adaptive boost mismatch: expected=${expectedUltra}, state=${JSON.stringify(ultra)}`);
   if(ultraActive.some((id,index)=>id!==ids[index]))throw new Error(`boost packs must activate in priority order: ${ultraActive.join(",")}`);
   const activeRules=ultraActive.reduce((s,id)=>s+Number(meta.counts[ids.indexOf(id)]||0),0);
-  log("PASS",JSON.stringify({packaged:meta.total,activeSets:ultraActive,activeRules,coreUltra:coreUltraRules,compatReleased:compatRules,available:ultra.available}));
+  log("PASS",JSON.stringify({packaged:meta.total,activeSets:ultraActive,activeRules,coreUltra:coreUltraRules,compatActive:false,available:ultra.available}));
 }finally{
   if(browser)try{await browser.close();}catch(_){}
 }
