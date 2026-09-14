@@ -1,0 +1,108 @@
+name: Publish xADKiller Chrome v1.4.0 TITAN
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/release-chrome-v1.4.0.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tested source
+        uses: actions/checkout@v4
+        with:
+          ref: 3c99d69e1714c10c3ff6625d85de6b405a9a6960
+
+      - name: Download exact green CI artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: '10333050473'
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" > /tmp/xad-artifact.zip
+          unzip -q /tmp/xad-artifact.zip -d release
+          test -f release/xADKiller-Chrome-v1.4.0-TITAN.zip
+          test -f release/SHA256SUMS.txt
+          (cd release && sha256sum -c SHA256SUMS.txt)
+          unzip -tq release/xADKiller-Chrome-v1.4.0-TITAN.zip
+
+      - name: Verify store manifest
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/xad-store
+          mkdir -p /tmp/xad-store
+          unzip -q release/xADKiller-Chrome-v1.4.0-TITAN.zip -d /tmp/xad-store
+          node - <<'NODE'
+          const fs = require('fs');
+          const m = JSON.parse(fs.readFileSync('/tmp/xad-store/manifest.json','utf8'));
+          if (m.manifest_version !== 3 || m.version !== '1.4.0') throw new Error('Unexpected manifest');
+          if (m.permissions?.includes('declarativeNetRequestFeedback')) throw new Error('Debug feedback permission present');
+          const sets = m.declarative_net_request?.rule_resources || [];
+          if (sets.some(x => x.id === 'compat')) throw new Error('COMPAT allow ruleset present');
+          console.log('Store manifest OK:', m.version, m.permissions.join(','));
+          NODE
+
+      - name: Release notes
+        run: |
+          cat > release/RELEASE_NOTES.md <<'EOF'
+          # xADKiller Chrome v1.4.0 — TITAN
+
+          First public Chrome/Chromium release of the xADKiller TITAN browser engine by SWIR.
+
+          ## Highlights
+          - Manifest V3 Chrome extension.
+          - STANDARD and ULTRA protection modes.
+          - 17,360 STANDARD BLOCK rules + 10,000 ULTRA BLOCK rules in the tested build.
+          - 24,000 dynamic intelligence domains.
+          - 4,215 session rules.
+          - Adaptive Static Boost with up to 30,000 additional BLOCK-only static rules when Chrome quota is available.
+          - Smart DOM filtering, Auto-Skip and cosmetic filtering.
+          - Open and closed Shadow DOM protection.
+          - Preflight, Worker, popup and injected-markup guards.
+          - Local Adaptive Network Learner.
+          - xADKiller Live Shield / Live Matrix rule-data updates from the official GitHub repository.
+          - English, Polish, Spanish, German and French UI.
+          - No remote executable code and no advertising telemetry.
+          - COMPAT allow rules removed from the active Chrome architecture.
+          - Chrome Web Store build does not request the debug-only declarativeNetRequestFeedback permission.
+
+          ## Validation
+          The exact ZIP attached to this release passed the full Chrome TITAN CI gate on `main`, including runtime blocking tests, Adaptive Static Boost, no-COMPAT regression, checksum verification and ZIP integrity testing.
+
+          A local pre-release benchmark reported by the developer reached 76%. Benchmark scores vary by site, Chrome version, configuration and other extensions and are not a universal blocking guarantee.
+
+          ## Installation for developers
+          Download the ZIP, extract it, open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select the extracted folder.
+
+          For normal users, the preferred installation method will be the Chrome Web Store after Google's review is completed.
+
+          ## Privacy
+          https://github.com/Swir/xADKiller/blob/main/browser-extension/PRIVACY.md
+          EOF
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: chrome-v1.4.0
+          TARGET: 3c99d69e1714c10c3ff6625d85de6b405a9a6960
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/xADKiller-Chrome-v1.4.0-TITAN.zip release/SHA256SUMS.txt --clobber
+            gh release edit "$TAG" --title "xADKiller Chrome v1.4.0 — TITAN" --notes-file release/RELEASE_NOTES.md
+          else
+            gh release create "$TAG" \
+              release/xADKiller-Chrome-v1.4.0-TITAN.zip \
+              release/SHA256SUMS.txt \
+              --target "$TARGET" \
+              --title "xADKiller Chrome v1.4.0 — TITAN" \
+              --notes-file release/RELEASE_NOTES.md
+          fi
