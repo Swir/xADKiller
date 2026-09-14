@@ -9,7 +9,6 @@
     "storage",
     "alarms",
     "declarativeNetRequest",
-    "declarativeNetRequestFeedback",
     "activeTab"
   ],
   "host_permissions": [
