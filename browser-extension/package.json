@@ -11,6 +11,7 @@
     "test:compat": "node tests/chrome-compat-runtime.mjs",
     "test:language": "node tests/chrome-language-runtime.mjs",
     "test:memory": "node tests/chrome-adaptive-memory-runtime.mjs",
+    "test:pause": "node tests/chrome-temporary-pause-runtime.mjs",
     "build:legacy": "node tools/build.mjs"
   },
   "devDependencies": {
