@@ -15,6 +15,7 @@ for (const p of ["storage","alarms","declarativeNetRequest","activeTab"]) {
 }
 if (manifest.permissions?.includes("declarativeNetRequestFeedback")) fail("store build must not request declarativeNetRequestFeedback");
 if (!manifest.host_permissions?.includes("<all_urls>")) fail("missing host access");
+if (!manifest.default_locale || manifest.default_locale !== "en") fail("default locale must be English");
 if (manifest.background?.service_worker !== "service-worker.js") fail("composite service worker missing");
 const rs = manifest.declarative_net_request?.rule_resources || [];
 if (!rs.some((x) => x.id === "standard" && x.enabled === true)) fail("standard ruleset missing/enabled state wrong");
@@ -124,12 +125,22 @@ const bridge = fs.readFileSync(path.join(base, "preflight-config.js"), "utf8");
 if (!guard.includes("xadkiller:preflight-config") || !bridge.includes("xadkiller:preflight-config")) fail("Preflight state synchronization missing");
 if (!bridge.includes("mode:")) fail("Preflight mode synchronization missing");
 
-for (const lang of ["en","pl","es","de","fr"]) {
-  const messages = readJson(path.join(base, "_locales", lang, "messages.json"));
-  for (const key of ["extName","extDescription","protection","filterMode","modeUltra","smartEngine","pickElement","statusOn","statusOff","liveShield","updateNow"]) {
-    if (!messages[key]?.message) fail(`${lang}: missing ${key}`);
-  }
+const localeRoot = path.join(base, "_locales");
+const localeDirs = fs.readdirSync(localeRoot, { withFileTypes:true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
+if (JSON.stringify(localeDirs) !== JSON.stringify(["en","pl"])) fail(`store build must contain only en/pl locales, got: ${localeDirs.join(",")}`);
+const requiredLocaleKeys = [
+  "extName","extDescription","language","languageEnglish","languagePolish","protection","filterMode","modeUltra","smartEngine","pickElement","statusOn","statusOff","liveShield","updateNow","titanEngine","titanWaiting"
+];
+for (const lang of ["en","pl"]) {
+  const messages = readJson(path.join(localeRoot, lang, "messages.json"));
+  for (const key of requiredLocaleKeys) if (!messages[key]?.message) fail(`${lang}: missing ${key}`);
 }
+
+const popupHtml = fs.readFileSync(path.join(base, "popup.html"), "utf8");
+const popupJs = fs.readFileSync(path.join(base, "popup.js"), "utf8");
+if (!popupHtml.includes('id="language"') || !popupHtml.includes('value="en"') || !popupHtml.includes('value="pl"')) fail("PL/EN language selector missing from popup");
+if (!popupJs.includes("uiLanguage") || !popupJs.includes("initializeLanguage") || !popupJs.includes("_locales/${safe}/messages.json")) fail("runtime language switching engine missing");
+if (!popupJs.includes("chrome.storage.local") || !popupJs.includes("uiLanguage:next")) fail("language preference persistence missing");
 
 for (const rel of ["service-worker.js","background.js","live-signatures.js","titan-engine.js","static-boost.js","titan-main.js","network-scout.js","early-guard.js","preflight-config.js","content.js","shadow-sentinel.js","live-cosmetic.js","popup.js"]) {
   const code = fs.readFileSync(path.join(base, rel), "utf8");
@@ -137,4 +148,4 @@ for (const rel of ["service-worker.js","background.js","live-signatures.js","tit
   if (/importScripts\s*\(\s*["']https?:/i.test(code)) fail(`${rel}: remote hosted code forbidden`);
 }
 
-if (!process.exitCode) console.log(`OK: xADKiller TITAN v1.4.0 store build validated: ${standard} STANDARD block + ${ultra} ULTRA block, no active COMPAT allow ruleset, no declarativeNetRequestFeedback permission, ${intel.length} consensus dynamic domains, ${session.length} session rules${dormantCompat ? `, ${dormantCompat} dormant COMPAT source rules not referenced` : ""}`);
+if (!process.exitCode) console.log(`OK: xADKiller TITAN v1.4.0 store build validated: ${standard} STANDARD block + ${ultra} ULTRA block, PL/EN only with persistent language switch, no active COMPAT allow ruleset, no declarativeNetRequestFeedback permission, ${intel.length} consensus dynamic domains, ${session.length} session rules${dormantCompat ? `, ${dormantCompat} dormant COMPAT source rules not referenced` : ""}`);
