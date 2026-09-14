@@ -1,1 +1,1 @@
-importScripts("background.js", "live-signatures.js", "titan-engine.js", "static-boost.js");
+importScripts("background.js", "live-signatures.js", "titan-engine.js", "static-boost.js", "temporary-site-guard.js");
