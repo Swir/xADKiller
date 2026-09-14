@@ -9,6 +9,7 @@
     "test:chrome": "node tests/chrome-ultra-runtime.mjs",
     "test:boost": "node tests/chrome-static-boost-runtime.mjs",
     "test:compat": "node tests/chrome-compat-runtime.mjs",
+    "test:language": "node tests/chrome-language-runtime.mjs",
     "build:legacy": "node tools/build.mjs"
   },
   "devDependencies": {

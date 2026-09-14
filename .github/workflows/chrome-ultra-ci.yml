@@ -2,7 +2,7 @@ name: Test xADKiller Chrome TITAN
 
 on:
   push:
-    branches: [ main, chrome-titan-v140 ]
+    branches: [ main, chrome-titan-v140, chrome-v141-pl-en ]
     paths:
       - "browser-extension/**"
       - ".github/workflows/chrome-ultra-ci.yml"
@@ -56,23 +56,25 @@ jobs:
         run: timeout --signal=TERM --kill-after=10s 180s npm run test:boost
       - name: Chromium no-COMPAT regression test
         run: timeout --signal=TERM --kill-after=10s 120s npm run test:compat
-      - name: Package Chrome TITAN ZIP
+      - name: Chromium PL EN language switch test
+        run: timeout --signal=TERM --kill-after=10s 120s npm run test:language
+      - name: Package Chrome TITAN PL EN ZIP
         run: |
           rm -rf packages
           mkdir -p packages
-          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.4.0-TITAN.zip .)
+          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.4.0-TITAN-PL-EN.zip .)
       - name: Checksums
         run: |
           cd packages
-          sha256sum xADKiller-Chrome-v1.4.0-TITAN.zip > SHA256SUMS.txt
+          sha256sum xADKiller-Chrome-v1.4.0-TITAN-PL-EN.zip > SHA256SUMS.txt
       - name: Verify archive
         run: |
-          unzip -tq packages/xADKiller-Chrome-v1.4.0-TITAN.zip
+          unzip -tq packages/xADKiller-Chrome-v1.4.0-TITAN-PL-EN.zip
           (cd packages && sha256sum -c SHA256SUMS.txt)
-      - name: Upload tested Chrome TITAN package
+      - name: Upload tested Chrome TITAN PL EN package
         uses: actions/upload-artifact@v4
         with:
-          name: xADKiller-Chrome-v1.4.0-TITAN-tested
+          name: xADKiller-Chrome-v1.4.0-TITAN-PL-EN-tested
           path: browser-extension/packages/*
           if-no-files-found: error
           retention-days: 30
