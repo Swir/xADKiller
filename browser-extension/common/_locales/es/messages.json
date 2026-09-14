@@ -1,0 +1,11 @@
+{
+  "extName":{"message":"xADKiller Browser"},
+  "extDescription":{"message":"Bloquea anuncios y rastreadores con reglas Manifest V3, XAD Preflight Guard, Live Shield, Smart DOM adaptativo y Auto-Skip."},
+  "protection":{"message":"Protección"},"currentSite":{"message":"Sitio actual"},"filterMode":{"message":"Modo de filtro"},"modeStandard":{"message":"STANDARD"},"modeUltra":{"message":"ULTRA"},
+  "networkRules":{"message":"reglas de red"},"cosmeticRules":{"message":"reglas cosméticas"},"dynamicRules":{"message":"dinámicas"},"smartEngine":{"message":"Smart DOM Engine"},"smartHint":{"message":"Detección adaptativa local de elementos"},
+  "autoSkip":{"message":"Smart Auto-Skip"},"autoSkipHint":{"message":"Solo pulsa botones claros de Omitir anuncio"},"preflightHint":{"message":"Preflight Guard + Shadow DOM Sentinel protegen antes y dentro de las capas dinámicas de la página."},
+  "liveShield":{"message":"XAD Live Shield"},"liveShieldHint":{"message":"Nuestra inteligencia de dominios SWIR se actualiza desde GitHub sin código ejecutable remoto."},"liveShieldWaiting":{"message":"Esperando la base de inteligencia…"},"liveShieldUpdating":{"message":"Actualizando Live Shield…"},"liveShieldError":{"message":"La actualización falló"},"liveDomains":{"message":"dominios Live propios"},"updateNow":{"message":"Actualizar"},
+  "networkBlocks":{"message":"bloqueos de red"},"hiddenAds":{"message":"elementos ocultos"},"smartBlocks":{"message":"ocultaciones Smart"},"learnedSignals":{"message":"señales aprendidas"},
+  "adaptiveLab":{"message":"Herramientas adaptativas"},"pickElement":{"message":"Bloquear / enseñar elemento"},"falsePositive":{"message":"Falso positivo"},"adaptiveHint":{"message":"El aprendizaje queda localmente en este perfil del navegador."},
+  "customDomain":{"message":"Dominio bloqueado personalizado"},"customDomainsCount":{"message":"dominios personalizados"},"add":{"message":"Añadir"},"testButton":{"message":"Probar bloqueo"},"unsupportedPage":{"message":"Página del navegador"},"statusOn":{"message":"ACTIVA"},"statusOff":{"message":"DESACTIVADA"},"allowSite":{"message":"Permitir este sitio"},"protectSite":{"message":"Proteger este sitio"}
+}

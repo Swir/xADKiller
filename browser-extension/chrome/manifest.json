@@ -1,0 +1,96 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_extName__",
+  "version": "1.4.0",
+  "description": "__MSG_extDescription__",
+  "default_locale": "en",
+  "minimum_chrome_version": "121",
+  "permissions": [
+    "storage",
+    "alarms",
+    "declarativeNetRequest",
+    "declarativeNetRequestFeedback",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "xADKiller",
+    "default_icon": {
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "128": "icons/icon128.png"
+  },
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "standard",
+        "enabled": true,
+        "path": "rules/standard.json"
+      },
+      {
+        "id": "ultra",
+        "enabled": false,
+        "path": "rules/ultra.json"
+      },
+      {
+        "id": "titan_boost_1",
+        "enabled": false,
+        "path": "rules/titan-boost-1.json"
+      },
+      {
+        "id": "titan_boost_2",
+        "enabled": false,
+        "path": "rules/titan-boost-2.json"
+      },
+      {
+        "id": "titan_boost_3",
+        "enabled": false,
+        "path": "rules/titan-boost-3.json"
+      }
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "titan-main.js",
+        "early-guard.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "preflight-config.js",
+        "cosmetic-data.js",
+        "content.js",
+        "shadow-sentinel.js",
+        "live-cosmetic.js",
+        "network-scout.js"
+      ],
+      "run_at": "document_start",
+      "world": "ISOLATED",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
+    }
+  ]
+}

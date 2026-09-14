@@ -1,0 +1,11 @@
+{
+  "extName":{"message":"xADKiller Browser"},
+  "extDescription":{"message":"Bloque publicités et traceurs avec des règles Manifest V3, XAD Preflight Guard, Live Shield, Smart DOM adaptatif et Auto-Skip."},
+  "protection":{"message":"Protection"},"currentSite":{"message":"Site actuel"},"filterMode":{"message":"Mode de filtrage"},"modeStandard":{"message":"STANDARD"},"modeUltra":{"message":"ULTRA"},
+  "networkRules":{"message":"règles réseau"},"cosmeticRules":{"message":"règles cosmétiques"},"dynamicRules":{"message":"dynamiques"},"smartEngine":{"message":"Smart DOM Engine"},"smartHint":{"message":"Détection adaptative locale des éléments"},
+  "autoSkip":{"message":"Smart Auto-Skip"},"autoSkipHint":{"message":"Clique uniquement sur les boutons explicites Ignorer la publicité"},"preflightHint":{"message":"Preflight Guard + Shadow DOM Sentinel protègent avant et dans les couches dynamiques de la page."},
+  "liveShield":{"message":"XAD Live Shield"},"liveShieldHint":{"message":"Notre intelligence de domaines SWIR se met à jour depuis GitHub sans code exécutable distant."},"liveShieldWaiting":{"message":"En attente de la base d’intelligence…"},"liveShieldUpdating":{"message":"Mise à jour de Live Shield…"},"liveShieldError":{"message":"Échec de la mise à jour"},"liveDomains":{"message":"domaines Live internes"},"updateNow":{"message":"Mettre à jour"},
+  "networkBlocks":{"message":"blocages réseau"},"hiddenAds":{"message":"éléments masqués"},"smartBlocks":{"message":"masquages Smart"},"learnedSignals":{"message":"signaux appris"},
+  "adaptiveLab":{"message":"Outils adaptatifs"},"pickElement":{"message":"Bloquer / apprendre un élément"},"falsePositive":{"message":"Faux positif"},"adaptiveHint":{"message":"L'apprentissage reste local dans ce profil de navigateur."},
+  "customDomain":{"message":"Domaine bloqué personnalisé"},"customDomainsCount":{"message":"domaines personnalisés"},"add":{"message":"Ajouter"},"testButton":{"message":"Tester le blocage"},"unsupportedPage":{"message":"Page du navigateur"},"statusOn":{"message":"ACTIVE"},"statusOff":{"message":"DÉSACTIVÉE"},"allowSite":{"message":"Autoriser ce site"},"protectSite":{"message":"Protéger ce site"}
+}

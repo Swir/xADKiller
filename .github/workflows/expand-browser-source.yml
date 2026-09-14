@@ -1,0 +1,90 @@
+name: Test xADKiller Browser Extensions
+
+on:
+  push:
+    branches: [ main, browser-extension-dev ]
+    paths:
+      - "browser-extension/**"
+      - ".github/workflows/expand-browser-source.yml"
+  pull_request:
+    paths:
+      - "browser-extension/**"
+      - ".github/workflows/expand-browser-source.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build browser packages
+        run: npm run build
+      - name: Validate manifests, locales and DNR
+        run: npm run validate
+      - name: JavaScript syntax
+        run: |
+          node --check dist/chrome/background.js
+          node --check dist/chrome/content.js
+          node --check dist/chrome/popup.js
+          node --check dist/firefox/background.js
+          node --check dist/firefox/content.js
+          node --check dist/firefox/popup.js
+      - name: Firefox web-ext lint
+        run: npx web-ext lint --source-dir dist/firefox --warnings-as-errors
+      - name: Install Chromium and Firefox
+        run: npx playwright install --with-deps chromium firefox
+      - name: Firefox temporary-install smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          FIREFOX_BIN="$(node -e "import('playwright').then(({firefox})=>console.log(firefox.executablePath()))")"
+          echo "Firefox binary: $FIREFOX_BIN"
+          test -x "$FIREFOX_BIN"
+          set +e
+          xvfb-run -a timeout 20s npx web-ext run \
+            --source-dir dist/firefox \
+            --firefox "$FIREFOX_BIN" \
+            --start-url about:blank \
+            --no-reload \
+            --no-input
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
+            echo "Firefox smoke test failed with exit code $code"
+            exit "$code"
+          fi
+          echo "Firefox smoke test passed (extension remained loaded until controlled timeout)."
+      - name: Chromium runtime test
+        run: xvfb-run -a npm run test:chrome
+      - name: Package Chrome store ZIP
+        run: |
+          mkdir -p packages
+          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.0.0.zip .)
+      - name: Package Firefox with web-ext
+        run: npx web-ext build --source-dir dist/firefox --artifacts-dir packages --filename xADKiller-Firefox-v1.0.0.zip --overwrite-dest
+      - name: Checksums
+        run: |
+          cd packages
+          sha256sum *.zip | tee SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+      - name: Verify packaged archives
+        run: |
+          unzip -tq packages/xADKiller-Chrome-v1.0.0.zip
+          unzip -tq packages/xADKiller-Firefox-v1.0.0.zip
+      - name: Upload tested packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: xADKiller-browser-v1.0.0-tested
+          path: browser-extension/packages/*
+          if-no-files-found: error
+          retention-days: 30
