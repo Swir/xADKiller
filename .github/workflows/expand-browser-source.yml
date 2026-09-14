@@ -1,15 +1,9 @@
-name: Test xADKiller Browser Extensions
+name: Legacy Browser Extensions CI (Chrome/Firefox v1.0)
 
+# Legacy cross-browser gate kept for the old Firefox/Chrome v1.0 baseline.
+# Chrome TITAN is released and tested by chrome-ultra-ci.yml.
+# Firefox will be rebuilt from the Chrome TITAN baseline later.
 on:
-  push:
-    branches: [ main, browser-extension-dev ]
-    paths:
-      - "browser-extension/**"
-      - ".github/workflows/expand-browser-source.yml"
-  pull_request:
-    paths:
-      - "browser-extension/**"
-      - ".github/workflows/expand-browser-source.yml"
   workflow_dispatch:
 
 jobs:
@@ -63,28 +57,5 @@ jobs:
             echo "Firefox smoke test failed with exit code $code"
             exit "$code"
           fi
-          echo "Firefox smoke test passed (extension remained loaded until controlled timeout)."
       - name: Chromium runtime test
         run: xvfb-run -a npm run test:chrome
-      - name: Package Chrome store ZIP
-        run: |
-          mkdir -p packages
-          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.0.0.zip .)
-      - name: Package Firefox with web-ext
-        run: npx web-ext build --source-dir dist/firefox --artifacts-dir packages --filename xADKiller-Firefox-v1.0.0.zip --overwrite-dest
-      - name: Checksums
-        run: |
-          cd packages
-          sha256sum *.zip | tee SHA256SUMS.txt
-          sha256sum -c SHA256SUMS.txt
-      - name: Verify packaged archives
-        run: |
-          unzip -tq packages/xADKiller-Chrome-v1.0.0.zip
-          unzip -tq packages/xADKiller-Firefox-v1.0.0.zip
-      - name: Upload tested packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: xADKiller-browser-v1.0.0-tested
-          path: browser-extension/packages/*
-          if-no-files-found: error
-          retention-days: 30
