@@ -2,14 +2,21 @@
 
 This branch develops the Android APK independently from the current stable 1.5.1 line.
 
+<img width="100%" src="assets/readme/android/progress-mini.svg" alt="xADKiller Android v1.6.0 roadmap progress" />
+
+**Development progress:** **N/A** — this roadmap is priority-based and does not define a finite checkbox denominator, so no completion percentage is claimed.  
+**Release readiness:** **BLOCKED** — manual physical-device VPN lifecycle and stability evidence is still required.
+
 ## Current validation snapshot — 2026-09-17
-- Development APK CI: **GREEN** (privacy manifest gate, lint, unit tests, build, package checks, ZIP integrity and SHA-256).
+- Development APK CI: **GREEN** before the current hardening batch (privacy manifest gate, lint, unit tests, build, package checks, ZIP integrity and SHA-256); the current branch must re-pass that full gate.
 - Deterministic offline DNS ad fixture coverage: **100.0% (96/96)**.
 - Benign DNS control false positives: **0/20**.
 - Bundled offline starter list: **95 high-confidence domains**, with larger maintained lists loaded at runtime.
 - DNS parser hardening is GREEN: rejects IPv4 fragments, inconsistent IP/UDP lengths, response packets, non-standard opcodes, ambiguous multi-question DNS messages and invalid source port 0.
+- Upstream DNS response validation rejects mismatched question/name/type/class, malformed responses and truncated replies.
 - Upstream DNS circuit-breaker tests are GREEN, including half-open recovery and bounded probe latency.
-- Privacy hardening: Android backup is disabled for local xADKiller state; cleartext traffic remains disabled; CI now enforces these invariants and rejects QUERY_ALL_PACKAGES.
+- Blocklist update hardening now evaluates **normalized unique-domain counts**, preventing a duplicate-inflated remote feed from passing minimum-size or same-mode anti-shrink checks.
+- Privacy hardening: Android backup is disabled for local xADKiller state; cleartext traffic remains disabled; CI enforces these invariants and rejects QUERY_ALL_PACKAGES.
 - Release remains blocked until manual-device VPN lifecycle, Wi-Fi/mobile transitions, sleep/wake, real-app behavior and longer stability checks are satisfactory.
 
 ## Release gate
@@ -36,8 +43,9 @@ No Release until all relevant build, lint, regression, stability, privacy, DNS/V
 - Privacy/network manifest gate.
 - Manifest and signing checks.
 - APK integrity/checksum checks.
+- Deterministic SWIR Progress SVG math/XML/staleness check.
 - VPN start/stop/restart/boot lifecycle regression coverage where possible.
-- Parser/blocklist regression fixtures.
+- Parser/blocklist regression fixtures, including duplicate-inflated update rejection.
 - DNS packet malformed/fragmented/query-shape regression fixtures.
 - DNS upstream failover/half-open recovery tests.
 - Memory/large-list stress checks.
