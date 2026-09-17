@@ -14,7 +14,7 @@
 
 <img width="100%" src="../assets/readme/chrome/progress-card.svg" alt="xADKiller Chrome v1.5.0 development progress" />
 
-**Development progress:** **53.8% — 14/26 verified v1.5.0 roadmap items.**  
+**Development progress:** **57.7% — 15/26 verified v1.5.0 roadmap items.**  
 **Release readiness:** **BLOCKED** — manual browser/beta validation and the remaining hardening items are not complete.
 
 | Item | Status |
@@ -35,6 +35,7 @@
 |---|---|
 | 🛡️ DeclarativeNetRequest | Uses Manifest V3 static, dynamic and session rules for network blocking. |
 | ⚡ STANDARD / ULTRA | Provides conservative and stronger protection modes with separately tested rule budgets. |
+| 📊 Rule Budget | Shows live packaged STANDARD/ULTRA/TITAN Boost counts plus current runtime rule buckets without inventing a browser-limit percentage. |
 | 🧠 TITAN Adaptive Memory | Persists only promoted high-confidence third-party ad/tracker hosts, with TTL, bounds and a user reset. |
 | 🧩 Smart DOM / Shadow protection | Hides ad containers in normal, open-shadow and closed-shadow DOM while protecting normal page UI. |
 | ⏭️ Smart Auto-Skip | Handles explicit ad-skip controls conservatively. |
@@ -77,7 +78,7 @@ The v1.5 branch runs Chromium and integrity gates for:
 - broader real-page mutation soak with normal business UI, login/checkout/media controls and mixed DOM/Shadow ad layers;
 - static/adaptive boost behavior;
 - no-COMPAT regression;
-- PL/EN language persistence;
+- PL/EN language persistence plus populated Rule Budget diagnostics;
 - Adaptive Memory persistence/privacy/reset;
 - Breakage Guard pause/resume plus login/checkout/media safety;
 - GitHub Feed Guard validation and local health diagnostics;
