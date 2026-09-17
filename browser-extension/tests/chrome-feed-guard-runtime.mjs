@@ -8,29 +8,42 @@ const LIVE_SHIELD = "https://raw.githubusercontent.com/Swir/xADKiller/live-shiel
 const LIVE_MATRIX = "https://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json";
 const TITAN = "https://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-titan-feed.json";
 
-function response(data) {
-  return new Response(JSON.stringify(data), { status:200, headers:{ "content-type":"application/json" } });
+function response(data, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers:{ "content-type":"application/json" } });
 }
 
-async function makeGuard(payloadByUrl, storage = {}) {
+async function makeGuard(payloadByUrl, seed = {}) {
+  const storage = { ...seed };
+  const listeners = [];
   const context = {
     URL,
     Response,
     TypeError,
+    Date,
     console,
     globalThis:null,
     chrome:{
       storage:{
-        local:{ get:(defaults, cb) => cb({ ...defaults, ...storage }) }
+        local:{
+          get:(defaults, cb) => cb({ ...defaults, ...storage }),
+          set:(values, cb) => { Object.assign(storage, values || {}); if (cb) cb(); }
+        }
+      },
+      runtime:{
+        onMessage:{ addListener:(listener) => listeners.push(listener) }
       }
     },
     fetch:async (input) => {
       const url = typeof input === "string" ? input : input?.url;
       if (!(url in payloadByUrl)) return response({ ok:true });
-      return response(payloadByUrl[url]);
+      const value = payloadByUrl[url];
+      if (value && typeof value === "object" && value.__status) return response(value.body || {}, value.__status);
+      return response(value);
     }
   };
   context.globalThis = context;
+  context.__storage = storage;
+  context.__listeners = listeners;
   vm.createContext(context);
   vm.runInContext(source, context, { filename:"feed-guard.js" });
   return context;
@@ -42,6 +55,12 @@ async function expectReject(promise, label) {
     rejected = /xad_feed_guard_/.test(String(error?.message || error));
   }
   if (!rejected) throw new Error(`${label} was not rejected`);
+}
+
+function requireFeed(health, kind) {
+  const feed = health?.feeds?.[kind];
+  if (!feed) throw new Error(`missing health for ${kind}`);
+  return feed;
 }
 
 const healthyShield = {
@@ -71,11 +90,26 @@ const healthyTitan = {
   await guard.fetch(LIVE_SHIELD);
   await guard.fetch(LIVE_MATRIX);
   await guard.fetch(TITAN);
+  const health = await guard.XAD_FEED_GUARD.readHealth();
+  for (const kind of ["live-shield", "live-matrix", "titan"]) {
+    const feed = requireFeed(health, kind);
+    if (feed.successCount !== 1 || feed.failureCount !== 0 || feed.consecutiveFailures !== 0) {
+      throw new Error(`bad successful health counters for ${kind}: ${JSON.stringify(feed)}`);
+    }
+    if (feed.lastVersion !== "2026.09.17.1" || !feed.lastSuccessAt || feed.lastError) {
+      throw new Error(`bad successful health metadata for ${kind}: ${JSON.stringify(feed)}`);
+    }
+  }
+  if (guard.__listeners.length !== 1) throw new Error("getFeedGuardHealth runtime listener missing");
 }
 
 {
   const guard = await makeGuard({ [LIVE_SHIELD]:{ ...healthyShield, schema:2 } });
   await expectReject(guard.fetch(LIVE_SHIELD), "schema mismatch");
+  const feed = requireFeed(await guard.XAD_FEED_GUARD.readHealth(), "live-shield");
+  if (feed.failureCount !== 1 || feed.consecutiveFailures !== 1 || feed.lastError !== "schema") {
+    throw new Error(`schema failure was not recorded safely: ${JSON.stringify(feed)}`);
+  }
 }
 
 {
@@ -102,4 +136,12 @@ const healthyTitan = {
   await expectReject(guard.fetch(TITAN), "suspicious titan shrink");
 }
 
-console.log("[xADKiller FEED GUARD CI] PASS • schema, minimum-size and anti-shrink guards verified for Live Shield, Live Matrix and TITAN");
+{
+  const guard = await makeGuard({ [LIVE_SHIELD]:{ __status:503, body:{ error:"temporary" } } });
+  const result = await guard.fetch(LIVE_SHIELD);
+  if (result.status !== 503) throw new Error("HTTP status was unexpectedly changed by Feed Guard");
+  const feed = requireFeed(await guard.XAD_FEED_GUARD.readHealth(), "live-shield");
+  if (feed.failureCount !== 1 || feed.lastError !== "http_503") throw new Error(`HTTP failure health missing: ${JSON.stringify(feed)}`);
+}
+
+console.log("[xADKiller FEED GUARD CI] PASS • schema/anti-shrink guards + local health counters verified for Live Shield, Live Matrix and TITAN");
