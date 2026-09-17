@@ -121,6 +121,36 @@ final class DnsPacket {
         return null;
     }
 
+    /**
+     * Accept an upstream DNS reply only when it is a real standard response to the exact
+     * single question we forwarded. This is intentionally stricter than checking only the
+     * transaction id: mismatched question names/types/classes and query-shaped packets are
+     * rejected before they can be written back into the VPN tunnel.
+     */
+    static boolean isValidUpstreamResponse(byte[] query, byte[] response, int responseLength) {
+        if (query == null || response == null || query.length < 17 || responseLength < 17 || responseLength > response.length) {
+            return false;
+        }
+        if (query[0] != response[0] || query[1] != response[1]) return false;
+
+        int queryFlags = u16(query, 2);
+        int responseFlags = u16(response, 2);
+        if ((queryFlags & 0x8000) != 0 || (queryFlags & 0x7800) != 0) return false;
+        if ((responseFlags & 0x8000) == 0 || (responseFlags & 0x7800) != 0) return false;
+        if (u16(query, 4) != 1 || u16(response, 4) != 1) return false;
+
+        byte[] trimmed = responseLength == response.length ? response : Arrays.copyOf(response, responseLength);
+        String queryName = extractQueryName(query);
+        String responseName = extractQueryName(trimmed);
+        if (queryName == null || responseName == null || !queryName.equals(responseName)) return false;
+
+        int queryEnd = questionEnd(query);
+        int responseEnd = questionEnd(trimmed);
+        if (queryEnd < 4 || responseEnd < 4) return false;
+        return u16(query, queryEnd - 4) == u16(trimmed, responseEnd - 4)
+                && u16(query, queryEnd - 2) == u16(trimmed, responseEnd - 2);
+    }
+
     static byte[] nxdomain(byte[] query) { return errorResponse(query, 3); }
     static byte[] servfail(byte[] query) { return errorResponse(query, 2); }
 
