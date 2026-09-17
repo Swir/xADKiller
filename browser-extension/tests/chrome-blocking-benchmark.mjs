@@ -104,11 +104,12 @@ async function matchCases(worker, cases) {
   return await worker.evaluate(async (rows) => {
     const out = [];
     for (const [url, type] of rows) {
-      const matches = await chrome.declarativeNetRequest.testMatchOutcome({
+      const result = await chrome.declarativeNetRequest.testMatchOutcome({
         url,
         initiator: "https://publisher.xad.test",
         type
       });
+      const matches = Array.isArray(result?.matchedRules) ? result.matchedRules : [];
       out.push({ url, type, matched: matches.length > 0, matches });
     }
     return out;
