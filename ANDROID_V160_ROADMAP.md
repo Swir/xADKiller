@@ -2,6 +2,13 @@
 
 This branch develops the Android APK independently from the current stable 1.5.1 line.
 
+## Current validation snapshot — 2026-09-17
+- Development APK CI: GREEN (lint, unit tests, build, manifest/package checks, ZIP integrity and SHA-256).
+- Deterministic offline DNS ad fixture coverage: **100.0% (96/96)**.
+- Benign DNS control false positives: **0/20**.
+- Bundled offline starter list: **95 high-confidence domains**, with larger maintained lists loaded at runtime.
+- Release remains blocked until manual-device VPN lifecycle, real-app behavior and longer stability checks are satisfactory.
+
 ## Release gate
 No Release until all relevant build, lint, regression, stability, privacy, DNS/VPN lifecycle, blocklist integrity and manual-device checks are green and there are no known critical issues.
 
