@@ -12,6 +12,13 @@ const log = (stage, extra = "") => console.log(`[xADKiller PAUSE CI] ${stage}${e
 const html = `<!doctype html><html><head><meta charset="utf-8"><title>Pause fixture</title></head><body>
 <div id="normal">NORMAL CONTENT</div>
 <div id="ad" class="adsbygoogle" style="width:300px;height:90px">ADVERTISEMENT</div>
+<div id="open-host"></div><div id="closed-host"></div>
+<script>
+  const openRoot = document.querySelector('#open-host').attachShadow({mode:'open'});
+  const openAd = document.createElement('div'); openAd.id='open-ad'; openAd.className='adsbygoogle'; openAd.textContent='OPEN SHADOW AD'; openRoot.appendChild(openAd);
+  const closedRoot = document.querySelector('#closed-host').attachShadow({mode:'closed'});
+  const closedAd = document.createElement('div'); closedAd.id='closed-ad'; closedAd.className='adsbygoogle'; closedAd.textContent='CLOSED SHADOW AD'; closedRoot.appendChild(closedAd); window.__pauseClosedAd=closedAd;
+</script>
 </body></html>`;
 const server = http.createServer((req, res) => {
   res.writeHead(200, { "content-type":"text/html; charset=utf-8" });
@@ -83,15 +90,22 @@ try {
   const page = await browser.newPage();
   await page.goto(`http://pause.xad.test:${port}/`, { waitUntil:"domcontentloaded", timeout:12000 });
   await delay(900);
-  const pausedView = await page.evaluate(() => ({
-    normal:getComputedStyle(document.querySelector("#normal")).display,
-    ad:getComputedStyle(document.querySelector("#ad")).display,
-    hidden:document.querySelector("#ad")?.dataset?.xadkillerHidden || ""
-  }));
-  if (pausedView.normal === "none" || pausedView.ad === "none" || pausedView.hidden === "1") {
+  const pausedView = await page.evaluate(() => {
+    const openAd = document.querySelector('#open-host')?.shadowRoot?.querySelector('#open-ad');
+    const closedAd = window.__pauseClosedAd;
+    return {
+      normal:getComputedStyle(document.querySelector("#normal")).display,
+      ad:getComputedStyle(document.querySelector("#ad")).display,
+      hidden:document.querySelector("#ad")?.dataset?.xadkillerHidden || "",
+      shadowHidden:document.querySelector("#ad")?.dataset?.xadkillerShadowHidden || "",
+      openShadow:openAd ? getComputedStyle(openAd).display : "missing",
+      closedShadow:closedAd ? getComputedStyle(closedAd).display : "missing"
+    };
+  });
+  if (pausedView.normal === "none" || pausedView.ad === "none" || pausedView.hidden === "1" || pausedView.shadowHidden === "1" || pausedView.openShadow === "none" || pausedView.closedShadow === "none") {
     throw new Error(`DOM protection did not pause cleanly: ${JSON.stringify(pausedView)}`);
   }
-  log("DOM layers paused", JSON.stringify(pausedView));
+  log("DOM + Shadow layers paused", JSON.stringify(pausedView));
 
   const stop = await send(popup, { type:"setTemporarySitePause", host:"pause.xad.test", minutes:0 });
   if (!stop?.ok || stop.paused) throw new Error(`resume rejected: ${JSON.stringify(stop)}`);
@@ -105,11 +119,19 @@ try {
 
   await page.reload({ waitUntil:"domcontentloaded", timeout:12000 });
   await delay(900);
-  const protectedView = await page.evaluate(() => ({
-    normal:getComputedStyle(document.querySelector("#normal")).display,
-    ad:getComputedStyle(document.querySelector("#ad")).display
-  }));
-  if (protectedView.normal === "none" || protectedView.ad !== "none") throw new Error(`protection did not resume: ${JSON.stringify(protectedView)}`);
+  const protectedView = await page.evaluate(() => {
+    const openAd = document.querySelector('#open-host')?.shadowRoot?.querySelector('#open-ad');
+    const closedAd = window.__pauseClosedAd;
+    return {
+      normal:getComputedStyle(document.querySelector("#normal")).display,
+      ad:getComputedStyle(document.querySelector("#ad")).display,
+      openShadow:openAd ? getComputedStyle(openAd).display : "missing",
+      closedShadow:closedAd ? getComputedStyle(closedAd).display : "missing"
+    };
+  });
+  if (protectedView.normal === "none" || protectedView.ad !== "none" || protectedView.openShadow !== "none" || protectedView.closedShadow !== "none") {
+    throw new Error(`protection did not resume across DOM/Shadow layers: ${JSON.stringify(protectedView)}`);
+  }
   log("Protection restored", JSON.stringify(protectedView));
 
   await worker.evaluate(async () => await chrome.storage.local.set({ allowSites:["permanent.example"] }));
@@ -121,7 +143,7 @@ try {
   if (preserved.xadTemporaryPauseInjectedAllowSitesV1.includes("permanent.example")) throw new Error(`pre-existing allowlist entry was incorrectly marked temporary: ${JSON.stringify(preserved)}`);
   log("Permanent allowlist preserved", JSON.stringify(preserved));
 
-  log("PASS", "15-minute DNR pause, DOM pause, resume and permanent allowlist safety verified");
+  log("PASS", "15-minute DNR pause, normal/open/closed-shadow DOM pause, resume and permanent allowlist safety verified");
 } finally {
   if (browser) { try { await browser.close(); } catch (_) {} }
   await new Promise((resolve) => server.close(resolve));
