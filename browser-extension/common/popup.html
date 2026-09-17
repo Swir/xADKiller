@@ -55,6 +55,17 @@
       <small data-i18n="liveShieldHint">SWIR protection data updates from GitHub without remote executable code.</small>
     </section>
 
+    <section class="card compactCard feedHealthCard">
+      <div class="row">
+        <div>
+          <strong data-i18n="feedIntegrity">GitHub Feed Guard</strong>
+          <small id="feedHealthInfo" data-i18n="feedHealthWaiting">Waiting for verified feed checks…</small>
+        </div>
+        <span id="feedHealthBadge" class="pauseBadge off">—</span>
+      </div>
+      <small data-i18n="feedIntegrityHint">Validates schema, size and anti-shrink rules before new protection data is accepted.</small>
+    </section>
+
     <section class="card compactCard titanCard">
       <div class="row">
         <div>
@@ -134,7 +145,7 @@
       <button id="testBtn" data-i18n="testButton">Test blocking</button>
       <button id="githubBtn" class="secondary">GitHub</button>
     </div>
-    <footer>v1.5.0-dev • PL / EN • Adaptive Memory + Breakage Guard • BY SWIR</footer>
+    <footer>v1.5.0-dev • PL / EN • Adaptive Memory + Breakage Guard + Feed Guard • BY SWIR</footer>
   </main>
   <script src="popup.js"></script>
 </body>
