@@ -28,6 +28,12 @@ public class DnsResponseValidationTest {
         assertFalse(DnsPacket.isValidUpstreamResponse(query, response, response.length));
     }
 
+    @Test public void rejectsDnsResponseMarkedTruncated() {
+        byte[] query = dns("ads.example.com", 0x1234, 0x0100, 1, 1);
+        byte[] response = dns("ads.example.com", 0x1234, 0x8380, 1, 1); // QR + TC + RD + RA
+        assertFalse(DnsPacket.isValidUpstreamResponse(query, response, response.length));
+    }
+
     @Test public void rejectsQuestionNameMismatch() {
         byte[] query = dns("ads.example.com", 0x1234, 0x0100, 1, 1);
         byte[] response = dns("safe.example.com", 0x1234, 0x8180, 1, 1);
