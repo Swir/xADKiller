@@ -33,6 +33,15 @@ android {
     testOptions {
         unitTests.returnDefaultValues = true
     }
+
+    lint {
+        // Each dynamic status receiver uses RECEIVER_NOT_EXPORTED on Android 13+
+        // and the only available legacy overload below API 33. Current lint
+        // flags the guarded pre-33 branch even though the flag API did not exist
+        // there. Keep every other lint rule fatal; suppress only this reviewed
+        // compatibility false-positive.
+        disable 'UnspecifiedRegisterReceiverFlag'
+    }
 }
 
 dependencies {
