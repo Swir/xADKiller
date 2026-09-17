@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img width="100%" src="assets/readme/android/hero.svg" alt="xADKiller Android — local VPN and DNS ad blocker" />
+<img width="100%" src="assets/readme/hero.svg" alt="xADKiller Android — local VPN and DNS ad blocker" />
 
 </div>
 
@@ -37,6 +37,7 @@
 | 💓 VPN liveness heartbeat | Refreshes local service/UI liveness every 5 seconds even when no DNS packets are flowing, while still shutting the heartbeat down with the VPN lifecycle. |
 | ⚡ STANDARD / ULTRA lists | Uses maintained public blocklists plus a bundled offline starter list and user rules. |
 | 🧠 Adaptive DNS upstream pool | Tracks aggregate resolver latency/failures, uses bounded half-open recovery probes, ages stale latency-only penalties after long network idle/transitions, and falls back between Cloudflare, Quad9 and Google DNS. |
+| 🔎 Private DNS diagnostics | Distinguishes strict Private DNS conflicts, active encrypted system DNS, automatic/unknown states and no-network states without pretending that per-app DoH can be detected. |
 | ♻️ Safe list updates | Keeps a known-good cache, rejects obviously incomplete updates and uses rollback-safe replacement. |
 | 🎛️ Custom allow/block rules | Lets the owner recover false positives or add local rules. |
 | 📋 Local diagnostics | Stores blocking and system diagnostics on the device; no cloud log upload is required. |
@@ -50,7 +51,8 @@
 - cleartext network traffic is disabled by manifest/network-security policy;
 - DNS hostnames may be visible to the local filter, but HTTPS URL paths and page contents are not available to DNS filtering;
 - the app does not install a TLS man-in-the-middle certificate;
-- the development gate rejects `QUERY_ALL_PACKAGES`.
+- the development gate rejects `QUERY_ALL_PACKAGES`;
+- app-level encrypted DNS/DoH is explicitly reported as **not reliably detectable** from Android system Private DNS APIs instead of being falsely classified.
 
 Allowed DNS queries are forwarded to the configured public upstream pool: Cloudflare (`1.1.1.1`), Quad9 (`9.9.9.9`) and Google DNS (`8.8.8.8`).
 
@@ -86,12 +88,12 @@ The branch CI additionally validates the manifest, APK archive integrity and SHA
 | `DnsPacket` | Strict IPv4/UDP/DNS parsing and upstream response validation. |
 | `DnsUpstreamPool` | Resolver health scoring, stale-latency aging, cooldown and bounded half-open recovery. |
 | `BlocklistManager` | Offline bootstrap, remote list parsing/cache, user rules and memory-bounded hashed lookup. |
-| `PrivateDnsHelper` | Diagnostics for Android Private DNS conflicts. |
+| `PrivateDnsHelper` + `DnsPrivacyDiagnostics` | System Private DNS inspection plus testable conflict/risk classification; per-app DoH is deliberately not claimed as detectable. |
 | `SystemLogStore` / `LogStore` | Local diagnostics and blocking records. |
 
 ## Limitations
 
-DNS filtering cannot reliably remove ads served from the same hostname as wanted content. Applications that use their own encrypted DNS/DoH path can bypass ordinary DNS interception. Per-app attribution depends on Android platform support. The v1.6.0 development branch is **not release-ready** until the manual-device lifecycle/stability gate is completed, including physical validation of the new heartbeat across idle, sleep/wake and network transitions.
+DNS filtering cannot reliably remove ads served from the same hostname as wanted content. Applications that use their own encrypted DNS/DoH path can bypass ordinary DNS interception, and Android's system Private DNS APIs cannot reliably identify that behavior per app. Per-app attribution depends on Android platform support. The v1.6.0 development branch is **not release-ready** until the manual-device lifecycle/stability gate is completed, including physical validation of the new heartbeat across idle, sleep/wake and network transitions.
 
 ## Development roadmap
 
@@ -108,7 +110,7 @@ Because the current Android roadmap has no finite checkbox denominator, the corr
 
 ## 🔎 Search Keywords
 
-`android ad blocker` • `android DNS blocker` • `local VPN ad blocker` • `tracker blocker Android` • `no root ad blocker` • `privacy DNS filter` • `Android VpnService DNS` • `malicious domain blocker` • `offline blocklist Android` • `DNS filtering app` • `SWIR xADKiller` • `Android privacy tool`
+`android ad blocker` • `android DNS blocker` • `local VPN ad blocker` • `tracker blocker Android` • `no root ad blocker` • `privacy DNS filter` • `Android VpnService DNS` • `malicious domain blocker` • `offline blocklist Android` • `DNS filtering app` • `Private DNS diagnostics` • `DoH compatibility Android` • `SWIR xADKiller` • `Android privacy tool`
 
 <div align="center">
 
