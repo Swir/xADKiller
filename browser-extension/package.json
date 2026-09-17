@@ -16,6 +16,7 @@
     "test:benchmark": "node tests/chrome-blocking-benchmark.mjs",
     "test:shadow-soak": "node tests/chrome-shadow-mutation-soak.mjs",
     "test:real-page": "node tests/chrome-real-page-soak.mjs",
+    "test:performance": "node tests/chrome-performance-budget.mjs",
     "build:legacy": "node tools/build.mjs"
   },
   "devDependencies": {
