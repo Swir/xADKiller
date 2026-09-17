@@ -3,6 +3,7 @@
   window.__xadKillerInjected = true;
 
   const DATA = globalThis.XAD_COSMETIC_DATA || { generic: [], scoped: [], meta: {} };
+  const RECOVERY_KEY = "xadHeuristicRecoverySitesV1";
   const BASE_SELECTORS = [
     ".adsbygoogle","[data-ad-client]","[data-ad-slot]","[data-ad-unit]","[data-adunit]",
     "[id^='google_ads_']","[id*='google_ads_iframe']","iframe[src*='doubleclick.net']",
@@ -26,6 +27,7 @@
   let autoSkip = true;
   let smartEnabled = true;
   let allowSites = [];
+  let heuristicRecoverySites = {};
   let customCosmetic = {};
   let learnWeights = {};
   let hiddenCount = 0;
@@ -49,7 +51,16 @@
       return d && (host === d || host.endsWith("." + d));
     });
   }
-  function active() { return enabled && !siteAllowed(); }
+  function heuristicRecoveryActive(now = Date.now()) {
+    const host = normalizeHost(location.hostname);
+    if (!host || !heuristicRecoverySites || typeof heuristicRecoverySites !== "object") return false;
+    return Object.entries(heuristicRecoverySites).some(([entry, rawUntil]) => {
+      const d = normalizeHost(entry);
+      const until = Number(rawUntil || 0);
+      return d && Number.isFinite(until) && until > now && (host === d || host.endsWith("." + d));
+    });
+  }
+  function active() { return enabled && !siteAllowed() && !heuristicRecoveryActive(); }
   function fnv1a(text) {
     let h = 0x811c9dc5;
     for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); }
@@ -201,8 +212,6 @@
   function scheduleScan() {
     if (!active()) return;
     clearTimeout(scanTimer);
-    // Coalesce a burst of DOM mutations into one bounded full-page scan. Scanning
-    // only the last added node can miss an ad inserted earlier in the same burst.
     scanTimer = setTimeout(() => scan(document), 45);
   }
   function updateWeights(tokens, delta) {
@@ -298,12 +307,13 @@
     begin();
   }
   function refreshPrefs() {
-    chrome.storage.local.get({ enabled:true, mode:"standard", autoSkip:true, smartEnabled:true, allowSites:[], customCosmetic:{}, learnWeights:{} }, (prefs) => {
+    chrome.storage.local.get({ enabled:true, mode:"standard", autoSkip:true, smartEnabled:true, allowSites:[], [RECOVERY_KEY]:{}, customCosmetic:{}, learnWeights:{} }, (prefs) => {
       enabled = prefs.enabled !== false;
       mode = prefs.mode === "ultra" ? "ultra" : "standard";
       autoSkip = prefs.autoSkip !== false;
       smartEnabled = prefs.smartEnabled !== false;
       allowSites = Array.isArray(prefs.allowSites) ? prefs.allowSites : [];
+      heuristicRecoverySites = prefs[RECOVERY_KEY] && typeof prefs[RECOVERY_KEY] === "object" ? prefs[RECOVERY_KEY] : {};
       customCosmetic = prefs.customCosmetic && typeof prefs.customCosmetic === "object" ? prefs.customCosmetic : {};
       learnWeights = prefs.learnWeights && typeof prefs.learnWeights === "object" ? prefs.learnWeights : {};
       rebuildCosmeticCss();
@@ -314,15 +324,19 @@
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg?.type === "getPageStats") {
       const host = normalizeHost(location.hostname);
-      sendResponse({ ok:true, hidden:hiddenCount, smart:smartHidden, skipped:skippedCount, active:active(), learned:Object.keys(learnWeights).length, custom:Array.isArray(customCosmetic?.[host]) ? customCosmetic[host].length : 0 });
+      sendResponse({ ok:true, hidden:hiddenCount, smart:smartHidden, skipped:skippedCount, active:active(), recovery:heuristicRecoveryActive(), learned:Object.keys(learnWeights).length, custom:Array.isArray(customCosmetic?.[host]) ? customCosmetic[host].length : 0 });
       return false;
     }
     if (msg?.type === "rescan") { refreshPrefs(); sendResponse({ ok:true }); return false; }
     if (msg?.type === "startPicker") { sendResponse({ ok:startPicker() }); return false; }
     if (msg?.type === "markFalsePositive") {
+      const hadFalsePositive = !!lastSmart?.el;
       if (lastSmart?.el) restoreElement(lastSmart.el);
       if (lastSmart?.tokens) updateWeights(lastSmart.tokens, -3);
-      sendResponse({ ok:!!lastSmart });
+      if (hadFalsePositive) {
+        try { chrome.runtime.sendMessage({ type:"setHeuristicSiteRecovery", host:location.hostname, minutes:15 }); } catch (_) {}
+      }
+      sendResponse({ ok:hadFalsePositive, recoveryMinutes:hadFalsePositive ? 15 : 0 });
       lastSmart = null;
       return false;
     }
@@ -336,6 +350,7 @@
     if (changes.autoSkip) autoSkip = changes.autoSkip.newValue !== false;
     if (changes.smartEnabled) smartEnabled = changes.smartEnabled.newValue !== false;
     if (changes.allowSites) allowSites = Array.isArray(changes.allowSites.newValue) ? changes.allowSites.newValue : [];
+    if (changes[RECOVERY_KEY]) heuristicRecoverySites = changes[RECOVERY_KEY].newValue && typeof changes[RECOVERY_KEY].newValue === "object" ? changes[RECOVERY_KEY].newValue : {};
     if (changes.customCosmetic) customCosmetic = changes.customCosmetic.newValue || {};
     if (changes.learnWeights) learnWeights = changes.learnWeights.newValue || {};
     rebuildCosmeticCss();
