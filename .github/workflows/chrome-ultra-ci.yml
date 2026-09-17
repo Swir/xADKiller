@@ -18,7 +18,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 28
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: browser-extension
@@ -62,6 +62,7 @@ jobs:
           node --check tests/chrome-temporary-pause-runtime.mjs
           node --check tests/chrome-feed-guard-runtime.mjs
           node --check tests/chrome-blocking-benchmark.mjs
+          node --check tests/chrome-shadow-mutation-soak.mjs
           node --check tools/validate-v150-safety.mjs
       - name: GitHub feed integrity regression test
         run: npm run test:feeds
@@ -69,6 +70,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Chromium TITAN runtime test
         run: timeout --signal=TERM --kill-after=10s 300s npm run test:chrome
+      - name: Chromium Shadow DOM mutation soak
+        run: timeout --signal=TERM --kill-after=10s 180s npm run test:shadow-soak
       - name: Chromium adaptive static boost test
         run: timeout --signal=TERM --kill-after=10s 180s npm run test:boost
       - name: Chromium no-COMPAT regression test
