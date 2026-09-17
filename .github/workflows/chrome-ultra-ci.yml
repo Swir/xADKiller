@@ -5,6 +5,7 @@ on:
     branches: [ main, chrome-titan-v140, chrome-v141-pl-en, chrome-v150-adaptive-memory ]
     paths:
       - "browser-extension/**"
+      - "browser-intelligence/**"
       - "assets/readme/chrome/**"
       - "ci/progress_svg.py"
       - ".github/workflows/chrome-ultra-ci.yml"
@@ -70,9 +71,12 @@ jobs:
           node --check tests/chrome-shadow-mutation-soak.mjs
           node --check tests/chrome-real-page-soak.mjs
           node --check tests/chrome-performance-budget.mjs
+          node --check tools/validate-feed-checksums.mjs
           node --check tools/validate-v150-safety.mjs
       - name: GitHub feed integrity regression test
         run: npm run test:feeds
+      - name: Production GitHub feed checksum audit
+        run: npm run test:feed-checksums
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Chromium TITAN runtime test
