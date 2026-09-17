@@ -288,14 +288,10 @@ public class AdBlockVpnServiceV121 extends VpnService {
                 byte[] buf = new byte[8192];
                 DatagramPacket response = new DatagramPacket(buf, buf.length);
                 socket.receive(response);
-                if (response.getLength() < 12) {
-                    lastError = "short response from " + server;
+                if (!DnsPacket.isValidUpstreamResponse(query, buf, response.getLength())) {
+                    lastError = "mismatched response from " + server;
                     UPSTREAM_POOL.recordFailure(server, System.currentTimeMillis());
-                    continue;
-                }
-                if (query.length >= 2 && (buf[0] != query[0] || buf[1] != query[1])) {
-                    lastError = "transaction id mismatch from " + server;
-                    UPSTREAM_POOL.recordFailure(server, System.currentTimeMillis());
+                    SystemLogStore.warn(this, "UPSTREAM", "Odrzucono niepasującą odpowiedź DNS • server=" + server);
                     continue;
                 }
                 long rttMs = Math.max(1L, (System.nanoTime() - startedNs) / 1_000_000L);
