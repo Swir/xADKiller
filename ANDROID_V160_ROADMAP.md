@@ -14,7 +14,7 @@ This branch develops the Android APK independently from the current stable 1.5.1
 - Bundled offline starter list: **95 high-confidence domains**, with larger maintained lists loaded at runtime.
 - DNS parser hardening is GREEN: rejects IPv4 fragments, inconsistent IP/UDP lengths, response packets, non-standard opcodes, ambiguous multi-question DNS messages and invalid source port 0.
 - Upstream DNS response validation rejects mismatched question/name/type/class, malformed responses and truncated replies.
-- Upstream DNS circuit-breaker tests are GREEN, including half-open recovery and bounded probe latency.
+- Upstream DNS health scoring is GREEN: failure cooldown/half-open recovery remains bounded, while persistently slow but successful resolvers are demoted without being marked failed and can recover after sustained fast responses.
 - Blocklist update hardening evaluates **normalized unique-domain counts**, preventing a duplicate-inflated remote feed from passing minimum-size or same-mode anti-shrink checks.
 - Privacy hardening: Android backup is disabled for local xADKiller state; cleartext traffic remains disabled; CI enforces these invariants and rejects QUERY_ALL_PACKAGES.
 - Release remains blocked until manual-device VPN lifecycle, Wi-Fi/mobile transitions, sleep/wake, real-app behavior and longer stability checks are satisfactory.
@@ -47,7 +47,7 @@ No Release until all relevant build, lint, regression, stability, privacy, DNS/V
 - VPN start/stop/restart/boot lifecycle regression coverage where possible.
 - Parser/blocklist regression fixtures, including duplicate-inflated update rejection.
 - DNS packet malformed/fragmented/query-shape regression fixtures.
-- DNS upstream failover/half-open recovery tests.
+- DNS upstream failover/half-open recovery and persistent-slow-resolver recovery tests.
 - Memory/large-list stress checks.
 - Manual device tests for Wi-Fi ↔ mobile data, sleep/wake and longer VPN stability.
 - No Release from this branch until manual Android device validation is also satisfactory.
