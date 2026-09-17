@@ -8,6 +8,7 @@ const LIVE_SHIELD = "https://raw.githubusercontent.com/Swir/xADKiller/live-shiel
 const LIVE_MATRIX = "https://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json";
 const TITAN = "https://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-titan-feed.json";
 const NOW_ISO = new Date().toISOString();
+const EXPIRES_7D_ISO = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
 function response(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers:{ "content-type":"application/json" } });
@@ -88,6 +89,16 @@ const healthyTitan = {
     { regex:"commercial", types:["media"] }
   ]
 };
+function v2(feed, version = "2026.09.18.1") {
+  return {
+    ...feed,
+    schema:2,
+    feed_version:version,
+    updated_at:NOW_ISO,
+    expires_at:EXPIRES_7D_ISO,
+    rollback:{ previous_version:"2026.09.17.1", previous_ref:"feed-data/2026.09.17.1" }
+  };
+}
 
 {
   const guard = await makeGuard({ [LIVE_SHIELD]:healthyShield, [LIVE_MATRIX]:healthyMatrix, [TITAN]:healthyTitan });
@@ -100,7 +111,7 @@ const healthyTitan = {
     if (feed.successCount !== 1 || feed.failureCount !== 0 || feed.consecutiveFailures !== 0) {
       throw new Error(`bad successful health counters for ${kind}: ${JSON.stringify(feed)}`);
     }
-    if (feed.lastVersion !== "2026.09.17.1" || !feed.lastSuccessAt || feed.lastError) {
+    if (feed.lastVersion !== "2026.09.17.1" || feed.lastSchema !== 1 || !feed.lastSuccessAt || feed.lastError) {
       throw new Error(`bad successful health metadata for ${kind}: ${JSON.stringify(feed)}`);
     }
   }
@@ -108,12 +119,55 @@ const healthyTitan = {
 }
 
 {
-  const guard = await makeGuard({ [LIVE_SHIELD]:{ ...healthyShield, schema:2 } });
-  await expectReject(guard.fetch(LIVE_SHIELD), "schema mismatch", "schema");
+  const guard = await makeGuard({ [LIVE_SHIELD]:v2(healthyShield), [LIVE_MATRIX]:v2(healthyMatrix), [TITAN]:v2(healthyTitan) });
+  await guard.fetch(LIVE_SHIELD);
+  await guard.fetch(LIVE_MATRIX);
+  await guard.fetch(TITAN);
+  const health = await guard.XAD_FEED_GUARD.readHealth();
+  for (const kind of ["live-shield", "live-matrix", "titan"]) {
+    const feed = requireFeed(health, kind);
+    if (feed.lastSchema !== 2 || feed.lastVersion !== "2026.09.18.1" || feed.failureCount !== 0) {
+      throw new Error(`v2 contract was not accepted/recorded for ${kind}: ${JSON.stringify(feed)}`);
+    }
+  }
+}
+
+{
+  const guard = await makeGuard({ [LIVE_SHIELD]:{ ...healthyShield, schema:3 } });
+  await expectReject(guard.fetch(LIVE_SHIELD), "unsupported schema", "schema");
   const feed = requireFeed(await guard.XAD_FEED_GUARD.readHealth(), "live-shield");
   if (feed.failureCount !== 1 || feed.consecutiveFailures !== 1 || feed.lastError !== "schema") {
     throw new Error(`schema failure was not recorded safely: ${JSON.stringify(feed)}`);
   }
+}
+
+{
+  const guard = await makeGuard({ [LIVE_SHIELD]:{ ...v2(healthyShield), expires_at:"not-a-date" } });
+  await expectReject(guard.fetch(LIVE_SHIELD), "invalid v2 expiry", "expires_at");
+}
+
+{
+  const expired = new Date(Date.now() - 60_000).toISOString();
+  const guard = await makeGuard({ [LIVE_MATRIX]:{ ...v2(healthyMatrix), expires_at:expired } });
+  await expectReject(guard.fetch(LIVE_MATRIX), "expired v2 feed", "expired_feed");
+}
+
+{
+  const tooFar = new Date(Date.now() + 61 * 24 * 60 * 60 * 1000).toISOString();
+  const guard = await makeGuard({ [TITAN]:{ ...v2(healthyTitan), expires_at:tooFar } });
+  await expectReject(guard.fetch(TITAN), "overlong v2 lifetime", "expiry_window");
+}
+
+{
+  const guard = await makeGuard({ [LIVE_SHIELD]:{ ...v2(healthyShield), rollback:{ previous_version:"2026.09.17.1", previous_ref:"https://evil.example/payload.js" } } });
+  await expectReject(guard.fetch(LIVE_SHIELD), "remote rollback URL", "rollback_ref");
+}
+
+{
+  const same = v2(healthyShield);
+  same.rollback = { previous_version:same.feed_version, previous_ref:"feed-data/current" };
+  const guard = await makeGuard({ [LIVE_SHIELD]:same });
+  await expectReject(guard.fetch(LIVE_SHIELD), "same-version rollback", "rollback_same_version");
 }
 
 {
@@ -167,4 +221,4 @@ const healthyTitan = {
   if (feed.failureCount !== 1 || feed.lastError !== "http_503") throw new Error(`HTTP failure health missing: ${JSON.stringify(feed)}`);
 }
 
-console.log("[xADKiller FEED GUARD CI] PASS • schema/age/anti-shrink guards + local health counters verified for Live Shield, Live Matrix and TITAN");
+console.log("[xADKiller FEED GUARD CI] PASS • schema v1 compatibility + schema v2 expiry/rollback contract + age/anti-shrink guards + local health counters verified");
