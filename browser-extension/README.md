@@ -14,7 +14,7 @@
 
 <img width="100%" src="../assets/readme/chrome/progress-card.svg" alt="xADKiller Chrome v1.5.0 development progress" />
 
-**Development progress:** **65.4% — 17/26 verified v1.5.0 roadmap items.**  
+**Development progress:** **73.1% — 19/26 verified v1.5.0 roadmap items.**  
 **Release readiness:** **BLOCKED** — manual browser/beta validation and the remaining hardening items are not complete.
 
 | Item | Status |
@@ -39,7 +39,7 @@
 | 🧠 TITAN Adaptive Memory | Persists only promoted high-confidence third-party ad/tracker hosts, with TTL, bounds and a user reset. |
 | 🧩 Smart DOM / Shadow protection | Hides ad containers in normal, open-shadow and closed-shadow DOM while protecting normal page UI. |
 | ⏭️ Smart Auto-Skip | Handles explicit ad-skip controls conservatively. |
-| 🩹 Breakage Guard | Temporarily pauses protection for the current site and restores it without deleting a permanent allowlist entry. |
+| 🩹 Breakage Guard | Uses a two-stage recovery path: first pause only local heuristic/cosmetic/learning layers while core DNR stays enabled, then offer the existing full temporary site pause only when needed. Recovery events stay in a bounded local history that the user can clear; no telemetry is sent. |
 | 🌐 Live Shield / Live Matrix / TITAN feed | Pulls verified **data-only** protection rules/signatures from the official GitHub repository. |
 | 🔐 Feed Guard | Rejects malformed, stale, future-dated, undersized or suspiciously shrunken data feeds and preserves known-good cache fallback. |
 | 📐 Performance budget | Runs a reproducible Chromium regression gate for service-worker readiness, mutation injection, protection settling, renderer responsiveness and page-heap ceilings. |
@@ -85,7 +85,7 @@ The v1.5 branch runs Chromium and integrity gates for:
 - no-COMPAT regression;
 - PL/EN language persistence plus populated Rule Budget diagnostics;
 - Adaptive Memory persistence/privacy/reset;
-- Breakage Guard pause/resume plus login/checkout/media safety;
+- two-stage Breakage Guard: heuristic-only recovery keeps core DNR active, restores normal/open/closed Shadow DOM elements, preserves login/checkout/media UI, records only bounded local recovery events and still verifies full temporary pause/resume as the escalation path;
 - GitHub Feed Guard validation and local health diagnostics;
 - deterministic production-feed checksum/metadata verification against the exact GitHub payloads;
 - deterministic blocking effectiveness;
@@ -100,7 +100,7 @@ python3 ../ci/progress_svg.py chrome --check
 
 ## Privacy
 
-xADKiller stores settings and adaptive protection state locally in the browser profile. The v1.5 Adaptive Memory design intentionally avoids persisting full page URLs, request paths or originating browsing-history domains. There is no xADKiller advertising telemetry/profile backend and no remote executable code.
+xADKiller stores settings and adaptive protection state locally in the browser profile. The v1.5 Adaptive Memory design intentionally avoids persisting full page URLs, request paths or originating browsing-history domains. Breakage Guard stores only a bounded local site-recovery event history for user-visible rollback diagnostics and offers a local clear control; there is no recovery telemetry. There is no xADKiller advertising telemetry/profile backend and no remote executable code.
 
 See [`PRIVACY.md`](PRIVACY.md) for the store-facing privacy policy.
 
