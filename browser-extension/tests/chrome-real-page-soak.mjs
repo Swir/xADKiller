@@ -75,7 +75,7 @@ async function findWorker(browser, timeoutMs = 25000) {
       if (!worker) continue;
       try {
         const manifest = await worker.evaluate(() => chrome.runtime.getManifest());
-        if (manifest?.name?.includes("xADKiller") && manifest?.permissions?.includes("declarativeNetRequest")) {
+        if (manifest?.permissions?.includes("declarativeNetRequest") && manifest?.action?.default_popup === "popup.html") {
           return {
             worker,
             extensionId:await worker.evaluate(() => chrome.runtime.id),
