@@ -79,6 +79,8 @@ const hostEl = document.getElementById("host");
 const siteToggle = document.getElementById("siteToggle");
 const tempPauseBtn = document.getElementById("tempPauseBtn");
 const tempPauseInfo = document.getElementById("tempPauseInfo");
+const heuristicRecoveryBtn = document.getElementById("heuristicRecoveryBtn");
+const heuristicRecoveryInfo = document.getElementById("heuristicRecoveryInfo");
 const pauseBadge = document.getElementById("pauseBadge");
 const networkCount = document.getElementById("networkCount");
 const hiddenCount = document.getElementById("hiddenCount");
@@ -93,12 +95,17 @@ const titanInfo = document.getElementById("titanInfo");
 const memoryBadge = document.getElementById("memoryBadge");
 const memoryInfo = document.getElementById("memoryInfo");
 const resetMemoryBtn = document.getElementById("resetMemoryBtn");
+const clearRecoveryHistoryBtn = document.getElementById("clearRecoveryHistoryBtn");
+const recoveryHistoryInfo = document.getElementById("recoveryHistoryInfo");
 
 let activeTab = null;
 let host = "";
 let siteAllowed = false;
 let temporaryPaused = false;
 let temporaryMinutesLeft = 0;
+let heuristicRecoveryActive = false;
+let heuristicRecoveryMinutesLeft = 0;
+let rollbackHistoryCount = 0;
 let protectionEnabled = true;
 let stateBusy = false;
 let languageBusy = false;
@@ -129,27 +136,45 @@ function renderSiteControls() {
   tempPauseBtn.textContent = temporaryPaused ? t("resumeSiteNow", "Resume now") : t("pauseSite15", "Pause 15 min");
   tempPauseBtn.className = temporaryPaused ? "secondary warningButton active" : "secondary warningButton";
 
+  heuristicRecoveryBtn.disabled = !usable || persistentAllowed || !protectionEnabled || temporaryPaused;
+  heuristicRecoveryBtn.textContent = heuristicRecoveryActive ? t("heuristicRecoveryStop", "Restore heuristics now") : t("heuristicRecovery15", "Try safe recovery 15 min");
+  heuristicRecoveryBtn.className = heuristicRecoveryActive ? "secondary warningButton active memoryAction" : "secondary memoryAction";
+
   if (!usable) {
     pauseBadge.textContent = t("siteUnavailable", "N/A");
     pauseBadge.className = "pauseBadge off";
     tempPauseInfo.textContent = t("pauseUnsupported", "Temporary pause is available on normal HTTP/HTTPS websites.");
+    heuristicRecoveryInfo.textContent = t("heuristicRecoveryUnsupported", "Safe recovery is available on normal HTTP/HTTPS websites.");
   } else if (temporaryPaused) {
     pauseBadge.textContent = t("sitePaused", "PAUSED");
     pauseBadge.className = "pauseBadge paused";
     tempPauseInfo.textContent = `${t("pauseActive", "Protection temporarily paused")} • ${formatNumber(temporaryMinutesLeft)} ${t("minutesLeft", "min left")}`;
+    heuristicRecoveryInfo.textContent = t("heuristicRecoveryEscalated", "Full site pause is active; core network filtering is also bypassed for this site.");
   } else if (persistentAllowed) {
     pauseBadge.textContent = t("siteAllowedStatus", "ALLOWED");
     pauseBadge.className = "pauseBadge paused";
     tempPauseInfo.textContent = t("persistentAllowHint", "This site is on your permanent allowlist. Re-enable protection to use temporary pause.");
+    heuristicRecoveryInfo.textContent = t("heuristicRecoveryAllowed", "The permanent allowlist already bypasses protection for this site.");
   } else if (!protectionEnabled) {
     pauseBadge.textContent = t("statusOff", "DISABLED");
     pauseBadge.className = "pauseBadge off";
     tempPauseInfo.textContent = t("globalProtectionOffHint", "Global protection is disabled.");
+    heuristicRecoveryInfo.textContent = t("heuristicRecoveryGlobalOff", "Enable global protection before using safe recovery.");
+  } else if (heuristicRecoveryActive) {
+    pauseBadge.textContent = t("heuristicRecoveryStatus", "RECOVERY");
+    pauseBadge.className = "pauseBadge paused";
+    tempPauseInfo.textContent = t("pauseSiteHint", "Temporary pause is for fixing a broken site and resumes automatically.");
+    heuristicRecoveryInfo.textContent = `${t("heuristicRecoveryActive", "Heuristic layers paused; core network rules remain enabled")} • ${formatNumber(heuristicRecoveryMinutesLeft)} ${t("minutesLeft", "min left")}`;
   } else {
     pauseBadge.textContent = t("siteProtected", "PROTECTED");
     pauseBadge.className = "pauseBadge off";
     tempPauseInfo.textContent = t("pauseSiteHint", "Temporary pause is for fixing a broken site and resumes automatically.");
+    heuristicRecoveryInfo.textContent = t("heuristicRecoveryHint", "Safe recovery pauses local heuristic layers first while core network rules stay enabled.");
   }
+  recoveryHistoryInfo.textContent = rollbackHistoryCount > 0
+    ? `${t("recoveryHistory", "Local recovery history")}: ${formatNumber(rollbackHistoryCount)} ${t("events", "events")}`
+    : t("recoveryHistoryHint", "Breakage Guard history stays local and contains only bounded recovery events.");
+  clearRecoveryHistoryBtn.disabled = rollbackHistoryCount <= 0;
 }
 
 async function refresh() {
@@ -158,12 +183,17 @@ async function refresh() {
   try { if (activeTab && /^https?:/i.test(activeTab.url || "")) host = new URL(activeTab.url).hostname; } catch (_) {}
   hostEl.textContent = host || t("unsupportedPage", "Browser page");
 
-  const [state, pause] = await Promise.all([
+  const [state, pause, recovery, history] = await Promise.all([
     send({ type:"getState", host }),
-    host ? send({ type:"getTemporarySitePause", host }) : Promise.resolve({ ok:true, paused:false, minutesLeft:0 })
+    host ? send({ type:"getTemporarySitePause", host }) : Promise.resolve({ ok:true, paused:false, minutesLeft:0 }),
+    host ? send({ type:"getHeuristicSiteRecovery", host }) : Promise.resolve({ ok:true, active:false, minutesLeft:0 }),
+    send({ type:"getBreakageRollbackHistory" })
   ]);
   temporaryPaused = !!pause?.paused;
   temporaryMinutesLeft = Number(pause?.minutesLeft || 0);
+  heuristicRecoveryActive = !!recovery?.active;
+  heuristicRecoveryMinutesLeft = Number(recovery?.minutesLeft || 0);
+  rollbackHistoryCount = Array.isArray(history?.items) ? history.items.length : 0;
 
   if (state?.ok) {
     protectionEnabled = !!state.enabled;
@@ -262,6 +292,18 @@ siteToggle.addEventListener("click", async () => {
   stateBusy = false;
   refresh();
 });
+heuristicRecoveryBtn.addEventListener("click", async () => {
+  if (!host || stateBusy) return;
+  stateBusy = true;
+  heuristicRecoveryBtn.disabled = true;
+  const result = await send({ type:"setHeuristicSiteRecovery", host, minutes:heuristicRecoveryActive ? 0 : 15 });
+  if (result?.ok) {
+    await rescan();
+    try { if (activeTab?.id) chrome.tabs.reload(activeTab.id); } catch (_) {}
+  }
+  stateBusy = false;
+  refresh();
+});
 tempPauseBtn.addEventListener("click", async () => {
   if (!host || stateBusy) return;
   stateBusy = true;
@@ -297,7 +339,7 @@ document.getElementById("pickerBtn").addEventListener("click", async () => {
 });
 document.getElementById("falseBtn").addEventListener("click", async () => {
   if (activeTab) await tabMessage(activeTab.id, { type:"markFalsePositive" });
-  refresh();
+  setTimeout(refresh, 120);
 });
 resetMemoryBtn.addEventListener("click", async () => {
   if (stateBusy) return;
@@ -307,6 +349,14 @@ resetMemoryBtn.addEventListener("click", async () => {
   resetMemoryBtn.disabled = true;
   await send({ type:"resetTitanMemory" });
   resetMemoryBtn.disabled = false;
+  stateBusy = false;
+  refresh();
+});
+clearRecoveryHistoryBtn.addEventListener("click", async () => {
+  if (stateBusy || rollbackHistoryCount <= 0) return;
+  stateBusy = true;
+  clearRecoveryHistoryBtn.disabled = true;
+  await send({ type:"clearBreakageRollbackHistory" });
   stateBusy = false;
   refresh();
 });
@@ -330,6 +380,6 @@ document.getElementById("githubBtn").addEventListener("click", () => {
 async function init() {
   await initializeLanguage();
   await refresh();
-  setInterval(() => { if (temporaryPaused) refresh(); }, 30000);
+  setInterval(() => { if (temporaryPaused || heuristicRecoveryActive) refresh(); }, 30000);
 }
 init();
