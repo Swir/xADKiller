@@ -42,10 +42,10 @@ Status: **in development / hardening** on `chrome-v150-adaptive-memory`.
 
 ### Phase 4 — Live Shield hardening
 
-- [ ] Add feed schema versioning and explicit expiry metadata to the published data contract.
+- [ ] Publish/migrate protection feeds to the v2 data contract with explicit expiry metadata. The extension-side Feed Guard already supports v1 for current production compatibility and validates v2 `expires_at` with bounded lifetime/expiry checks; this item stays open until the published production feeds are actually migrated.
 - [x] Reject stale or malformed feed payloads without replacing a known-good cache.
 - [x] Add deterministic feed checksums in the repository.
-- [ ] Add rollback metadata for bad rule-data releases.
+- [ ] Publish rollback metadata for bad rule-data releases. Feed Guard now validates v2 `rollback.previous_version` + safe repository-relative `previous_ref`, but this item stays open until that metadata exists in the published production feeds.
 
 ### Phase 5 — Store beta
 
