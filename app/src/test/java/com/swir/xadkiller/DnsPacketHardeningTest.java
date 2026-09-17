@@ -6,6 +6,7 @@ import static org.junit.Assert.assertNull;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 import org.junit.Test;
 
@@ -38,6 +39,16 @@ public class DnsPacketHardeningTest {
         byte[] packet = packet(query(0x0100, 1), 53000, 0x4000);
         DnsPacket.put16(packet, 24, packet.length);
         assertNull(DnsPacket.parseIpv4UdpQuery(packet, packet.length));
+    }
+
+    @Test public void rejectsUdpLengthSmallerThanIpv4Payload() {
+        byte[] packet = packet(query(0x0100, 1), 53000, 0x4000);
+        byte[] padded = Arrays.copyOf(packet, packet.length + 8);
+        DnsPacket.put16(padded, 2, padded.length);
+        // Leave the UDP length at the original datagram size. A TUN IPv4 packet
+        // with extra unexplained IP payload is malformed/ambiguous and must not
+        // be partially parsed as DNS.
+        assertNull(DnsPacket.parseIpv4UdpQuery(padded, padded.length));
     }
 
     @Test public void rejectsDnsResponseMasqueradingAsTunQuery() {
