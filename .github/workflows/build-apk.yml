@@ -3,11 +3,20 @@ name: Build xADKiller APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, android-v160-mega ]
+    paths:
+      - "app/**"
+      - "build.gradle"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "ci/**"
+      - "ANDROID_V160_ROADMAP.md"
+      - ".github/workflows/build-apk.yml"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,14 +39,30 @@ jobs:
           base64 -d ci/xadkiller-debug.keystore.b64 > "$HOME/.android/debug.keystore"
           chmod 600 "$HOME/.android/debug.keystore"
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey >/dev/null
+      - name: Android lint
+        run: gradle --no-daemon lintDebug
+      - name: Unit tests
+        run: gradle --no-daemon testDebugUnitTest
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
+      - name: Validate APK package
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -tq "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee /tmp/xadkiller-badging.txt
+          grep -q "package: name='com.swir.xadkiller.debug'" /tmp/xadkiller-badging.txt
+          grep -q "sdkVersion:'26'" /tmp/xadkiller-badging.txt
+          grep -q "targetSdkVersion:'35'" /tmp/xadkiller-badging.txt
       - name: APK checksum
-        run: sha256sum app/build/outputs/apk/debug/app-debug.apk
+        run: |
+          mkdir -p artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk artifacts/xADKiller-Android-dev-debug.apk
+          (cd artifacts && sha256sum xADKiller-Android-dev-debug.apk > SHA256SUMS.txt && sha256sum -c SHA256SUMS.txt)
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: xADKiller-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: xADKiller-Android-dev-tested
+          path: artifacts/*
           if-no-files-found: error
           retention-days: 30
