@@ -148,7 +148,8 @@ function v2(feed, version = "2026.09.18.1") {
 
 {
   const expired = new Date(Date.now() - 60_000).toISOString();
-  const guard = await makeGuard({ [LIVE_MATRIX]:{ ...v2(healthyMatrix), expires_at:expired } });
+  const updated = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const guard = await makeGuard({ [LIVE_MATRIX]:{ ...v2(healthyMatrix), updated_at:updated, expires_at:expired } });
   await expectReject(guard.fetch(LIVE_MATRIX), "expired v2 feed", "expired_feed");
 }
 
