@@ -13,6 +13,13 @@ on:
       - "ANDROID_V160_ROADMAP.md"
       - ".github/workflows/build-apk.yml"
 
+concurrency:
+  group: xadkiller-android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,14 +28,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Install Android 35
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Android 35 from runner SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v sdkmanager
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/aapt"
       - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -41,12 +52,13 @@ jobs:
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey >/dev/null
       - name: Android lint
         run: gradle --no-daemon lintDebug
-      - name: Unit tests
+      - name: Unit tests and blocking benchmark
         run: gradle --no-daemon testDebugUnitTest
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
       - name: Validate APK package
         run: |
+          set -euo pipefail
           APK=app/build/outputs/apk/debug/app-debug.apk
           test -s "$APK"
           unzip -tq "$APK"
@@ -57,12 +69,12 @@ jobs:
       - name: APK checksum
         run: |
           mkdir -p artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk artifacts/xADKiller-Android-dev-debug.apk
-          (cd artifacts && sha256sum xADKiller-Android-dev-debug.apk > SHA256SUMS.txt && sha256sum -c SHA256SUMS.txt)
-      - name: Upload APK
+          cp app/build/outputs/apk/debug/app-debug.apk artifacts/xADKiller-Android-v1.6.0-dev-debug.apk
+          (cd artifacts && sha256sum xADKiller-Android-v1.6.0-dev-debug.apk > SHA256SUMS.txt && sha256sum -c SHA256SUMS.txt)
+      - name: Upload tested development APK
         uses: actions/upload-artifact@v4
         with:
-          name: xADKiller-Android-dev-tested
+          name: xADKiller-Android-v1.6.0-dev-tested
           path: artifacts/*
           if-no-files-found: error
           retention-days: 30
