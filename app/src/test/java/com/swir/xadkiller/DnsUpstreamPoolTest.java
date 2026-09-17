@@ -21,6 +21,25 @@ public class DnsUpstreamPoolTest {
         assertEquals(1L, pool.successes("9.9.9.9"));
     }
 
+    @Test public void oneSuccessfulLatencySpikeIsDampenedButStillMarkedSlow() {
+        DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
+        pool.recordSuccess("1.1.1.1", 35L, 1_000L);
+        pool.recordSuccess("1.1.1.1", 40L, 1_100L);
+        int before = pool.timeoutMs("1.1.1.1", 1_101L);
+
+        // A valid 5s response may be caused by a one-off radio/scheduler stall.
+        // It must still count as slow, but it must not poison the EWMA enough to
+        // force the maximum timeout for many later DNS queries.
+        pool.recordSuccess("1.1.1.1", 5_000L, 1_200L);
+
+        assertEquals(1, pool.slowStreak("1.1.1.1"));
+        assertEquals(0, pool.failureStreak("1.1.1.1"));
+        assertEquals(3L, pool.successes("1.1.1.1"));
+        assertTrue(pool.timeoutMs("1.1.1.1", 1_201L) < 2_200);
+        assertTrue(pool.timeoutMs("1.1.1.1", 1_201L) >= before);
+        assertTrue(pool.snapshot(1_201L).contains("slow=1"));
+    }
+
     @Test public void persistentlySlowSuccessfulResolverIsDemotedWithoutFailure() {
         DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
         pool.recordSuccess("1.1.1.1", 1600L, 1_000L);
