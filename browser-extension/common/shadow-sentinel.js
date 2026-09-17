@@ -23,6 +23,7 @@
   ];
   const STYLE_TEXT = `${SELECTORS.join(",")}{display:none!important;visibility:hidden!important;max-height:0!important;min-height:0!important}`;
   const watched = new WeakSet();
+  const scheduledRoots = new WeakSet();
   const hidden = new Map();
   const styles = new Set();
   let enabled = false;
@@ -70,11 +71,18 @@
     }
   }
 
+  function setStyleText(style, css) {
+    if (!style) return;
+    try {
+      if (style.textContent !== css) style.textContent = css;
+    } catch (_) {}
+  }
+
   function updateStyles() {
     const css = active() ? STYLE_TEXT : "";
     for (const style of [...styles]) {
       if (!style?.isConnected) { styles.delete(style); continue; }
-      try { if (style.textContent !== css) style.textContent = css; } catch (_) {}
+      setStyleText(style, css);
     }
   }
 
@@ -91,7 +99,7 @@
     try { existing = root.querySelector?.("style[data-xadkiller-shadow-style='1']") || null; } catch (_) {}
     if (existing) {
       styles.add(existing);
-      try { existing.textContent = active() ? STYLE_TEXT : ""; } catch (_) {}
+      setStyleText(existing, active() ? STYLE_TEXT : "");
       return existing;
     }
     try {
@@ -104,6 +112,28 @@
     } catch (_) { return null; }
   }
 
+  function isOwnStyleMutation(mutation) {
+    const target = mutation?.target;
+    if (target instanceof Element && target.matches?.("style[data-xadkiller-shadow-style='1']")) return true;
+    for (const node of mutation?.addedNodes || []) {
+      const el = node instanceof Element ? node : node?.parentElement;
+      if (el?.matches?.("style[data-xadkiller-shadow-style='1']")) continue;
+      return false;
+    }
+    return (mutation?.addedNodes?.length || 0) > 0;
+  }
+
+  function scheduleScan(root) {
+    if (!active() || !root?.querySelectorAll || scheduledRoots.has(root)) return;
+    scheduledRoots.add(root);
+    setTimeout(() => {
+      scheduledRoots.delete(root);
+      if (!active()) return;
+      hideIn(root);
+      discover(root);
+    }, 0);
+  }
+
   function watchRoot(root) {
     if (!(root instanceof ShadowRoot) || watched.has(root)) return;
     watched.add(root);
@@ -111,15 +141,11 @@
     hideIn(root);
     const observer = new MutationObserver((mutations) => {
       if (!active()) return;
-      let needsScan = false;
       for (const mutation of mutations) {
-        if (mutation.addedNodes?.length) { needsScan = true; break; }
+        if (!mutation.addedNodes?.length || isOwnStyleMutation(mutation)) continue;
+        scheduleScan(root);
+        break;
       }
-      if (needsScan) queueMicrotask(() => {
-        installStyle(root);
-        hideIn(root);
-        discover(root);
-      });
     });
     observer.observe(root, { childList: true, subtree: true });
   }
@@ -157,14 +183,11 @@
 
   const docObserver = new MutationObserver((mutations) => {
     if (!active()) return;
-    let changed = false;
     for (const mutation of mutations) {
-      if (mutation.addedNodes?.length) { changed = true; break; }
+      if (!mutation.addedNodes?.length) continue;
+      scheduleScan(document);
+      break;
     }
-    if (changed) queueMicrotask(() => {
-      hideIn(document);
-      discover(document);
-    });
   });
 
   const begin = () => {
