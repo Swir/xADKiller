@@ -55,7 +55,6 @@ window.injectFixture=async function(){
     const sr=host.attachShadow({mode:'closed'}); const ad=document.createElement('div'); ad.className='adsbygoogle'; ad.textContent='CLOSED SHADOW AD '+i; sr.appendChild(ad); window.__closedAds.push(ad);
   }
   window.__injectMs=performance.now()-started;
-  window.__fixtureReady=true;
   return {normal,ads,injectMs:window.__injectMs};
 };
 </script></body></html>`;
@@ -67,8 +66,27 @@ const server = http.createServer((req, res) => {
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const port = server.address().port;
 
-function visibleStyle(style) {
-  return style && style.display !== "none" && style.visibility !== "hidden";
+async function findWorker(browser, timeoutMs = 25000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    for (const target of browser.targets()) {
+      if (target.type() !== "service_worker" || !target.url().startsWith("chrome-extension://")) continue;
+      const worker = await target.worker();
+      if (!worker) continue;
+      try {
+        const manifest = await worker.evaluate(() => chrome.runtime.getManifest());
+        if (manifest?.name?.includes("xADKiller") && manifest?.permissions?.includes("declarativeNetRequest")) {
+          return {
+            worker,
+            extensionId:await worker.evaluate(() => chrome.runtime.id),
+            version:String(manifest.version || "")
+          };
+        }
+      } catch (_) {}
+    }
+    await delay(200);
+  }
+  throw new Error("xADKiller service worker not ready");
 }
 
 async function snapshot(page) {
@@ -113,10 +131,20 @@ try {
     timeout:60000
   });
 
+  const ready = await findWorker(browser);
+  log("Extension ready", `v=${ready.version} • id=${ready.extensionId}`);
+  // Open the packaged popup once to force preference/service-worker hydration
+  // before navigating the first real-page fixture. Without this readiness gate,
+  // Chrome can race the first tab against extension registration in headless CI.
+  const popup = await browser.newPage();
+  await popup.goto(`chrome-extension://${ready.extensionId}/popup.html`, { waitUntil:"domcontentloaded", timeout:12000 });
+  await delay(250);
+  await popup.close();
+
   const page = await browser.newPage();
   page.setDefaultTimeout(12000);
   await page.goto(`http://realpage.xad.test:${port}/`, { waitUntil:"domcontentloaded", timeout:12000 });
-  await delay(350);
+  await delay(450);
   const heartbeatBefore = await page.evaluate(() => window.__heartbeat||0);
   const injected = await page.evaluate(async () => await window.injectFixture());
   log("Fixture injected", JSON.stringify(injected));
