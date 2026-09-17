@@ -11,7 +11,7 @@ Status: **in development / hardening** on `chrome-v150-adaptive-memory`.
 
 <img width="100%" src="../assets/readme/chrome/progress-mini.svg" alt="xADKiller Chrome v1.5.0 roadmap progress" />
 
-**Development progress:** **50.0% — 13/26 verified roadmap items.**  
+**Development progress:** **53.8% — 14/26 verified roadmap items.**  
 **Release readiness:** **BLOCKED** — manual browser/beta validation and the remaining hardening items are not complete.
 
 ### Phase 1 — Adaptive Memory
@@ -51,13 +51,13 @@ Status: **in development / hardening** on `chrome-v150-adaptive-memory`.
 
 - [x] Produce a tested beta ZIP from green CI.
 - [ ] Local benchmark and real browsing test.
-- [ ] Fix regressions without weakening tests and complete the broader real-page/performance soak.
+- [x] Add and stabilize a broader real-page mutation/performance soak without weakening tests.
 - [ ] Merge to `main` only after user approval.
 - [ ] Publish v1.5.0 update to Chrome Web Store.
 
 ## Release gate
 
-No merge or release based only on the 50.0% development counter or a green build. The release gate also requires the remaining functional/performance items, benchmark/integrity gates and manual browser regression validation to pass without known critical issues.
+No merge or release based only on the 53.8% development counter or a green build. The release gate also requires the remaining functional/performance items, benchmark/integrity gates and manual browser regression validation to pass without known critical issues.
 
 ## Later
 
