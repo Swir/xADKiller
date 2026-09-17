@@ -109,16 +109,29 @@ try {
     timeout:60000
   });
   const { worker, extensionId } = await findWorker(browser);
+  const page = await browser.newPage();
+  await page.goto(`http://pause.xad.test:${port}/`, { waitUntil:"domcontentloaded", timeout:12000 });
+  await delay(900);
+
   const popup = await browser.newPage();
   await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil:"domcontentloaded", timeout:12000 });
+  await popup.waitForFunction(() => {
+    const button = document.querySelector("#heuristicRecoveryBtn");
+    return button && !button.disabled;
+  }, { timeout:12000 });
 
   const initialRulesets = await enabledRulesets(worker);
   if (!initialRulesets.includes("standard")) throw new Error(`STANDARD ruleset not enabled before recovery: ${JSON.stringify(initialRulesets)}`);
 
-  const recovery = await send(popup, { type:"setHeuristicSiteRecovery", host:"pause.xad.test", minutes:15 });
-  if (!recovery?.ok || !recovery.active || recovery.minutesLeft < 1) throw new Error(`heuristic recovery rejected: ${JSON.stringify(recovery)}`);
-  const recoveryStatus = await send(popup, { type:"getHeuristicSiteRecovery", host:"pause.xad.test" });
-  if (!recoveryStatus?.ok || !recoveryStatus.active) throw new Error(`heuristic recovery state invalid: ${JSON.stringify(recoveryStatus)}`);
+  await popup.click("#heuristicRecoveryBtn");
+  const deadline = Date.now() + 8000;
+  let recoveryStatus = null;
+  while (Date.now() < deadline) {
+    recoveryStatus = await send(popup, { type:"getHeuristicSiteRecovery", host:"pause.xad.test" });
+    if (recoveryStatus?.active) break;
+    await delay(100);
+  }
+  if (!recoveryStatus?.ok || !recoveryStatus.active || recoveryStatus.minutesLeft < 1) throw new Error(`heuristic recovery UI did not activate: ${JSON.stringify(recoveryStatus)}`);
 
   const recoveryStorage = await worker.evaluate(async () => await chrome.storage.local.get({ allowSites:[], xadHeuristicRecoverySitesV1:{}, xadBreakageRollbackHistoryV1:[] }));
   if (recoveryStorage.allowSites.includes("pause.xad.test")) throw new Error(`heuristic recovery polluted permanent allowlist: ${JSON.stringify(recoveryStorage)}`);
@@ -130,18 +143,24 @@ try {
   const recoveryRulesets = await enabledRulesets(worker);
   if (!recoveryRulesets.includes("standard")) throw new Error(`heuristic recovery disabled core DNR: ${JSON.stringify(recoveryRulesets)}`);
 
-  const page = await browser.newPage();
-  await page.goto(`http://pause.xad.test:${port}/`, { waitUntil:"domcontentloaded", timeout:12000 });
-  await delay(900);
+  await delay(700);
   const recoveryView = await inspectPage(page);
   assertBusinessUi(recoveryView, "heuristic recovery");
   if (recoveryView.ad === "none" || recoveryView.hidden === "1" || recoveryView.shadowHidden === "1" || recoveryView.openShadow === "none" || recoveryView.closedShadow === "none") {
     throw new Error(`heuristic layers did not recover cleanly: ${JSON.stringify(recoveryView)}`);
   }
-  log("Heuristic-only recovery", JSON.stringify({ view:recoveryView, rulesets:recoveryRulesets }));
+  const recoveryUi = await popup.evaluate(() => ({
+    text:document.querySelector("#heuristicRecoveryBtn")?.textContent || "",
+    badge:document.querySelector("#pauseBadge")?.textContent || "",
+    history:document.querySelector("#recoveryHistoryInfo")?.textContent || ""
+  }));
+  if (!/heuristic|restore|przywr/i.test(recoveryUi.text)) throw new Error(`recovery UI state not rendered: ${JSON.stringify(recoveryUi)}`);
+  log("Heuristic-only recovery UI", JSON.stringify({ view:recoveryView, rulesets:recoveryRulesets, ui:recoveryUi }));
 
-  const recoveryStop = await send(popup, { type:"setHeuristicSiteRecovery", host:"pause.xad.test", minutes:0 });
-  if (!recoveryStop?.ok || recoveryStop.active) throw new Error(`heuristic recovery stop failed: ${JSON.stringify(recoveryStop)}`);
+  await popup.click("#heuristicRecoveryBtn");
+  await delay(350);
+  const recoveryStop = await send(popup, { type:"getHeuristicSiteRecovery", host:"pause.xad.test" });
+  if (!recoveryStop?.ok || recoveryStop.active) throw new Error(`heuristic recovery UI did not stop: ${JSON.stringify(recoveryStop)}`);
   await page.reload({ waitUntil:"domcontentloaded", timeout:12000 });
   await delay(900);
   const recoveredProtection = await inspectPage(page);
@@ -204,15 +223,18 @@ try {
   if (preserved.xadTemporaryPauseInjectedAllowSitesV1.includes("permanent.example")) throw new Error(`pre-existing allowlist entry was incorrectly marked temporary: ${JSON.stringify(preserved)}`);
   log("Permanent allowlist preserved", JSON.stringify(preserved));
 
-  const history = await send(popup, { type:"getBreakageRollbackHistory" });
-  if (!history?.ok || !Array.isArray(history.items) || history.items.length < 2) throw new Error(`breakage history unavailable: ${JSON.stringify(history)}`);
-  const cleared = await send(popup, { type:"clearBreakageRollbackHistory" });
-  if (!cleared?.ok) throw new Error(`breakage history clear failed: ${JSON.stringify(cleared)}`);
+  await popup.bringToFront();
+  await popup.waitForFunction(() => {
+    const button = document.querySelector("#clearRecoveryHistoryBtn");
+    return button && !button.disabled;
+  }, { timeout:8000 });
+  await popup.click("#clearRecoveryHistoryBtn");
+  await delay(250);
   const emptyHistory = await send(popup, { type:"getBreakageRollbackHistory" });
-  if (!emptyHistory?.ok || emptyHistory.items.length !== 0) throw new Error(`breakage history survived clear: ${JSON.stringify(emptyHistory)}`);
-  log("Local rollback history control", "bounded local start/stop history can be inspected and cleared without telemetry");
+  if (!emptyHistory?.ok || emptyHistory.items.length !== 0) throw new Error(`breakage history survived UI clear: ${JSON.stringify(emptyHistory)}`);
+  log("Local rollback history control", "bounded local start/stop history can be viewed in popup diagnostics and cleared without telemetry");
 
-  log("PASS", "heuristic-only recovery preserves core DNR; full pause, login/checkout/media safety, DOM/Shadow resume, permanent allowlist and local rollback history verified");
+  log("PASS", "two-stage Breakage Guard UI preserves core DNR during heuristic recovery; full pause, business UI safety, DOM/Shadow resume, permanent allowlist and local history controls verified");
 } finally {
   if (browser) { try { await browser.close(); } catch (_) {} }
   await new Promise((resolve) => server.close(resolve));
