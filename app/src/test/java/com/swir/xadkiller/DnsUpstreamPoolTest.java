@@ -34,16 +34,19 @@ public class DnsUpstreamPoolTest {
         assertTrue(pool.snapshot(1_201L).contains("slow=2"));
     }
 
-    @Test public void fastResponsesDecaySlowPenaltyAndAllowRecovery() {
+    @Test public void fastResponsesDecaySlowPenaltyAndEwmaUntilResolverRecovers() {
         DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
         pool.recordSuccess("1.1.1.1", 1800L, 1_000L);
         pool.recordSuccess("1.1.1.1", 1700L, 1_100L);
         assertEquals(2, pool.slowStreak("1.1.1.1"));
 
-        pool.recordSuccess("1.1.1.1", 20L, 1_200L);
-        pool.recordSuccess("1.1.1.1", 18L, 1_300L);
+        // A slow-streak should clear quickly, while the EWMA intentionally needs
+        // several fast samples before the resolver outranks untouched defaults.
+        for (int i = 0; i < 8; i++) {
+            pool.recordSuccess("1.1.1.1", 20L, 1_200L + i * 100L);
+        }
         assertEquals(0, pool.slowStreak("1.1.1.1"));
-        assertEquals("1.1.1.1", pool.order(1_301L)[0]);
+        assertEquals("1.1.1.1", pool.order(2_001L)[0]);
     }
 
     @Test public void coolingResolverIsMovedBehindHealthyResolvers() {
