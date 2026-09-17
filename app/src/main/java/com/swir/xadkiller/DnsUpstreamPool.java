@@ -20,6 +20,11 @@ import java.util.Map;
  * healthy resolvers for a bounded probe. A successful probe restores it
  * immediately; another failure returns it to exponential cooldown. This avoids
  * permanently starving a resolver after a temporary network/provider outage.
+ *
+ * Persistently slow but technically successful resolvers also receive a bounded
+ * ranking penalty. They remain usable as fallbacks and are not marked failed,
+ * while faster healthy resolvers move ahead. Fast responses decay that penalty
+ * again so temporary network congestion does not permanently demote a provider.
  */
 final class DnsUpstreamPool {
     private static final int DEFAULT_RTT_MS = 180;
@@ -27,12 +32,16 @@ final class DnsUpstreamPool {
     private static final int MAX_TIMEOUT_MS = 3200;
     private static final int HALF_OPEN_TIMEOUT_MAX_MS = 1800;
     private static final long MAX_COOLDOWN_MS = 60_000L;
+    private static final long SLOW_RTT_MS = 1500L;
+    private static final int MAX_SLOW_STREAK = 4;
+    private static final double SLOW_STREAK_PENALTY_MS = 260d;
 
     private static final class State {
         final String server;
         final int ordinal;
         double ewmaRttMs = DEFAULT_RTT_MS;
         int failureStreak;
+        int slowStreak;
         long cooldownUntilMs;
         long successes;
         long failures;
@@ -95,6 +104,11 @@ final class DnsUpstreamPool {
         state.successes++;
         state.failureStreak = 0;
         state.cooldownUntilMs = 0L;
+        if (rttMs >= SLOW_RTT_MS) {
+            state.slowStreak = Math.min(MAX_SLOW_STREAK, state.slowStreak + 1);
+        } else {
+            state.slowStreak = Math.max(0, state.slowStreak - 1);
+        }
     }
 
     synchronized void recordFailure(String server, long nowMs) {
@@ -102,6 +116,7 @@ final class DnsUpstreamPool {
         if (state == null) return;
         state.failures++;
         state.failureStreak = Math.min(12, state.failureStreak + 1);
+        state.slowStreak = Math.max(0, state.slowStreak - 1);
         int shift = Math.min(5, Math.max(0, state.failureStreak - 1));
         long cooldown = Math.min(MAX_COOLDOWN_MS, 1500L << shift);
         state.cooldownUntilMs = Math.max(state.cooldownUntilMs, nowMs + cooldown);
@@ -127,6 +142,8 @@ final class DnsUpstreamPool {
                 out.append(" probe");
             } else if (state.failureStreak > 0) {
                 out.append(" recover=").append(state.failureStreak);
+            } else if (state.slowStreak > 0) {
+                out.append(" slow=").append(state.slowStreak);
             } else {
                 out.append(" ok");
             }
@@ -147,6 +164,11 @@ final class DnsUpstreamPool {
     synchronized int failureStreak(String server) {
         State state = byServer.get(server);
         return state == null ? 0 : state.failureStreak;
+    }
+
+    synchronized int slowStreak(String server) {
+        State state = byServer.get(server);
+        return state == null ? 0 : state.slowStreak;
     }
 
     private State recoveryProbeCandidate(long nowMs) {
@@ -174,7 +196,9 @@ final class DnsUpstreamPool {
     }
 
     private double score(State state) {
-        return state.ewmaRttMs + state.failureStreak * 550d;
+        return state.ewmaRttMs
+                + state.failureStreak * 550d
+                + state.slowStreak * SLOW_STREAK_PENALTY_MS;
     }
 
     @Override public synchronized String toString() {
