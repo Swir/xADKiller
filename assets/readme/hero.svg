@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
+  <title id="title">xADKiller Android v1.6 development</title>
+  <desc id="desc">SWIR project banner for the xADKiller Android local VPN and DNS blocker development line.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#02050A"/><stop offset="1" stop-color="#07111C"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0088FF"/><stop offset="1" stop-color="#62E5FF"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#62E5FF" stroke-opacity=".045"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="320" rx="28" fill="url(#bg)"/>
+  <rect width="1200" height="320" rx="28" fill="url(#grid)"/>
+  <path d="M0 270 C240 210 360 305 600 238 S960 205 1200 118" fill="none" stroke="#0088FF" stroke-opacity=".23" stroke-width="2"/>
+  <path d="M0 292 C250 235 420 320 650 258 S980 238 1200 150" fill="none" stroke="#62E5FF" stroke-opacity=".16" stroke-width="1.5"/>
+  <g transform="translate(88 72)" filter="url(#glow)">
+    <path d="M78 0 145 24v55c0 50-28 88-67 111C39 167 11 129 11 79V24Z" fill="#07111C" stroke="url(#accent)" stroke-width="5"/>
+    <path d="M42 92 68 118 116 62" fill="none" stroke="#62E5FF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="286" y="76" fill="#62E5FF" font-family="Segoe UI,Arial,sans-serif" font-size="18" font-weight="700" letter-spacing="4">SWIR PROJECT</text>
+  <text x="286" y="147" fill="#F4FAFF" font-family="Segoe UI,Arial,sans-serif" font-size="64" font-weight="800">xADKiller</text>
+  <text x="289" y="194" fill="#8DA8B8" font-family="Segoe UI,Arial,sans-serif" font-size="25">Local Android DNS protection without root</text>
+  <rect x="287" y="224" width="610" height="42" rx="21" fill="#07111C" stroke="#0088FF" stroke-opacity=".7"/>
+  <text x="311" y="252" fill="#62E5FF" font-family="Segoe UI,Arial,sans-serif" font-size="16" font-weight="700" letter-spacing="1.5">ANDROID • v1.6 DEV • LOCAL VPN / DNS • PRIVACY FIRST</text>
+</svg>
