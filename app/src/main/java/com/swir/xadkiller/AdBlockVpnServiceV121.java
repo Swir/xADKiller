@@ -36,13 +36,15 @@ public class AdBlockVpnServiceV121 extends VpnService {
     public static final String EXTRA_BLOCKED = "blocked";
     public static final String EXTRA_DOMAINS = "domains";
     public static final String EXTRA_LAST = "last";
+    public static final String EXTRA_UPSTREAM = "upstream";
     public static final String KEY_HEARTBEAT = "vpn_heartbeat_v121";
 
     private static final int NOTIFICATION_ID = 73;
     private static final String CHANNEL_ID = "xadkiller_vpn";
     private static final String VPN_DNS = "10.111.222.1";
     private static final String VPN_CLIENT = "10.111.222.2";
-    private static final String[] UPSTREAMS = {"1.1.1.1", "9.9.9.9", "8.8.8.8"};
+    private static final DnsUpstreamPool UPSTREAM_POOL = new DnsUpstreamPool(
+            new String[]{"1.1.1.1", "9.9.9.9", "8.8.8.8"});
 
     private final AtomicBoolean workerRunning = new AtomicBoolean(false);
     private volatile ParcelFileDescriptor vpnInterface;
@@ -56,7 +58,8 @@ public class AdBlockVpnServiceV121 extends VpnService {
         super.onCreate();
         createNotificationChannel();
         int base = BlocklistManager.bootstrap(this);
-        SystemLogStore.info(this, "VPN", "Serwis v1.5.0 utworzony • bootstrap=" + base + " domen • lang=" + I18n.language(this));
+        SystemLogStore.info(this, "VPN", "Serwis v1.6.0-dev utworzony • bootstrap=" + base + " domen • lang=" + I18n.language(this));
+        SystemLogStore.info(this, "UPSTREAM", "Adaptive DNS pool • " + UPSTREAM_POOL.snapshot(System.currentTimeMillis()));
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -267,15 +270,18 @@ public class AdBlockVpnServiceV121 extends VpnService {
 
     private byte[] forward(byte[] query) {
         String lastError = "";
-        for (String server : UPSTREAMS) {
+        long orderAt = System.currentTimeMillis();
+        for (String server : UPSTREAM_POOL.order(orderAt)) {
             DatagramSocket socket = null;
+            long startedNs = System.nanoTime();
             try {
                 socket = new DatagramSocket();
                 if (!protect(socket)) {
                     lastError = "protect() failed for " + server;
+                    UPSTREAM_POOL.recordFailure(server, System.currentTimeMillis());
                     continue;
                 }
-                socket.setSoTimeout(2200);
+                socket.setSoTimeout(UPSTREAM_POOL.timeoutMs(server));
                 DatagramPacket request = new DatagramPacket(
                         query, query.length, InetAddress.getByName(server), 53);
                 socket.send(request);
@@ -284,23 +290,31 @@ public class AdBlockVpnServiceV121 extends VpnService {
                 socket.receive(response);
                 if (response.getLength() < 12) {
                     lastError = "short response from " + server;
+                    UPSTREAM_POOL.recordFailure(server, System.currentTimeMillis());
                     continue;
                 }
                 if (query.length >= 2 && (buf[0] != query[0] || buf[1] != query[1])) {
                     lastError = "transaction id mismatch from " + server;
+                    UPSTREAM_POOL.recordFailure(server, System.currentTimeMillis());
                     continue;
                 }
+                long rttMs = Math.max(1L, (System.nanoTime() - startedNs) / 1_000_000L);
+                UPSTREAM_POOL.recordSuccess(server, rttMs, System.currentTimeMillis());
                 return Arrays.copyOf(buf, response.getLength());
             } catch (SocketTimeoutException e) {
                 lastError = "timeout " + server;
+                UPSTREAM_POOL.recordFailure(server, System.currentTimeMillis());
             } catch (Exception e) {
                 lastError = server + ": " + e.getClass().getSimpleName() + " " + e.getMessage();
+                UPSTREAM_POOL.recordFailure(server, System.currentTimeMillis());
             } finally {
                 if (socket != null) socket.close();
             }
         }
-        if (!lastError.isEmpty())
-            SystemLogStore.warn(this, "UPSTREAM", "Wszystkie upstream DNS zawiodły • " + lastError);
+        if (!lastError.isEmpty()) {
+            SystemLogStore.warn(this, "UPSTREAM", "Wszystkie upstream DNS zawiodły • " + lastError +
+                    " • health=" + UPSTREAM_POOL.snapshot(System.currentTimeMillis()));
+        }
         return null;
     }
 
@@ -323,6 +337,7 @@ public class AdBlockVpnServiceV121 extends VpnService {
         getSharedPreferences(BlocklistManager.PREFS, MODE_PRIVATE).edit()
                 .putBoolean("running", actuallyRunning)
                 .putLong(KEY_HEARTBEAT, actuallyRunning ? now : 0)
+                .putString("dns_upstream_health", UPSTREAM_POOL.snapshot(now))
                 .apply();
         Intent i = new Intent(ACTION_STATUS).setPackage(getPackageName());
         i.putExtra(EXTRA_RUNNING, actuallyRunning);
@@ -330,6 +345,7 @@ public class AdBlockVpnServiceV121 extends VpnService {
         i.putExtra(EXTRA_BLOCKED, blocked);
         i.putExtra(EXTRA_DOMAINS, BlocklistManager.currentCount());
         i.putExtra(EXTRA_LAST, lastBlocked);
+        i.putExtra(EXTRA_UPSTREAM, UPSTREAM_POOL.snapshot(now));
         sendBroadcast(i);
     }
 
