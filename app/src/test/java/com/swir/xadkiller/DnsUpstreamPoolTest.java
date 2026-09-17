@@ -21,6 +21,31 @@ public class DnsUpstreamPoolTest {
         assertEquals(1L, pool.successes("9.9.9.9"));
     }
 
+    @Test public void persistentlySlowSuccessfulResolverIsDemotedWithoutFailure() {
+        DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
+        pool.recordSuccess("1.1.1.1", 1600L, 1_000L);
+        pool.recordSuccess("1.1.1.1", 1700L, 1_100L);
+        pool.recordSuccess("9.9.9.9", 45L, 1_200L);
+
+        assertEquals("9.9.9.9", pool.order(1_201L)[0]);
+        assertEquals(2, pool.slowStreak("1.1.1.1"));
+        assertEquals(0, pool.failureStreak("1.1.1.1"));
+        assertEquals(0L, pool.failures("1.1.1.1"));
+        assertTrue(pool.snapshot(1_201L).contains("slow=2"));
+    }
+
+    @Test public void fastResponsesDecaySlowPenaltyAndAllowRecovery() {
+        DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
+        pool.recordSuccess("1.1.1.1", 1800L, 1_000L);
+        pool.recordSuccess("1.1.1.1", 1700L, 1_100L);
+        assertEquals(2, pool.slowStreak("1.1.1.1"));
+
+        pool.recordSuccess("1.1.1.1", 20L, 1_200L);
+        pool.recordSuccess("1.1.1.1", 18L, 1_300L);
+        assertEquals(0, pool.slowStreak("1.1.1.1"));
+        assertEquals("1.1.1.1", pool.order(1_301L)[0]);
+    }
+
     @Test public void coolingResolverIsMovedBehindHealthyResolvers() {
         DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
         pool.recordSuccess("1.1.1.1", 20L, 1_000L);
