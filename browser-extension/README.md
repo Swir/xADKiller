@@ -14,7 +14,7 @@
 
 <img width="100%" src="../assets/readme/chrome/progress-card.svg" alt="xADKiller Chrome v1.5.0 development progress" />
 
-**Development progress:** **57.7% — 15/26 verified v1.5.0 roadmap items.**  
+**Development progress:** **65.4% — 17/26 verified v1.5.0 roadmap items.**  
 **Release readiness:** **BLOCKED** — manual browser/beta validation and the remaining hardening items are not complete.
 
 | Item | Status |
@@ -42,6 +42,7 @@
 | 🩹 Breakage Guard | Temporarily pauses protection for the current site and restores it without deleting a permanent allowlist entry. |
 | 🌐 Live Shield / Live Matrix / TITAN feed | Pulls verified **data-only** protection rules/signatures from the official GitHub repository. |
 | 🔐 Feed Guard | Rejects malformed, stale, future-dated, undersized or suspiciously shrunken data feeds and preserves known-good cache fallback. |
+| 📐 Performance budget | Runs a reproducible Chromium regression gate for service-worker readiness, mutation injection, protection settling, renderer responsiveness and page-heap ceilings. |
 
 ## GitHub protection-data updates
 
@@ -50,8 +51,11 @@ The extension intentionally separates executable logic from remotely refreshed p
 - executable JavaScript ships inside the extension package;
 - approved GitHub endpoints provide only domains, URL signatures, cosmetic selectors and regex/rule metadata;
 - Feed Guard validates schema/age/shape before data can replace a known-good cache;
+- `browser-intelligence/feed-checksums.json` pins the exact Git blob hashes and metadata of the production Live Shield, Live Matrix and TITAN feeds, and CI re-fetches and verifies those payloads;
 - a network outage or bad feed must not require remote code or disable the last valid cached protection;
 - the development CI contains explicit no-remote-code and no-COMPAT safety gates.
+
+The feed checksum manifest is an integrity/audit gate, not a remote-code loader and not a claim of signed distribution.
 
 ## Build
 
@@ -76,12 +80,14 @@ The v1.5 branch runs Chromium and integrity gates for:
 - TITAN runtime behavior;
 - Shadow DOM mutation soak;
 - broader real-page mutation soak with normal business UI, login/checkout/media controls and mixed DOM/Shadow ad layers;
+- reproducible startup/DOM/renderer/heap performance ceilings designed to catch regressions rather than advertise benchmark speed;
 - static/adaptive boost behavior;
 - no-COMPAT regression;
 - PL/EN language persistence plus populated Rule Budget diagnostics;
 - Adaptive Memory persistence/privacy/reset;
 - Breakage Guard pause/resume plus login/checkout/media safety;
 - GitHub Feed Guard validation and local health diagnostics;
+- deterministic production-feed checksum/metadata verification against the exact GitHub payloads;
 - deterministic blocking effectiveness;
 - ZIP integrity and SHA-256 checks.
 
