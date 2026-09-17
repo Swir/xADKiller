@@ -149,7 +149,7 @@ final class BlocklistManager {
         boolean ultra = prefs.getBoolean(KEY_STRICT, false);
         String mode = ultra ? "ULTRA" : "STANDARD";
         String previousMode = prefs.getString(KEY_CACHE_MODE, "");
-        int previousCount = dst.isFile() ? countCacheEntries(dst, MAX_REMOTE_DOMAINS) : 0;
+        int previousCount = dst.isFile() ? countUniqueCacheEntries(dst, MAX_REMOTE_DOMAINS) : 0;
 
         try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
                 new FileOutputStream(tmp), StandardCharsets.UTF_8), 64 * 1024)) {
@@ -174,10 +174,14 @@ final class BlocklistManager {
             throw new IOException("Błąd pobierania list: " + t.getClass().getSimpleName(), t);
         }
 
-        if (!candidateCountLooksHealthy(previousMode, mode, previousCount, written)) {
+        // Guard on normalized unique domains, not raw accepted lines. A broken
+        // source that repeats one domain thousands of times must not be able to
+        // satisfy the minimum-size or anti-shrink checks.
+        int uniqueDownloaded = countUniqueCacheEntries(tmp, MAX_REMOTE_DOMAINS);
+        if (!candidateCountLooksHealthy(previousMode, mode, previousCount, uniqueDownloaded)) {
             tmp.delete();
-            throw new IOException("Nowa lista wygląda na niepełną: " + written +
-                    " (poprzednio " + previousCount + ", tryb " + mode + ")");
+            throw new IOException("Nowa lista wygląda na niepełną: unique=" + uniqueDownloaded +
+                    " raw=" + written + " (poprzednio unique=" + previousCount + ", tryb " + mode + ")");
         }
 
         replaceCacheRollbackSafe(tmp, dst, bak);
@@ -190,7 +194,8 @@ final class BlocklistManager {
         try {
             SystemLogStore.info(context, "BLOCKLIST",
                     "Lista v1.6 załadowana • mode=" + mode +
-                            " • downloaded=" + written + " • previous=" + previousCount + " • unique=" + count);
+                            " • downloadedRaw=" + written + " • downloadedUnique=" + uniqueDownloaded +
+                            " • previousUnique=" + previousCount + " • activeUnique=" + count);
         } catch (Throwable ignored) {}
         return count;
     }
@@ -215,14 +220,18 @@ final class BlocklistManager {
         return newCount >= minimum;
     }
 
-    private static int countCacheEntries(File file, int max) throws IOException {
+    static int countUniqueNormalized(InputStream input, int max) throws IOException {
+        if (input == null || max <= 0) return 0;
+        LongCollector c = new LongCollector(Math.min(32_768, Math.max(16, max)));
+        parseDomainStream(input, c, max);
+        return c.toSortedUnique().length;
+    }
+
+    private static int countUniqueCacheEntries(File file, int max) throws IOException {
         if (file == null || !file.isFile()) return 0;
-        int count = 0;
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-                new FileInputStream(file), StandardCharsets.UTF_8), 64 * 1024)) {
-            while (count < max && reader.readLine() != null) count++;
+        try (InputStream in = new FileInputStream(file)) {
+            return countUniqueNormalized(in, max);
         }
-        return count;
     }
 
     private static void replaceCacheRollbackSafe(File tmp, File dst, File bak) throws IOException {
