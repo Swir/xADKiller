@@ -68,8 +68,15 @@ try {
   browser = await launch();
   let found = await findWorker(browser);
   let popup = await openPopup(browser, found.extensionId);
-  await popup.select("#mode", "ultra");
-  await delay(800);
+
+  // Wait for the initial service-worker refresh to settle before testing a
+  // read-modify-write memory sequence. This isolates Adaptive Memory itself
+  // from the deliberately concurrent startup feed/session refresh.
+  const ready = await waitStats(popup, (s) => s.session >= 1200 && s.regex >= 1, 20000);
+  log("Startup settled", JSON.stringify(ready));
+  const mode = await send(popup, { type:"setMode", mode:"ultra" });
+  if (!mode?.ok || mode.mode !== "ultra") throw new Error(`could not enter ULTRA: ${JSON.stringify(mode)}`);
+  await delay(500);
 
   const sample = { type:"titanLearnResource", url:"https://cdn-adnxs.example.net/runtime/ad.js", pageHost:"example.org" };
   const first = await send(popup, sample);
@@ -97,6 +104,8 @@ try {
   browser = await launch();
   found = await findWorker(browser);
   popup = await openPopup(browser, found.extensionId);
+  const modeAfterRestart = await send(popup, { type:"setMode", mode:"ultra" });
+  if (!modeAfterRestart?.ok) throw new Error(`could not restore ULTRA after restart: ${JSON.stringify(modeAfterRestart)}`);
   const restored = await waitStats(popup, (s) => s.memory >= 1 && s.promoted >= 1 && s.learned >= 1, 18000);
   log("Memory restored after browser restart", JSON.stringify(restored));
 
