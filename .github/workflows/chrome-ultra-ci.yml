@@ -14,7 +14,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 24
+    timeout-minutes: 28
     defaults:
       run:
         working-directory: browser-extension
@@ -31,6 +31,8 @@ jobs:
         run: npm run build
       - name: Validate Chrome TITAN package
         run: npm run validate
+      - name: Validate v1.5 safety invariants
+        run: node tools/validate-v150-safety.mjs
       - name: JavaScript syntax
         run: |
           node --check dist/chrome/service-worker.js
@@ -38,6 +40,7 @@ jobs:
           node --check dist/chrome/live-signatures.js
           node --check dist/chrome/titan-engine.js
           node --check dist/chrome/static-boost.js
+          node --check dist/chrome/temporary-site-guard.js
           node --check dist/chrome/titan-main.js
           node --check dist/chrome/network-scout.js
           node --check dist/chrome/early-guard.js
@@ -49,6 +52,9 @@ jobs:
           node --check dist/chrome/cosmetic-data.js
           node --check dist/chrome/build-meta.js
           node --check tests/chrome-adaptive-memory-runtime.mjs
+          node --check tests/chrome-temporary-pause-runtime.mjs
+          node --check tests/chrome-blocking-benchmark.mjs
+          node --check tools/validate-v150-safety.mjs
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Chromium TITAN runtime test
@@ -61,6 +67,10 @@ jobs:
         run: timeout --signal=TERM --kill-after=10s 120s npm run test:language
       - name: Chromium Adaptive Memory persistence test
         run: timeout --signal=TERM --kill-after=10s 180s npm run test:memory
+      - name: Chromium Breakage Guard pause and resume test
+        run: timeout --signal=TERM --kill-after=10s 180s npm run test:pause
+      - name: Chromium blocking effectiveness benchmark
+        run: timeout --signal=TERM --kill-after=10s 180s npm run test:benchmark
       - name: Package Chrome TITAN Adaptive Memory ZIP
         run: |
           rm -rf packages
