@@ -28,6 +28,7 @@ final class BlocklistManager {
     static final String KEY_AUTOSTART = "auto_start";
     static final String KEY_LAST_UPDATE = "last_update";
     static final String KEY_STRICT = "strict_mode";
+    static final String KEY_CACHE_MODE = "remote_cache_mode_v160";
 
     private static final String[] NORMAL_URLS = {
             "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
@@ -45,6 +46,8 @@ final class BlocklistManager {
 
     private static final String CACHE_FILE = "remote_blocklist.txt";
     private static final int MAX_REMOTE_DOMAINS = 750_000;
+    private static final int MIN_REMOTE_DOMAINS = 1_000;
+    private static final double SAME_MODE_MIN_RATIO = 0.45d;
 
     /*
      * Memory-safe representation: instead of keeping hundreds of thousands of
@@ -140,9 +143,13 @@ final class BlocklistManager {
     static synchronized int updateRemote(Context context) throws IOException {
         File tmp = new File(context.getFilesDir(), CACHE_FILE + ".tmp");
         File dst = new File(context.getFilesDir(), CACHE_FILE);
+        File bak = new File(context.getFilesDir(), CACHE_FILE + ".bak");
         int written = 0;
-        boolean ultra = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getBoolean(KEY_STRICT, false);
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        boolean ultra = prefs.getBoolean(KEY_STRICT, false);
+        String mode = ultra ? "ULTRA" : "STANDARD";
+        String previousMode = prefs.getString(KEY_CACHE_MODE, "");
+        int previousCount = dst.isFile() ? countCacheEntries(dst, MAX_REMOTE_DOMAINS) : 0;
 
         try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
                 new FileOutputStream(tmp), StandardCharsets.UTF_8), 64 * 1024)) {
@@ -167,26 +174,23 @@ final class BlocklistManager {
             throw new IOException("Błąd pobierania list: " + t.getClass().getSimpleName(), t);
         }
 
-        if (written < 1000) {
+        if (!candidateCountLooksHealthy(previousMode, mode, previousCount, written)) {
             tmp.delete();
-            throw new IOException("Lista wygląda na niepełną: " + written);
-        }
-        if (dst.exists() && !dst.delete()) {
-            tmp.delete();
-            throw new IOException("Nie można podmienić starej listy");
-        }
-        if (!tmp.renameTo(dst)) {
-            tmp.delete();
-            throw new IOException("Nie można zapisać listy");
+            throw new IOException("Nowa lista wygląda na niepełną: " + written +
+                    " (poprzednio " + previousCount + ", tryb " + mode + ")");
         }
 
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .putLong(KEY_LAST_UPDATE, System.currentTimeMillis()).apply();
+        replaceCacheRollbackSafe(tmp, dst, bak);
+
+        prefs.edit()
+                .putLong(KEY_LAST_UPDATE, System.currentTimeMillis())
+                .putString(KEY_CACHE_MODE, mode)
+                .apply();
         int count = load(context);
         try {
             SystemLogStore.info(context, "BLOCKLIST",
-                    "Lista v1.3.1 załadowana • mode=" + (ultra ? "ULTRA" : "STANDARD") +
-                            " • downloaded=" + written + " • unique=" + count);
+                    "Lista v1.6 załadowana • mode=" + mode +
+                            " • downloaded=" + written + " • previous=" + previousCount + " • unique=" + count);
         } catch (Throwable ignored) {}
         return count;
     }
@@ -194,11 +198,49 @@ final class BlocklistManager {
     static synchronized void clearRemoteCache(Context context) {
         File cache = new File(context.getFilesDir(), CACHE_FILE);
         File tmp = new File(context.getFilesDir(), CACHE_FILE + ".tmp");
+        File bak = new File(context.getFilesDir(), CACHE_FILE + ".bak");
         if (cache.exists()) cache.delete();
         if (tmp.exists()) tmp.delete();
+        if (bak.exists()) bak.delete();
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .remove(KEY_LAST_UPDATE).putBoolean(KEY_STRICT, false).apply();
+                .remove(KEY_LAST_UPDATE).remove(KEY_CACHE_MODE).putBoolean(KEY_STRICT, false).apply();
         bootstrap(context);
+    }
+
+    static boolean candidateCountLooksHealthy(String previousMode, String newMode, int previousCount, int newCount) {
+        if (newCount < MIN_REMOTE_DOMAINS) return false;
+        if (previousCount < MIN_REMOTE_DOMAINS * 2) return true;
+        if (previousMode == null || newMode == null || !previousMode.equals(newMode)) return true;
+        int minimum = Math.max(MIN_REMOTE_DOMAINS, (int)Math.floor(previousCount * SAME_MODE_MIN_RATIO));
+        return newCount >= minimum;
+    }
+
+    private static int countCacheEntries(File file, int max) throws IOException {
+        if (file == null || !file.isFile()) return 0;
+        int count = 0;
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                new FileInputStream(file), StandardCharsets.UTF_8), 64 * 1024)) {
+            while (count < max && reader.readLine() != null) count++;
+        }
+        return count;
+    }
+
+    private static void replaceCacheRollbackSafe(File tmp, File dst, File bak) throws IOException {
+        if (!tmp.isFile() || tmp.length() <= 0) throw new IOException("Brak nowej listy tymczasowej");
+        if (bak.exists() && !bak.delete()) throw new IOException("Nie można usunąć starej kopii bezpieczeństwa");
+        boolean hadOld = dst.isFile();
+        if (hadOld && !dst.renameTo(bak)) throw new IOException("Nie można zabezpieczyć starej listy");
+        boolean installed = false;
+        try {
+            installed = tmp.renameTo(dst);
+            if (!installed) throw new IOException("Nie można zapisać nowej listy");
+        } finally {
+            if (!installed && hadOld && bak.isFile()) {
+                if (dst.exists()) dst.delete();
+                bak.renameTo(dst);
+            }
+        }
+        if (bak.exists() && !bak.delete()) bak.deleteOnExit();
     }
 
     static void addCustomBlock(Context context, String domain) {
@@ -226,7 +268,7 @@ final class BlocklistManager {
         HttpURLConnection conn = (HttpURLConnection) new URL(source).openConnection();
         conn.setConnectTimeout(15_000);
         conn.setReadTimeout(50_000);
-        conn.setRequestProperty("User-Agent", "xADKiller/1.3.1");
+        conn.setRequestProperty("User-Agent", "xADKiller/1.6");
         conn.setInstanceFollowRedirects(true);
         int code = conn.getResponseCode();
         if (code < 200 || code >= 300) {
