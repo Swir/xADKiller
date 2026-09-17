@@ -8,6 +8,10 @@ on:
       - ".github/workflows/chrome-ultra-ci.yml"
   workflow_dispatch:
 
+concurrency:
+  group: xadkiller-chrome-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -20,9 +24,9 @@ jobs:
         working-directory: browser-extension
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Node 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "24"
       - name: Install dependencies
