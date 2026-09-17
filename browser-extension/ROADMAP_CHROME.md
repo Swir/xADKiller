@@ -7,7 +7,12 @@
 
 ## v1.5.0 — Adaptive Memory & Stability
 
-Status: **in development** on `chrome-v150-adaptive-memory`.
+Status: **in development / hardening** on `chrome-v150-adaptive-memory`.
+
+<img width="100%" src="../assets/readme/chrome/progress-mini.svg" alt="xADKiller Chrome v1.5.0 roadmap progress" />
+
+**Development progress:** **50.0% — 13/26 verified roadmap items.**  
+**Release readiness:** **BLOCKED** — manual browser/beta validation and the remaining hardening items are not complete.
 
 ### Phase 1 — Adaptive Memory
 
@@ -19,36 +24,40 @@ Status: **in development** on `chrome-v150-adaptive-memory`.
 - [x] Collision-safe learned-rule allocation.
 - [x] User-facing reset for network learning.
 - [x] PL/EN diagnostics in the popup.
-- [ ] Full Chromium CI green.
+- [x] Full Chromium CI green.
 
 ### Phase 2 — Breakage Guard
 
-- [ ] Add one-click temporary protection pause for the current site.
+- [x] Add one-click temporary protection pause for the current site.
 - [ ] Add a local breakage recovery mode that disables only heuristic layers before disabling core DNR.
-- [ ] Track false-positive rollbacks locally without telemetry.
-- [ ] Add regression fixtures for login, checkout and embedded-media pages.
+- [ ] Track false-positive rollbacks locally without telemetry as an explicit Breakage Guard history/control.
+- [x] Add regression fixtures for login, checkout and embedded-media pages.
 
 ### Phase 3 — Better filtering efficiency
 
 - [ ] Re-rank static rule selection using source agreement + resource-type coverage.
 - [ ] Deduplicate equivalent domain/path rules across static, dynamic and session layers.
 - [ ] Add a rule-budget dashboard for STANDARD/ULTRA/TITAN Boost.
-- [ ] Measure startup cost, memory use and DOM scan time in CI.
+- [ ] Measure startup cost, memory use and DOM scan time in CI as a reproducible performance budget.
 
 ### Phase 4 — Live Shield hardening
 
-- [ ] Add feed schema versioning and expiry metadata.
-- [ ] Reject stale or malformed feed payloads without replacing a known-good cache.
+- [ ] Add feed schema versioning and explicit expiry metadata to the published data contract.
+- [x] Reject stale or malformed feed payloads without replacing a known-good cache.
 - [ ] Add deterministic feed checksums in the repository.
 - [ ] Add rollback metadata for bad rule-data releases.
 
 ### Phase 5 — Store beta
 
-- [ ] Produce a tested beta ZIP from green CI.
+- [x] Produce a tested beta ZIP from green CI.
 - [ ] Local benchmark and real browsing test.
-- [ ] Fix regressions without weakening tests.
+- [ ] Fix regressions without weakening tests and complete the broader real-page/performance soak.
 - [ ] Merge to `main` only after user approval.
 - [ ] Publish v1.5.0 update to Chrome Web Store.
+
+## Release gate
+
+No merge or release based only on the 50.0% development counter or a green build. The release gate also requires the remaining functional/performance items, benchmark/integrity gates and manual browser regression validation to pass without known critical issues.
 
 ## Later
 
