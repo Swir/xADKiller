@@ -95,6 +95,22 @@ async function inspectPage(page) {
   });
 }
 
+async function refreshPopupForSite(popup, sitePage) {
+  await sitePage.bringToFront();
+  await delay(120);
+  await popup.evaluate(async () => {
+    if (typeof refresh === "function") await refresh();
+  });
+}
+
+async function clickPopupButtonWithoutActivatingTab(popup, selector) {
+  await popup.evaluate((target) => {
+    const button = document.querySelector(target);
+    if (!button) throw new Error(`missing popup button: ${target}`);
+    button.click();
+  }, selector);
+}
+
 let browser = null;
 try {
   browser = await puppeteer.launch({
@@ -115,6 +131,11 @@ try {
 
   const popup = await browser.newPage();
   await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil:"domcontentloaded", timeout:12000 });
+  // A real browser-action popup queries the active website tab. In this headless
+  // fixture the extension UI is a normal tab, so opening it temporarily makes
+  // itself active. Re-focus the site and refresh popup state without activating
+  // the extension tab again before exercising the exact UI controls.
+  await refreshPopupForSite(popup, page);
   await popup.waitForFunction(() => {
     const button = document.querySelector("#heuristicRecoveryBtn");
     return button && !button.disabled;
@@ -123,7 +144,7 @@ try {
   const initialRulesets = await enabledRulesets(worker);
   if (!initialRulesets.includes("standard")) throw new Error(`STANDARD ruleset not enabled before recovery: ${JSON.stringify(initialRulesets)}`);
 
-  await popup.click("#heuristicRecoveryBtn");
+  await clickPopupButtonWithoutActivatingTab(popup, "#heuristicRecoveryBtn");
   const deadline = Date.now() + 8000;
   let recoveryStatus = null;
   while (Date.now() < deadline) {
@@ -157,7 +178,7 @@ try {
   if (!/heuristic|restore|przywr/i.test(recoveryUi.text)) throw new Error(`recovery UI state not rendered: ${JSON.stringify(recoveryUi)}`);
   log("Heuristic-only recovery UI", JSON.stringify({ view:recoveryView, rulesets:recoveryRulesets, ui:recoveryUi }));
 
-  await popup.click("#heuristicRecoveryBtn");
+  await clickPopupButtonWithoutActivatingTab(popup, "#heuristicRecoveryBtn");
   await delay(350);
   const recoveryStop = await send(popup, { type:"getHeuristicSiteRecovery", host:"pause.xad.test" });
   if (!recoveryStop?.ok || recoveryStop.active) throw new Error(`heuristic recovery UI did not stop: ${JSON.stringify(recoveryStop)}`);
@@ -223,12 +244,12 @@ try {
   if (preserved.xadTemporaryPauseInjectedAllowSitesV1.includes("permanent.example")) throw new Error(`pre-existing allowlist entry was incorrectly marked temporary: ${JSON.stringify(preserved)}`);
   log("Permanent allowlist preserved", JSON.stringify(preserved));
 
-  await popup.bringToFront();
+  await refreshPopupForSite(popup, page);
   await popup.waitForFunction(() => {
     const button = document.querySelector("#clearRecoveryHistoryBtn");
     return button && !button.disabled;
   }, { timeout:8000 });
-  await popup.click("#clearRecoveryHistoryBtn");
+  await clickPopupButtonWithoutActivatingTab(popup, "#clearRecoveryHistoryBtn");
   await delay(250);
   const emptyHistory = await send(popup, { type:"getBreakageRollbackHistory" });
   if (!emptyHistory?.ok || emptyHistory.items.length !== 0) throw new Error(`breakage history survived UI clear: ${JSON.stringify(emptyHistory)}`);
