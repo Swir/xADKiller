@@ -6,6 +6,7 @@
   const MAX_FEED_BYTES = 2 * 1024 * 1024;
   const MAX_FEED_AGE_MS = 45 * 24 * 60 * 60 * 1000;
   const MAX_FUTURE_SKEW_MS = 24 * 60 * 60 * 1000;
+  const MAX_V2_LIFETIME_MS = 60 * 24 * 60 * 60 * 1000;
   const HEALTH_KEY = "xadFeedGuardHealthV1";
   const LIVE_SHIELD_PATH = "/Swir/xADKiller/live-shield-feed/browser-intelligence/xadkiller-live-shield.json";
   const LIVE_MATRIX_PATH = "/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json";
@@ -21,6 +22,15 @@
   function validVersion(value) {
     const s = String(value || "").trim();
     return !!s && s.length <= 80 && !/[\r\n<>]/.test(s) && s.toLowerCase() !== "unknown";
+  }
+  function validRollbackRef(value) {
+    const s = String(value || "").trim();
+    return !!s
+      && s.length <= 160
+      && !s.startsWith("/")
+      && !s.endsWith("/")
+      && !s.includes("..")
+      && /^[A-Za-z0-9._/-]+$/.test(s);
   }
   function minRelative(previous, absoluteMin, ratio = 0.5) {
     const old = Math.max(0, Number(previous || 0));
@@ -47,8 +57,23 @@
     if (now - parsed > MAX_FEED_AGE_MS) fail("stale_feed");
     return parsed;
   }
+  function validateV2Contract(data, updatedAt, now = Date.now()) {
+    const expiresRaw = String(data?.expires_at || "").trim();
+    const expiresAt = Date.parse(expiresRaw);
+    if (!expiresRaw || !Number.isFinite(expiresAt)) fail("expires_at");
+    if (expiresAt <= updatedAt) fail("expiry_order");
+    if (expiresAt <= now) fail("expired_feed");
+    if (expiresAt - updatedAt > MAX_V2_LIFETIME_MS) fail("expiry_window");
 
-  async function recordHealthNow(kind, ok, version, error, latencyMs) {
+    const rollback = data?.rollback;
+    if (!rollback || typeof rollback !== "object" || Array.isArray(rollback)) fail("rollback");
+    if (!validVersion(rollback.previous_version)) fail("rollback_version");
+    if (String(rollback.previous_version) === String(data.feed_version)) fail("rollback_same_version");
+    if (!validRollbackRef(rollback.previous_ref)) fail("rollback_ref");
+    return { expiresAt, previousVersion:String(rollback.previous_version), previousRef:String(rollback.previous_ref) };
+  }
+
+  async function recordHealthNow(kind, ok, version, error, latencyMs, schema = 0) {
     try {
       const stored = await getLocal({ [HEALTH_KEY]:{ schema:1, feeds:{} } });
       const health = stored[HEALTH_KEY] && typeof stored[HEALTH_KEY] === "object"
@@ -64,6 +89,7 @@
         lastSuccessAt:ok ? now : Math.max(0, Number(previous.lastSuccessAt || 0)),
         lastFailureAt:ok ? Math.max(0, Number(previous.lastFailureAt || 0)) : now,
         lastVersion:ok && validVersion(version) ? String(version).slice(0, 80) : String(previous.lastVersion || "").slice(0, 80),
+        lastSchema:ok && (schema === 1 || schema === 2) ? schema : Math.max(0, Number(previous.lastSchema || 0)),
         lastError:ok ? "" : String(error || "unknown").slice(0, 120),
         lastLatencyMs:Math.max(0, Math.min(60_000, Math.round(Number(latencyMs || 0))))
       };
@@ -73,10 +99,10 @@
     }
   }
 
-  function recordHealth(kind, ok, version = "", error = "", latencyMs = 0) {
+  function recordHealth(kind, ok, version = "", error = "", latencyMs = 0, schema = 0) {
     healthWriteChain = healthWriteChain.then(
-      () => recordHealthNow(kind, ok, version, error, latencyMs),
-      () => recordHealthNow(kind, ok, version, error, latencyMs)
+      () => recordHealthNow(kind, ok, version, error, latencyMs, schema),
+      () => recordHealthNow(kind, ok, version, error, latencyMs, schema)
     );
     return healthWriteChain;
   }
@@ -98,9 +124,11 @@
     if (!text || text.length > MAX_FEED_BYTES) fail("payload_size");
     let data;
     try { data = JSON.parse(text); } catch (_) { fail("json"); }
-    if (!data || typeof data !== "object" || data.schema !== 1) fail("schema");
+    if (!data || typeof data !== "object" || ![1, 2].includes(data.schema)) fail("schema");
     if (!validVersion(data.feed_version)) fail("version");
-    validateFeedTimestamp(data.updated_at);
+    const now = Date.now();
+    const updatedAt = validateFeedTimestamp(data.updated_at, now);
+    if (data.schema === 2) validateV2Contract(data, updatedAt, now);
     return data;
   }
 
@@ -174,7 +202,7 @@
         return response;
       }
       const data = await validate(kind, response);
-      await recordHealth(kind, true, data.feed_version, "", latency);
+      await recordHealth(kind, true, data.feed_version, "", latency, data.schema);
       return response;
     } catch (error) {
       await recordHealth(kind, false, "", safeReason(error), Date.now() - started);
@@ -191,5 +219,13 @@
     });
   } catch (_) {}
 
-  globalThis.XAD_FEED_GUARD = Object.freeze({ guardedKind, validVersion, minRelative, validateFeedTimestamp, readHealth });
+  globalThis.XAD_FEED_GUARD = Object.freeze({
+    guardedKind,
+    validVersion,
+    validRollbackRef,
+    minRelative,
+    validateFeedTimestamp,
+    validateV2Contract,
+    readHealth
+  });
 })();
