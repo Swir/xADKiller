@@ -25,7 +25,7 @@
   const watched = new WeakSet();
   const hidden = new Map();
   const styles = new Set();
-  let enabled = false; // fail open until local preferences have been loaded
+  let enabled = false;
   let smartEnabled = true;
   let allowSites = [];
   let prefsReady = false;
@@ -71,9 +71,10 @@
   }
 
   function updateStyles() {
+    const css = active() ? STYLE_TEXT : "";
     for (const style of [...styles]) {
       if (!style?.isConnected) { styles.delete(style); continue; }
-      try { style.disabled = !active(); } catch (_) {}
+      try { if (style.textContent !== css) style.textContent = css; } catch (_) {}
     }
   }
 
@@ -90,14 +91,13 @@
     try { existing = root.querySelector?.("style[data-xadkiller-shadow-style='1']") || null; } catch (_) {}
     if (existing) {
       styles.add(existing);
-      try { existing.disabled = !active(); } catch (_) {}
+      try { existing.textContent = active() ? STYLE_TEXT : ""; } catch (_) {}
       return existing;
     }
     try {
       const style = document.createElement("style");
       style.dataset.xadkillerShadowStyle = "1";
-      style.textContent = STYLE_TEXT;
-      style.disabled = !active();
+      style.textContent = active() ? STYLE_TEXT : "";
       root.appendChild(style);
       styles.add(style);
       return style;
@@ -135,8 +135,8 @@
   }
 
   function reconcile() {
-    updateStyles();
     if (active()) {
+      updateStyles();
       hideIn(document);
       discover(document);
     } else {
