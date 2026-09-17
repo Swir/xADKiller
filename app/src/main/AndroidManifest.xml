@@ -11,7 +11,7 @@
 
     <application
         android:name=".XadKillerApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
         android:label="xADKiller"
         android:localeConfig="@xml/locales_config"
