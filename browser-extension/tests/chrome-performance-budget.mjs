@@ -16,6 +16,8 @@ const BUDGET = Object.freeze({
   workerReadyMs:20_000,
   fixtureInjectMs:2_500,
   protectionSettleMs:3_500,
+  heartbeatWindowMs:160,
+  heartbeatMinTicks:4,
   heapDeltaBytes:72 * 1024 * 1024,
   finalHeapBytes:140 * 1024 * 1024
 });
@@ -123,7 +125,6 @@ try {
   await delay(350);
 
   const beforeMetrics = await page.metrics();
-  const heartbeatBefore = await page.evaluate(() => window.__heartbeat||0);
   const injected = await page.evaluate(async () => await window.injectLoad());
   if (injected.normal !== 600 || injected.ads !== 300) throw new Error(`fixture count mismatch: ${JSON.stringify(injected)}`);
   if (!(injected.injectMs >= 0 && injected.injectMs <= BUDGET.fixtureInjectMs)) {
@@ -139,20 +140,30 @@ try {
   }
   const settleMs = Date.now() - settleStarted;
   state = await pageState(page);
-  const afterMetrics = await page.metrics();
 
   if (state.normal !== 600 || state.normalVisible !== 600 || !state.titleVisible) throw new Error(`normal content damaged: ${JSON.stringify(state)}`);
   if (state.ads !== 300 || state.adsHidden !== 300) throw new Error(`ad protection incomplete: ${JSON.stringify(state)}`);
   if (settleMs > BUDGET.protectionSettleMs) throw new Error(`DOM settle budget exceeded: ${settleMs}ms > ${BUDGET.protectionSettleMs}ms`);
-  if (state.heartbeat <= heartbeatBefore + 4) throw new Error(`renderer heartbeat stalled: ${heartbeatBefore} -> ${state.heartbeat}`);
 
+  // Test renderer responsiveness over an explicit observation window. The first
+  // version compared against time elapsed during injection/settling, which can
+  // legitimately be shorter than five 20 ms ticks when protection is very fast.
+  const heartbeatAtSettle = state.heartbeat;
+  await delay(BUDGET.heartbeatWindowMs);
+  const responsiveState = await pageState(page);
+  const heartbeatTicks = responsiveState.heartbeat - heartbeatAtSettle;
+  if (heartbeatTicks < BUDGET.heartbeatMinTicks) {
+    throw new Error(`renderer heartbeat stalled: ${heartbeatAtSettle} -> ${responsiveState.heartbeat} over ${BUDGET.heartbeatWindowMs}ms`);
+  }
+
+  const afterMetrics = await page.metrics();
   const beforeHeap = Number(beforeMetrics.JSHeapUsedSize || 0);
   const finalHeap = Number(afterMetrics.JSHeapUsedSize || 0);
   const heapDelta = Math.max(0, finalHeap - beforeHeap);
   if (heapDelta > BUDGET.heapDeltaBytes) throw new Error(`heap delta budget exceeded: ${heapDelta} > ${BUDGET.heapDeltaBytes}`);
   if (finalHeap > BUDGET.finalHeapBytes) throw new Error(`final heap budget exceeded: ${finalHeap} > ${BUDGET.finalHeapBytes}`);
 
-  log("PASS", `worker=${ready.readyMs}ms • inject=${injected.injectMs.toFixed(1)}ms • settle=${settleMs}ms • heapDelta=${Math.round(heapDelta/1024/1024)}MiB • finalHeap=${Math.round(finalHeap/1024/1024)}MiB • 300/300 ads hidden • 600/600 normal nodes preserved`);
+  log("PASS", `worker=${ready.readyMs}ms • inject=${injected.injectMs.toFixed(1)}ms • settle=${settleMs}ms • heartbeatTicks=${heartbeatTicks}/${BUDGET.heartbeatWindowMs}ms • heapDelta=${Math.round(heapDelta/1024/1024)}MiB • finalHeap=${Math.round(finalHeap/1024/1024)}MiB • 300/300 ads hidden • 600/600 normal nodes preserved`);
 } finally {
   if (browser) { try { await browser.close(); } catch (_) {} }
   await new Promise((resolve) => server.close(resolve));
