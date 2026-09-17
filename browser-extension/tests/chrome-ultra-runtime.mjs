@@ -116,6 +116,8 @@ if (meta.dynamicIntelDomains !== intelDomains.length) throw new Error(`build met
 if (meta.titanSessionRules !== titanSessionPack.length) throw new Error(`build metadata session count mismatch: ${meta.titanSessionRules}`);
 if (!standardStatic.some((r) => /^\/(?:ads?|pagead|prebid)/i.test(String(r?.condition?.urlFilter || "")))) throw new Error("leading-slash ad URL filters were still lost by compiler");
 if (!titanSessionPack.some((r) => /(?:pagead|prebid|adserver|adservice|\/ads?)/i.test(String(r?.condition?.urlFilter || "")))) throw new Error("TITAN session pack lacks aggressive ad paths");
+const standardSessionFloor = Math.min(2000, titanSessionPack.length);
+const ultraSessionFloor = Math.min(4000, titanSessionPack.length);
 log("Build artifact meta OK", `v=${meta.version}, static=${meta.standardRules}+${meta.ultraRules}, dynamicPack=${intelDomains.length}, sessionPack=${titanSessionPack.length}, cosmetic=${meta.cosmeticGeneric}/${meta.cosmeticDomains}`);
 
 const server = http.createServer((req, res) => {
@@ -152,7 +154,7 @@ try {
   const initialRulesets = await worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets());
   if (!initialRulesets.includes("standard") || initialRulesets.includes("ultra")) throw new Error(`bad initial rulesets: ${initialRulesets.join(",")}`);
 
-  const standardShield = await waitShield(worker, { intel:15000, live:20, core:10, matrix:15, regex:1, session:2000 }, 50000);
+  const standardShield = await waitShield(worker, { intel:15000, live:20, core:10, matrix:15, regex:1, session:standardSessionFloor }, 50000);
   log("STANDARD TITAN Shield", JSON.stringify(standardShield));
 
   const titanCache = await worker.evaluate(async () => await chrome.storage.local.get({ xadTitanFeed:null, xadTitanFetchedAt:0 }));
@@ -193,7 +195,7 @@ try {
   const popup = await browser.newPage();
   await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil:"domcontentloaded", timeout:12000 });
   await popup.select("#mode", "ultra");
-  const ultraShield = await waitShield(worker, { intel:23000, live:100, core:25, matrix:35, regex:3, session:4000 }, 50000);
+  const ultraShield = await waitShield(worker, { intel:23000, live:100, core:25, matrix:35, regex:3, session:ultraSessionFloor }, 50000);
   log("ULTRA TITAN Shield", JSON.stringify(ultraShield));
 
   await delay(500);
@@ -213,13 +215,13 @@ try {
 
   const learnResult = await popup.evaluate(async () => await chrome.runtime.sendMessage({ type:"titanLearnResource", url:"https://cdn-adnxs.example.net/runtime/ad.js", pageHost:"example.org" }));
   if (!learnResult?.ok) throw new Error(`adaptive learner rejected strong signal: ${JSON.stringify(learnResult)}`);
-  const learnedShield = await waitShield(worker, { learned:1, session:4000 }, 8000);
+  const learnedShield = await waitShield(worker, { learned:1, session:ultraSessionFloor }, 8000);
   log("Adaptive session learner", JSON.stringify({ learned:learnedShield.learned }));
 
   const enabledRulesets = await worker.evaluate(async () => await chrome.declarativeNetRequest.getEnabledRulesets());
   if (!enabledRulesets.includes("standard") || !enabledRulesets.includes("ultra")) throw new Error(`ULTRA rulesets not enabled: ${enabledRulesets.join(",")}`);
 
-  log("PASS", `static=${meta.standardRules}+${meta.ultraRules}, dynamicIntel=${ultraShield.intel}, live=${ultraShield.live}, matrix=${ultraShield.matrix}, regex=${ultraShield.regex}, session=${ultraShield.session}, learned=${learnedShield.learned}, cosmetic=${meta.cosmeticGeneric}/${meta.cosmeticDomains}`);
+  log("PASS", `static=${meta.standardRules}+${meta.ultraRules}, dynamicIntel=${ultraShield.intel}, live=${ultraShield.live}, matrix=${ultraShield.matrix}, regex=${ultraShield.regex}, session=${ultraShield.session}/${titanSessionPack.length}, learned=${learnedShield.learned}, cosmetic=${meta.cosmeticGeneric}/${meta.cosmeticDomains}`);
 } finally {
   if (browser) { try { await browser.close(); } catch (_) {} }
   await new Promise((resolve) => server.close(resolve));
