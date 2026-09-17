@@ -25,29 +25,42 @@ final class DnsPacket {
     private DnsPacket() {}
 
     static Query parseIpv4UdpQuery(byte[] packet, int length) {
-        if (packet == null || length < 40) return null;
+        if (packet == null || length < 40 || length > packet.length) return null;
         int version = (packet[0] >> 4) & 0x0F;
         if (version != 4) return null;
         int ihl = (packet[0] & 0x0F) * 4;
         if (ihl < 20 || length < ihl + 8 + 12) return null;
+
+        int ipTotalLength = u16(packet, 2);
+        if (ipTotalLength < ihl + 8 + 12 || ipTotalLength > length) return null;
+
         int protocol = packet[9] & 0xFF;
         if (protocol != 17) return null;
 
+        // Reject every fragmented DNS datagram, including the first fragment with MF=1.
+        // The local filter intentionally handles only complete UDP DNS messages.
         int frag = ((packet[6] & 0xFF) << 8) | (packet[7] & 0xFF);
-        if ((frag & 0x1FFF) != 0) return null;
+        if ((frag & 0x3FFF) != 0) return null;
 
         int srcPort = u16(packet, ihl);
         int dstPort = u16(packet, ihl + 2);
-        if (dstPort != DNS_PORT) return null;
+        if (srcPort == 0 || dstPort != DNS_PORT) return null;
 
         int udpLen = u16(packet, ihl + 4);
-        if (udpLen < 20) return null;
-        int dnsLen = Math.min(udpLen - 8, length - ihl - 8);
+        if (udpLen < 20 || udpLen > ipTotalLength - ihl || ihl + udpLen > length) return null;
+        int dnsLen = udpLen - 8;
         if (dnsLen < 12) return null;
 
         byte[] dns = Arrays.copyOfRange(packet, ihl + 8, ihl + 8 + dnsLen);
+        int flags = u16(dns, 2);
+        int qdCount = u16(dns, 4);
+        // Only standard single-question queries are supported. Reject response packets,
+        // exotic opcodes and multi-question packets so the blocking decision is never
+        // based on a different question than the one actually forwarded.
+        if ((flags & 0x8000) != 0 || (flags & 0x7800) != 0 || qdCount != 1) return null;
+
         String host = extractQueryName(dns);
-        if (host == null || host.isEmpty()) return null;
+        if (host == null || host.isEmpty() || host.length() > 253) return null;
 
         byte[] srcIp = Arrays.copyOfRange(packet, 12, 16);
         byte[] dstIp = Arrays.copyOfRange(packet, 16, 20);
