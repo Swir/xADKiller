@@ -11,6 +11,10 @@ const log = (stage, extra = "") => console.log(`[xADKiller PAUSE CI] ${stage}${e
 
 const html = `<!doctype html><html><head><meta charset="utf-8"><title>Pause fixture</title></head><body>
 <div id="normal">NORMAL CONTENT</div>
+<form id="login-form" class="account-login-panel"><label>Email <input id="login-email" value="user@example.test"></label><button type="button">Sign in</button></form>
+<section id="checkout" class="checkout-summary payment-card"><strong>Order total</strong><button id="checkout-button" type="button">Pay now</button></section>
+<section id="media-player" class="media-player"><video id="content-video" controls muted></video><button id="media-control" type="button" aria-label="Play video">Play</button></section>
+<div id="address-form" class="address-card">Delivery address</div>
 <div id="ad" class="adsbygoogle" style="width:300px;height:90px">ADVERTISEMENT</div>
 <div id="open-host"></div><div id="closed-host"></div>
 <script>
@@ -54,6 +58,15 @@ async function pauseRules(worker) {
   return await worker.evaluate(async () => (await chrome.declarativeNetRequest.getDynamicRules()).filter((r) => r.id >= 905000 && r.id <= 905199));
 }
 
+function assertBusinessUi(view, phase) {
+  for (const key of ["login", "checkout", "media", "address"]) {
+    if (view[key] === "none" || view[key] === "hidden" || view[key] === "missing") {
+      throw new Error(`${phase}: normal ${key} UI was broken: ${JSON.stringify(view)}`);
+    }
+  }
+  if (view.email !== "user@example.test") throw new Error(`${phase}: login field content changed: ${JSON.stringify(view)}`);
+}
+
 let browser = null;
 try {
   browser = await puppeteer.launch({
@@ -93,19 +106,29 @@ try {
   const pausedView = await page.evaluate(() => {
     const openAd = document.querySelector('#open-host')?.shadowRoot?.querySelector('#open-ad');
     const closedAd = window.__pauseClosedAd;
+    const state = (selector) => {
+      const el = document.querySelector(selector);
+      return el ? getComputedStyle(el).display : "missing";
+    };
     return {
-      normal:getComputedStyle(document.querySelector("#normal")).display,
-      ad:getComputedStyle(document.querySelector("#ad")).display,
+      normal:state("#normal"),
+      login:state("#login-form"),
+      checkout:state("#checkout"),
+      media:state("#media-player"),
+      address:state("#address-form"),
+      email:document.querySelector("#login-email")?.value || "",
+      ad:state("#ad"),
       hidden:document.querySelector("#ad")?.dataset?.xadkillerHidden || "",
       shadowHidden:document.querySelector("#ad")?.dataset?.xadkillerShadowHidden || "",
       openShadow:openAd ? getComputedStyle(openAd).display : "missing",
       closedShadow:closedAd ? getComputedStyle(closedAd).display : "missing"
     };
   });
+  assertBusinessUi(pausedView, "pause");
   if (pausedView.normal === "none" || pausedView.ad === "none" || pausedView.hidden === "1" || pausedView.shadowHidden === "1" || pausedView.openShadow === "none" || pausedView.closedShadow === "none") {
     throw new Error(`DOM protection did not pause cleanly: ${JSON.stringify(pausedView)}`);
   }
-  log("DOM + Shadow layers paused", JSON.stringify(pausedView));
+  log("DOM + Shadow + business UI layers paused cleanly", JSON.stringify(pausedView));
 
   const stop = await send(popup, { type:"setTemporarySitePause", host:"pause.xad.test", minutes:0 });
   if (!stop?.ok || stop.paused) throw new Error(`resume rejected: ${JSON.stringify(stop)}`);
@@ -122,17 +145,27 @@ try {
   const protectedView = await page.evaluate(() => {
     const openAd = document.querySelector('#open-host')?.shadowRoot?.querySelector('#open-ad');
     const closedAd = window.__pauseClosedAd;
+    const state = (selector) => {
+      const el = document.querySelector(selector);
+      return el ? getComputedStyle(el).display : "missing";
+    };
     return {
-      normal:getComputedStyle(document.querySelector("#normal")).display,
-      ad:getComputedStyle(document.querySelector("#ad")).display,
+      normal:state("#normal"),
+      login:state("#login-form"),
+      checkout:state("#checkout"),
+      media:state("#media-player"),
+      address:state("#address-form"),
+      email:document.querySelector("#login-email")?.value || "",
+      ad:state("#ad"),
       openShadow:openAd ? getComputedStyle(openAd).display : "missing",
       closedShadow:closedAd ? getComputedStyle(closedAd).display : "missing"
     };
   });
+  assertBusinessUi(protectedView, "protected");
   if (protectedView.normal === "none" || protectedView.ad !== "none" || protectedView.openShadow !== "none" || protectedView.closedShadow !== "none") {
     throw new Error(`protection did not resume across DOM/Shadow layers: ${JSON.stringify(protectedView)}`);
   }
-  log("Protection restored", JSON.stringify(protectedView));
+  log("Protection restored without login/checkout/media breakage", JSON.stringify(protectedView));
 
   await worker.evaluate(async () => await chrome.storage.local.set({ allowSites:["permanent.example"] }));
   const persistentPause = await send(popup, { type:"setTemporarySitePause", host:"permanent.example", minutes:15 });
@@ -143,7 +176,7 @@ try {
   if (preserved.xadTemporaryPauseInjectedAllowSitesV1.includes("permanent.example")) throw new Error(`pre-existing allowlist entry was incorrectly marked temporary: ${JSON.stringify(preserved)}`);
   log("Permanent allowlist preserved", JSON.stringify(preserved));
 
-  log("PASS", "15-minute DNR pause, normal/open/closed-shadow DOM pause, resume and permanent allowlist safety verified");
+  log("PASS", "15-minute DNR pause, login/checkout/media safety, normal/open/closed-shadow DOM pause, resume and permanent allowlist safety verified");
 } finally {
   if (browser) { try { await browser.close(); } catch (_) {} }
   await new Promise((resolve) => server.close(resolve));
