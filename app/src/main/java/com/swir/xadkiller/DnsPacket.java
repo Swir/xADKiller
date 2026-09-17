@@ -47,7 +47,11 @@ final class DnsPacket {
         if (srcPort == 0 || dstPort != DNS_PORT) return null;
 
         int udpLen = u16(packet, ihl + 4);
-        if (udpLen < 20 || udpLen > ipTotalLength - ihl || ihl + udpLen > length) return null;
+        // For packets read from the TUN interface there is no Ethernet padding: the
+        // IPv4 payload must be exactly one complete UDP datagram. Accepting a shorter
+        // UDP length would make the DNS parser ignore unexplained trailing IP payload,
+        // creating two different interpretations of the same packet.
+        if (udpLen < 20 || udpLen != ipTotalLength - ihl || ihl + udpLen > length) return null;
         int dnsLen = udpLen - 8;
         if (dnsLen < 12) return null;
 
@@ -137,6 +141,11 @@ final class DnsPacket {
         int responseFlags = u16(response, 2);
         if ((queryFlags & 0x8000) != 0 || (queryFlags & 0x7800) != 0) return false;
         if ((responseFlags & 0x8000) == 0 || (responseFlags & 0x7800) != 0) return false;
+        // A truncated UDP reply is not a complete answer. Passing TC=1 back into the
+        // local DNS-only VPN can trigger retries that this UDP tunnel does not service
+        // and can create unreliable fallback behavior. Treat it as an upstream failure
+        // so the resolver pool can try another server instead.
+        if ((responseFlags & 0x0200) != 0) return false;
         if (u16(query, 4) != 1 || u16(response, 4) != 1) return false;
 
         byte[] trimmed = responseLength == response.length ? response : Arrays.copyOf(response, responseLength);
