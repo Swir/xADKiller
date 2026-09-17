@@ -15,6 +15,7 @@ This branch develops the Android APK independently from the current stable 1.5.1
 - DNS parser hardening is GREEN: rejects IPv4 fragments, inconsistent IP/UDP lengths, response packets, non-standard opcodes, ambiguous multi-question DNS messages and invalid source port 0.
 - Upstream DNS response validation rejects mismatched question/name/type/class, malformed responses and truncated replies.
 - Upstream DNS health scoring is GREEN: failure cooldown/half-open recovery remains bounded, persistently slow but successful resolvers are demoted without being marked failed, and stale latency-only penalties now decay after long idle periods so a Wi-Fi ↔ mobile transition does not keep biasing a new network with old RTT history.
+- Established healthy resolvers now dampen a **single valid-but-extreme RTT spike** before it enters the EWMA while still counting the real sample toward the slow-response streak; one scheduler/radio/handover stall therefore cannot pin adaptive DNS timeouts near their maximum, while repeated slowness is still penalized.
 - Stale-latency aging never clears circuit-breaker failure state: a failed resolver still requires its bounded half-open recovery probe after cooldown.
 - VPN service status now has a **traffic-independent 5-second heartbeat** while the TUN worker is alive, so an idle connection no longer depends on DNS packet traffic to keep UI/service liveness fresh; the scheduler is shut down with the VPN/service lifecycle.
 - Blocklist update hardening evaluates **normalized unique-domain counts**, preventing a duplicate-inflated remote feed from passing minimum-size or same-mode anti-shrink checks.
@@ -49,7 +50,7 @@ No Release until all relevant build, lint, regression, stability, privacy, DNS/V
 - VPN start/stop/restart/boot lifecycle regression coverage where possible; physical-device validation remains required for the heartbeat and OS lifecycle transitions.
 - Parser/blocklist regression fixtures, including duplicate-inflated update rejection.
 - DNS packet malformed/fragmented/query-shape regression fixtures.
-- DNS upstream failover/half-open recovery, persistent-slow-resolver recovery and stale-latency aging tests across simulated network-idle transitions.
+- DNS upstream failover/half-open recovery, persistent-slow-resolver recovery, one-off RTT spike dampening and stale-latency aging tests across simulated network-idle transitions.
 - Memory/large-list stress checks.
 - Manual device tests for Wi-Fi ↔ mobile data, sleep/wake and longer VPN stability.
 - No Release from this branch until manual Android device validation is also satisfactory.
