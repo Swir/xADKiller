@@ -4,6 +4,8 @@
 
   const nativeFetch = globalThis.fetch.bind(globalThis);
   const MAX_FEED_BYTES = 2 * 1024 * 1024;
+  const MAX_FEED_AGE_MS = 45 * 24 * 60 * 60 * 1000;
+  const MAX_FUTURE_SKEW_MS = 24 * 60 * 60 * 1000;
   const HEALTH_KEY = "xadFeedGuardHealthV1";
   const LIVE_SHIELD_PATH = "/Swir/xADKiller/live-shield-feed/browser-intelligence/xadkiller-live-shield.json";
   const LIVE_MATRIX_PATH = "/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json";
@@ -36,6 +38,14 @@
     if (guard) return guard[1].slice(0, 120);
     const name = String(error?.name || "network_error").toLowerCase().replace(/[^a-z0-9_.:-]/g, "_");
     return name.slice(0, 120) || "network_error";
+  }
+  function validateFeedTimestamp(value, now = Date.now()) {
+    const raw = String(value || "").trim();
+    const parsed = Date.parse(raw);
+    if (!raw || !Number.isFinite(parsed)) fail("updated_at");
+    if (parsed > now + MAX_FUTURE_SKEW_MS) fail("future_feed");
+    if (now - parsed > MAX_FEED_AGE_MS) fail("stale_feed");
+    return parsed;
   }
 
   async function recordHealthNow(kind, ok, version, error, latencyMs) {
@@ -90,6 +100,7 @@
     try { data = JSON.parse(text); } catch (_) { fail("json"); }
     if (!data || typeof data !== "object" || data.schema !== 1) fail("schema");
     if (!validVersion(data.feed_version)) fail("version");
+    validateFeedTimestamp(data.updated_at);
     return data;
   }
 
@@ -180,5 +191,5 @@
     });
   } catch (_) {}
 
-  globalThis.XAD_FEED_GUARD = Object.freeze({ guardedKind, validVersion, minRelative, readHealth });
+  globalThis.XAD_FEED_GUARD = Object.freeze({ guardedKind, validVersion, minRelative, validateFeedTimestamp, readHealth });
 })();
