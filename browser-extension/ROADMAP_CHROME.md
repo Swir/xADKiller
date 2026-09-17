@@ -11,7 +11,7 @@ Status: **in development / hardening** on `chrome-v150-adaptive-memory`.
 
 <img width="100%" src="../assets/readme/chrome/progress-mini.svg" alt="xADKiller Chrome v1.5.0 roadmap progress" />
 
-**Development progress:** **65.4% — 17/26 verified roadmap items.**  
+**Development progress:** **73.1% — 19/26 verified roadmap items.**  
 **Release readiness:** **BLOCKED** — manual browser/beta validation and the remaining hardening items are not complete.
 
 ### Phase 1 — Adaptive Memory
@@ -29,8 +29,8 @@ Status: **in development / hardening** on `chrome-v150-adaptive-memory`.
 ### Phase 2 — Breakage Guard
 
 - [x] Add one-click temporary protection pause for the current site.
-- [ ] Add a local breakage recovery mode that disables only heuristic layers before disabling core DNR.
-- [ ] Track false-positive rollbacks locally without telemetry as an explicit Breakage Guard history/control.
+- [x] Add a local breakage recovery mode that disables only heuristic layers before disabling core DNR.
+- [x] Track false-positive rollbacks locally without telemetry as an explicit Breakage Guard history/control.
 - [x] Add regression fixtures for login, checkout and embedded-media pages.
 
 ### Phase 3 — Better filtering efficiency
@@ -57,7 +57,7 @@ Status: **in development / hardening** on `chrome-v150-adaptive-memory`.
 
 ## Release gate
 
-No merge or release based only on the 65.4% development counter or a green build. The release gate also requires the remaining functional/performance items, benchmark/integrity gates and manual browser regression validation to pass without known critical issues.
+No merge or release based only on the 73.1% development counter or a green build. The release gate also requires the remaining functional/performance items, benchmark/integrity gates and manual browser regression validation to pass without known critical issues.
 
 ## Later
 
