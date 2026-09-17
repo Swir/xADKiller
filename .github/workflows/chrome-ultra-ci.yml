@@ -41,6 +41,7 @@ jobs:
         run: |
           node --check dist/chrome/service-worker.js
           node --check dist/chrome/feed-guard.js
+          node --check dist/chrome/feed-health-ui.js
           node --check dist/chrome/background.js
           node --check dist/chrome/live-signatures.js
           node --check dist/chrome/titan-engine.js
