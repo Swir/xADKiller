@@ -99,6 +99,8 @@
         <button id="siteToggle" class="secondary" disabled>—</button>
         <button id="tempPauseBtn" class="secondary warningButton" data-i18n="pauseSite15" disabled>Pause 15 min</button>
       </div>
+      <button id="heuristicRecoveryBtn" class="secondary memoryAction" data-i18n="heuristicRecovery15" disabled>Try safe recovery 15 min</button>
+      <small id="heuristicRecoveryInfo" data-i18n="heuristicRecoveryHint">Safe recovery pauses local heuristic layers first while core network rules stay enabled.</small>
       <small id="tempPauseInfo" data-i18n="pauseSiteHint">Temporary pause is for fixing a broken site and resumes automatically.</small>
     </section>
 
@@ -140,6 +142,8 @@
         <button id="falseBtn" class="secondary" data-i18n="falsePositive">False positive</button>
       </div>
       <button id="resetMemoryBtn" class="secondary memoryAction" data-i18n="resetMemory">Reset network memory</button>
+      <button id="clearRecoveryHistoryBtn" class="secondary memoryAction" data-i18n="clearRecoveryHistory">Clear recovery history</button>
+      <small id="recoveryHistoryInfo" data-i18n="recoveryHistoryHint">Breakage Guard history stays local and contains only bounded recovery events.</small>
       <small id="memoryInfo" data-i18n="adaptiveHint">Everything is learned locally in this browser profile.</small>
     </section>
 
