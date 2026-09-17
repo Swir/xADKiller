@@ -34,6 +34,7 @@
 |---|---|
 | 🛡️ Local DNS filtering | Blocks known advertising, tracking and malicious domains device-wide without root. |
 | 🔒 Local VPN architecture | Routes only the virtual DNS path needed by the filter; xADKiller does not operate a remote VPN relay. |
+| 💓 VPN liveness heartbeat | Refreshes local service/UI liveness every 5 seconds even when no DNS packets are flowing, while still shutting the heartbeat down with the VPN lifecycle. |
 | ⚡ STANDARD / ULTRA lists | Uses maintained public blocklists plus a bundled offline starter list and user rules. |
 | 🧠 Adaptive DNS upstream pool | Tracks aggregate resolver latency/failures, uses bounded half-open recovery probes, ages stale latency-only penalties after long network idle/transitions, and falls back between Cloudflare, Quad9 and Google DNS. |
 | ♻️ Safe list updates | Keeps a known-good cache, rejects obviously incomplete updates and uses rollback-safe replacement. |
@@ -81,7 +82,7 @@ The branch CI additionally validates the manifest, APK archive integrity and SHA
 
 | Layer | Responsibility |
 |---|---|
-| `AdBlockVpnServiceV121` | Local TUN lifecycle, DNS query processing, forwarding and runtime status. |
+| `AdBlockVpnServiceV121` | Local TUN lifecycle, DNS query processing/forwarding, traffic-independent liveness heartbeat and runtime status. |
 | `DnsPacket` | Strict IPv4/UDP/DNS parsing and upstream response validation. |
 | `DnsUpstreamPool` | Resolver health scoring, stale-latency aging, cooldown and bounded half-open recovery. |
 | `BlocklistManager` | Offline bootstrap, remote list parsing/cache, user rules and memory-bounded hashed lookup. |
@@ -90,7 +91,7 @@ The branch CI additionally validates the manifest, APK archive integrity and SHA
 
 ## Limitations
 
-DNS filtering cannot reliably remove ads served from the same hostname as wanted content. Applications that use their own encrypted DNS/DoH path can bypass ordinary DNS interception. Per-app attribution depends on Android platform support. The v1.6.0 development branch is **not release-ready** until the manual-device lifecycle/stability gate is completed.
+DNS filtering cannot reliably remove ads served from the same hostname as wanted content. Applications that use their own encrypted DNS/DoH path can bypass ordinary DNS interception. Per-app attribution depends on Android platform support. The v1.6.0 development branch is **not release-ready** until the manual-device lifecycle/stability gate is completed, including physical validation of the new heartbeat across idle, sleep/wake and network transitions.
 
 ## Development roadmap
 
