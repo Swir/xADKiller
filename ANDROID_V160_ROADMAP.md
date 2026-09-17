@@ -8,7 +8,7 @@ This branch develops the Android APK independently from the current stable 1.5.1
 **Release readiness:** **BLOCKED** — manual physical-device VPN lifecycle and stability evidence is still required.
 
 ## Current validation snapshot — 2026-09-17
-- Development APK CI is **GREEN** after the current DNS/blocklist/privacy hardening batch: SWIR progress SVG consistency, privacy/network manifest gate, lint, unit tests + deterministic benchmark, APK build/package validation, ZIP integrity and SHA-256 all passed.
+- Development APK CI is **GREEN** after the current DNS/VPN/blocklist/privacy hardening batch: SWIR progress SVG consistency, privacy/network manifest gate, lint, unit tests + deterministic benchmark, APK build/package validation, ZIP integrity and SHA-256 all passed.
 - Deterministic offline DNS ad fixture coverage: **100.0% (96/96)**.
 - Benign DNS control false positives: **0/20**.
 - Bundled offline starter list: **95 high-confidence domains**, with larger maintained lists loaded at runtime.
@@ -16,6 +16,7 @@ This branch develops the Android APK independently from the current stable 1.5.1
 - Upstream DNS response validation rejects mismatched question/name/type/class, malformed responses and truncated replies.
 - Upstream DNS health scoring is GREEN: failure cooldown/half-open recovery remains bounded, persistently slow but successful resolvers are demoted without being marked failed, and stale latency-only penalties now decay after long idle periods so a Wi-Fi ↔ mobile transition does not keep biasing a new network with old RTT history.
 - Stale-latency aging never clears circuit-breaker failure state: a failed resolver still requires its bounded half-open recovery probe after cooldown.
+- VPN service status now has a **traffic-independent 5-second heartbeat** while the TUN worker is alive, so an idle connection no longer depends on DNS packet traffic to keep UI/service liveness fresh; the scheduler is shut down with the VPN/service lifecycle.
 - Blocklist update hardening evaluates **normalized unique-domain counts**, preventing a duplicate-inflated remote feed from passing minimum-size or same-mode anti-shrink checks.
 - Privacy hardening: Android backup is disabled for local xADKiller state; cleartext traffic remains disabled; CI enforces these invariants and rejects QUERY_ALL_PACKAGES.
 - Release remains blocked until manual-device VPN lifecycle, Wi-Fi/mobile transitions, sleep/wake, real-app behavior and longer stability checks are satisfactory.
@@ -24,7 +25,7 @@ This branch develops the Android APK independently from the current stable 1.5.1
 No Release until all relevant build, lint, regression, stability, privacy, DNS/VPN lifecycle, blocklist integrity and manual-device checks are green and there are no known critical issues.
 
 ## Core priorities
-- Harden VPN lifecycle and heartbeat so UI/service state cannot drift.
+- Validate the new traffic-independent VPN heartbeat across stop/restart, sleep/wake and Wi-Fi ↔ mobile transitions on physical devices so UI/service state cannot drift.
 - Improve DNS blocking accuracy without routing all user traffic through the VPN.
 - Add safer upstream DNS fallback/health scoring and diagnostics.
 - Improve blocklist quality, deduplication, corruption handling and offline fallback.
@@ -45,7 +46,7 @@ No Release until all relevant build, lint, regression, stability, privacy, DNS/V
 - Manifest and signing checks.
 - APK integrity/checksum checks.
 - Deterministic SWIR Progress SVG math/XML/staleness check.
-- VPN start/stop/restart/boot lifecycle regression coverage where possible.
+- VPN start/stop/restart/boot lifecycle regression coverage where possible; physical-device validation remains required for the heartbeat and OS lifecycle transitions.
 - Parser/blocklist regression fixtures, including duplicate-inflated update rejection.
 - DNS packet malformed/fragmented/query-shape regression fixtures.
 - DNS upstream failover/half-open recovery, persistent-slow-resolver recovery and stale-latency aging tests across simulated network-idle transitions.
