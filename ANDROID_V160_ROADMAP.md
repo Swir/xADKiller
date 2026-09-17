@@ -8,7 +8,7 @@ This branch develops the Android APK independently from the current stable 1.5.1
 **Release readiness:** **BLOCKED** — manual physical-device VPN lifecycle and stability evidence is still required.
 
 ## Current validation snapshot — 2026-09-18
-- Development APK CI is **GREEN** after the exact IPv4/UDP framing and truncated-upstream-response hardening batch: SWIR progress SVG consistency, privacy/network manifest gate, lint, unit tests + deterministic benchmark, APK build/package validation, ZIP integrity and SHA-256 all passed.
+- Development APK CI is **GREEN** after the DNS privacy diagnostics hardening batch: SWIR progress SVG consistency, privacy/network manifest gate, lint, unit tests + deterministic benchmark, APK build/package validation, ZIP integrity and SHA-256 all passed on the functional head.
 - Deterministic offline DNS ad fixture coverage: **100.0% (96/96)**.
 - Benign DNS control false positives: **0/20**.
 - Bundled offline starter list: **95 high-confidence domains**, with larger maintained lists loaded at runtime.
@@ -18,6 +18,7 @@ This branch develops the Android APK independently from the current stable 1.5.1
 - Established healthy resolvers dampen a **single valid-but-extreme RTT spike** before it enters the EWMA while still counting the real sample toward the slow-response streak; one scheduler/radio/handover stall therefore cannot pin adaptive DNS timeouts near their maximum, while repeated slowness is still penalized.
 - Stale-latency aging never clears circuit-breaker failure state: a failed resolver still requires its bounded half-open recovery probe after cooldown.
 - VPN service status has a **traffic-independent 5-second heartbeat** while the TUN worker is alive, so an idle connection no longer depends on DNS packet traffic to keep UI/service liveness fresh; the scheduler is shut down with the VPN/service lifecycle.
+- Private DNS diagnostics now classify strict-hostname conflict risk, active encrypted system DNS, automatic/unknown state and no-network state with deterministic unit tests. The UI explicitly states that per-app DoH is **not reliably detectable** from Android system Private DNS APIs instead of claiming a false detection capability.
 - Blocklist update hardening evaluates **normalized unique-domain counts**, preventing a duplicate-inflated remote feed from passing minimum-size or same-mode anti-shrink checks.
 - Privacy hardening: Android backup is disabled for local xADKiller state; cleartext traffic remains disabled; CI enforces these invariants and rejects QUERY_ALL_PACKAGES.
 - Release remains blocked until manual-device VPN lifecycle, Wi-Fi/mobile transitions, sleep/wake, real-app behavior and longer stability checks are satisfactory.
@@ -32,7 +33,7 @@ No Release until all relevant build, lint, regression, stability, privacy, DNS/V
 - Improve blocklist quality, deduplication, corruption handling and offline fallback.
 - Keep memory bounded with large lists and avoid UI/service ANRs.
 - Improve false-positive recovery and per-domain controls.
-- Add stronger diagnostics for Private DNS / DoH conflicts and unsupported traffic classes.
+- Continue Private DNS / encrypted-DNS diagnostics without pretending application-level DoH is observable when Android does not expose it, and document unsupported traffic classes clearly.
 - Preserve privacy: no MITM, no remote executable code, no telemetry/profiling backend, no Android backup of local protection state.
 
 ## UI / UX
@@ -52,6 +53,7 @@ No Release until all relevant build, lint, regression, stability, privacy, DNS/V
 - DNS packet malformed/fragmented/query-shape/exact IPv4↔UDP length regression fixtures.
 - DNS upstream response regression fixtures including TC=1 truncated UDP rejection.
 - DNS upstream failover/half-open recovery, persistent-slow-resolver recovery, one-off RTT spike dampening and stale-latency aging tests across simulated network-idle transitions.
+- Private DNS diagnostic classification fixtures: STRICT conflict, automatic encrypted DNS, Private DNS off, unknown/specifier fallback and no-network state; app-level DoH remains explicitly non-detectable by this system-level check.
 - Memory/large-list stress checks.
 - Manual device tests for Wi-Fi ↔ mobile data, sleep/wake and longer VPN stability.
 - No Release from this branch until manual Android device validation is also satisfactory.
