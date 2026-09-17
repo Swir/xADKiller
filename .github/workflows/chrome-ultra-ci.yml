@@ -46,6 +46,7 @@ jobs:
         run: |
           node --check dist/chrome/service-worker.js
           node --check dist/chrome/feed-guard.js
+          node --check dist/chrome/feed-v2-compat.js
           node --check dist/chrome/feed-health-ui.js
           node --check dist/chrome/rule-budget-ui.js
           node --check dist/chrome/background.js
@@ -67,6 +68,7 @@ jobs:
           node --check tests/chrome-adaptive-memory-runtime.mjs
           node --check tests/chrome-temporary-pause-runtime.mjs
           node --check tests/chrome-feed-guard-runtime.mjs
+          node --check tests/feed-v2-consumer-compat.mjs
           node --check tests/chrome-blocking-benchmark.mjs
           node --check tests/chrome-shadow-mutation-soak.mjs
           node --check tests/chrome-real-page-soak.mjs
@@ -75,6 +77,8 @@ jobs:
           node --check tools/validate-v150-safety.mjs
       - name: GitHub feed integrity regression test
         run: npm run test:feeds
+      - name: Feed v2 consumer compatibility regression
+        run: npm run test:feed-v2-consumers
       - name: Production GitHub feed checksum audit
         run: npm run test:feed-checksums
       - name: Install Chromium
