@@ -2,6 +2,7 @@
   if (globalThis.__xadShadowSentinelV1) return;
   globalThis.__xadShadowSentinelV1 = true;
 
+  const RECOVERY_KEY = "xadHeuristicRecoverySitesV1";
   const SELECTORS = [
     ".adsbygoogle",
     ".adbox.banner_ads.adsbox",
@@ -29,6 +30,7 @@
   let enabled = false;
   let smartEnabled = true;
   let allowSites = [];
+  let heuristicRecoverySites = {};
   let prefsReady = false;
 
   function normalizeHost(v) {
@@ -41,7 +43,16 @@
       return d && (host === d || host.endsWith("." + d));
     });
   }
-  function active() { return prefsReady && enabled && smartEnabled && !allowed(); }
+  function recovered(now = Date.now()) {
+    const host = normalizeHost(location.hostname);
+    if (!host || !heuristicRecoverySites || typeof heuristicRecoverySites !== "object") return false;
+    return Object.entries(heuristicRecoverySites).some(([entry, rawUntil]) => {
+      const d = normalizeHost(entry);
+      const until = Number(rawUntil || 0);
+      return d && Number.isFinite(until) && until > now && (host === d || host.endsWith("." + d));
+    });
+  }
+  function active() { return prefsReady && enabled && smartEnabled && !allowed() && !recovered(); }
 
   function rememberAndHide(el) {
     if (!(el instanceof Element)) return;
@@ -172,10 +183,11 @@
   }
 
   function refreshPrefs() {
-    chrome.storage.local.get({ enabled:true, smartEnabled:true, allowSites:[] }, (prefs) => {
+    chrome.storage.local.get({ enabled:true, smartEnabled:true, allowSites:[], [RECOVERY_KEY]:{} }, (prefs) => {
       enabled = prefs.enabled !== false;
       smartEnabled = prefs.smartEnabled !== false;
       allowSites = Array.isArray(prefs.allowSites) ? prefs.allowSites : [];
+      heuristicRecoverySites = prefs[RECOVERY_KEY] && typeof prefs[RECOVERY_KEY] === "object" ? prefs[RECOVERY_KEY] : {};
       prefsReady = true;
       reconcile();
     });
@@ -199,6 +211,6 @@
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    if (changes.enabled || changes.smartEnabled || changes.allowSites) refreshPrefs();
+    if (changes.enabled || changes.smartEnabled || changes.allowSites || changes[RECOVERY_KEY]) refreshPrefs();
   });
 })();
