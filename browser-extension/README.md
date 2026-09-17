@@ -14,8 +14,8 @@
 
 <img width="100%" src="../assets/readme/chrome/progress-card.svg" alt="xADKiller Chrome v1.5.0 development progress" />
 
-**Development progress:** **50.0% — 13/26 verified v1.5.0 roadmap items.**  
-**Release readiness:** **BLOCKED** — broader real-page/performance validation and manual browser/beta regression testing remain required.
+**Development progress:** **53.8% — 14/26 verified v1.5.0 roadmap items.**  
+**Release readiness:** **BLOCKED** — manual browser/beta validation and the remaining hardening items are not complete.
 
 | Item | Status |
 |---|---|
@@ -74,6 +74,7 @@ The v1.5 branch runs Chromium and integrity gates for:
 
 - TITAN runtime behavior;
 - Shadow DOM mutation soak;
+- broader real-page mutation soak with normal business UI, login/checkout/media controls and mixed DOM/Shadow ad layers;
 - static/adaptive boost behavior;
 - no-COMPAT regression;
 - PL/EN language persistence;
