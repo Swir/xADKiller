@@ -51,7 +51,7 @@ public class BlocklistCoverageTest {
             "chromium.org", "stackoverflow.com", "npmjs.com", "pypi.org", "gradle.org", "android.com"
     };
 
-    @Test public void offlineStarterListHasHighSyntheticCoverageAndNoControlHits() throws Exception {
+    @Test public void offlineStarterListHasCompleteSyntheticCoverageAndNoControlHits() throws Exception {
         Set<String> domains = readStarterDomains();
         assertTrue("starter list unexpectedly small: " + domains.size(), domains.size() >= 80);
 
@@ -65,7 +65,7 @@ public class BlocklistCoverageTest {
                 "[xADKiller Android benchmark] offline DNS fixture coverage=%.1f%% (%d/%d), benign false positives=%d/%d, starter domains=%d%n",
                 coverage, hits, AD_FIXTURES.length, falsePositives, BENIGN_FIXTURES.length, domains.size());
 
-        assertTrue("offline DNS fixture coverage too low: " + coverage, coverage >= 95.0d);
+        assertEquals("offline DNS fixture suite must stay fully covered", AD_FIXTURES.length, hits);
         assertEquals("benign control domain was covered by starter list", 0, falsePositives);
     }
 
