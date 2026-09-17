@@ -14,6 +14,7 @@
     "test:pause": "node tests/chrome-temporary-pause-runtime.mjs",
     "test:feeds": "node tests/chrome-feed-guard-runtime.mjs",
     "test:benchmark": "node tests/chrome-blocking-benchmark.mjs",
+    "test:shadow-soak": "node tests/chrome-shadow-mutation-soak.mjs",
     "build:legacy": "node tools/build.mjs"
   },
   "devDependencies": {
