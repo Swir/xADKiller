@@ -5,6 +5,8 @@ on:
     branches: [ main, chrome-titan-v140, chrome-v141-pl-en, chrome-v150-adaptive-memory ]
     paths:
       - "browser-extension/**"
+      - "assets/readme/chrome/**"
+      - "ci/progress_svg.py"
       - ".github/workflows/chrome-ultra-ci.yml"
   workflow_dispatch:
 
@@ -18,7 +20,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     defaults:
       run:
         working-directory: browser-extension
@@ -29,6 +31,8 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "24"
+      - name: SWIR progress SVG consistency
+        run: python3 ../ci/progress_svg.py chrome --check
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Compile static dynamic session and adaptive boost rules
@@ -63,6 +67,7 @@ jobs:
           node --check tests/chrome-feed-guard-runtime.mjs
           node --check tests/chrome-blocking-benchmark.mjs
           node --check tests/chrome-shadow-mutation-soak.mjs
+          node --check tests/chrome-real-page-soak.mjs
           node --check tools/validate-v150-safety.mjs
       - name: GitHub feed integrity regression test
         run: npm run test:feeds
@@ -72,6 +77,8 @@ jobs:
         run: timeout --signal=TERM --kill-after=10s 300s npm run test:chrome
       - name: Chromium Shadow DOM mutation soak
         run: timeout --signal=TERM --kill-after=10s 180s npm run test:shadow-soak
+      - name: Chromium broader real-page soak
+        run: timeout --signal=TERM --kill-after=10s 180s npm run test:real-page
       - name: Chromium adaptive static boost test
         run: timeout --signal=TERM --kill-after=10s 180s npm run test:boost
       - name: Chromium no-COMPAT regression test
