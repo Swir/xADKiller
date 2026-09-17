@@ -10,6 +10,8 @@ on:
       - "settings.gradle"
       - "gradle.properties"
       - "ci/**"
+      - "assets/readme/android/**"
+      - "README.md"
       - "ANDROID_V160_ROADMAP.md"
       - ".github/workflows/build-apk.yml"
 
@@ -55,6 +57,8 @@ jobs:
           base64 -d ci/xadkiller-debug.keystore.b64 > "$HOME/.android/debug.keystore"
           chmod 600 "$HOME/.android/debug.keystore"
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey >/dev/null
+      - name: SWIR progress SVG consistency
+        run: python3 ci/progress_svg.py android --check
       - name: Android privacy and network manifest gate
         run: |
           set -euo pipefail
