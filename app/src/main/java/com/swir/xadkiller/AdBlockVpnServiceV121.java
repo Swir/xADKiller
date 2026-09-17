@@ -24,6 +24,9 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.util.Arrays;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class AdBlockVpnServiceV121 extends VpnService {
@@ -43,12 +46,15 @@ public class AdBlockVpnServiceV121 extends VpnService {
     private static final String CHANNEL_ID = "xadkiller_vpn";
     private static final String VPN_DNS = "10.111.222.1";
     private static final String VPN_CLIENT = "10.111.222.2";
+    private static final long HEARTBEAT_INTERVAL_MS = 5_000L;
     private static final DnsUpstreamPool UPSTREAM_POOL = new DnsUpstreamPool(
             new String[]{"1.1.1.1", "9.9.9.9", "8.8.8.8"});
 
     private final AtomicBoolean workerRunning = new AtomicBoolean(false);
+    private final Object heartbeatLock = new Object();
     private volatile ParcelFileDescriptor vpnInterface;
     private volatile Thread worker;
+    private volatile ScheduledExecutorService heartbeatExecutor;
     private volatile long queries;
     private volatile long blocked;
     private volatile String lastBlocked = "—";
@@ -167,6 +173,7 @@ public class AdBlockVpnServiceV121 extends VpnService {
                         .putLong(KEY_HEARTBEAT, System.currentTimeMillis())
                         .apply();
                 SystemLogStore.info(this, "VPN", "Interfejs VPN utworzony poprawnie");
+                startHeartbeat();
                 sendStatus(true);
                 maybeRefreshBlocklist();
                 processPackets(vpnInterface);
@@ -176,6 +183,7 @@ public class AdBlockVpnServiceV121 extends VpnService {
                 sendStatus(true);
             } finally {
                 workerRunning.set(false);
+                stopHeartbeat();
                 closeVpnInterface();
                 getSharedPreferences(BlocklistManager.PREFS, MODE_PRIVATE).edit()
                         .putBoolean("running", false)
@@ -187,6 +195,38 @@ public class AdBlockVpnServiceV121 extends VpnService {
             }
         }, "xADKiller-VPN-Worker");
         worker.start();
+    }
+
+    private void startHeartbeat() {
+        synchronized (heartbeatLock) {
+            stopHeartbeatLocked();
+            heartbeatExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "xADKiller-VPN-Heartbeat");
+                thread.setDaemon(true);
+                return thread;
+            });
+            heartbeatExecutor.scheduleAtFixedRate(() -> {
+                if (!workerRunning.get() || vpnInterface == null) return;
+                try {
+                    sendStatus(true);
+                } catch (Throwable error) {
+                    SystemLogStore.warn(this, "VPN", "Heartbeat status update failed: " + error.getClass().getSimpleName());
+                }
+            }, HEARTBEAT_INTERVAL_MS, HEARTBEAT_INTERVAL_MS, TimeUnit.MILLISECONDS);
+        }
+        SystemLogStore.info(this, "VPN", "Traffic-independent heartbeat aktywny • interval=" + HEARTBEAT_INTERVAL_MS + "ms");
+    }
+
+    private void stopHeartbeat() {
+        synchronized (heartbeatLock) {
+            stopHeartbeatLocked();
+        }
+    }
+
+    private void stopHeartbeatLocked() {
+        ScheduledExecutorService executor = heartbeatExecutor;
+        heartbeatExecutor = null;
+        if (executor != null) executor.shutdownNow();
     }
 
     private void processPackets(ParcelFileDescriptor pfd) throws IOException {
@@ -366,6 +406,7 @@ public class AdBlockVpnServiceV121 extends VpnService {
     private void stopVpnInternal(boolean self) {
         SystemLogStore.info(this, "VPN", "Zatrzymywanie • queries=" + queries + " • blocked=" + blocked);
         workerRunning.set(false);
+        stopHeartbeat();
         closeVpnInterface();
         getSharedPreferences(BlocklistManager.PREFS, MODE_PRIVATE).edit()
                 .putBoolean("running", false)
