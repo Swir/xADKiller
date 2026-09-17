@@ -55,6 +55,16 @@ jobs:
           base64 -d ci/xadkiller-debug.keystore.b64 > "$HOME/.android/debug.keystore"
           chmod 600 "$HOME/.android/debug.keystore"
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey >/dev/null
+      - name: Android privacy and network manifest gate
+        run: |
+          set -euo pipefail
+          MANIFEST=app/src/main/AndroidManifest.xml
+          grep -q 'android:allowBackup="false"' "$MANIFEST"
+          grep -q 'android:usesCleartextTraffic="false"' "$MANIFEST"
+          grep -q 'android:networkSecurityConfig="@xml/network_security_config"' "$MANIFEST"
+          grep -q 'android:permission="android.permission.BIND_VPN_SERVICE"' "$MANIFEST"
+          ! grep -q 'android.permission.QUERY_ALL_PACKAGES' "$MANIFEST"
+          echo "Android privacy manifest gate: PASS"
       - name: Android lint
         run: gradle --no-daemon lintDebug
       - name: Unit tests and blocking benchmark
