@@ -3,11 +3,14 @@
 This branch develops the Android APK independently from the current stable 1.5.1 line.
 
 ## Current validation snapshot — 2026-09-17
-- Development APK CI: GREEN (lint, unit tests, build, manifest/package checks, ZIP integrity and SHA-256).
+- Development APK CI: **GREEN** (privacy manifest gate, lint, unit tests, build, package checks, ZIP integrity and SHA-256).
 - Deterministic offline DNS ad fixture coverage: **100.0% (96/96)**.
 - Benign DNS control false positives: **0/20**.
 - Bundled offline starter list: **95 high-confidence domains**, with larger maintained lists loaded at runtime.
-- Release remains blocked until manual-device VPN lifecycle, real-app behavior and longer stability checks are satisfactory.
+- DNS parser hardening is GREEN: rejects IPv4 fragments, inconsistent IP/UDP lengths, response packets, non-standard opcodes, ambiguous multi-question DNS messages and invalid source port 0.
+- Upstream DNS circuit-breaker tests are GREEN, including half-open recovery and bounded probe latency.
+- Privacy hardening: Android backup is disabled for local xADKiller state; cleartext traffic remains disabled; CI now enforces these invariants and rejects QUERY_ALL_PACKAGES.
+- Release remains blocked until manual-device VPN lifecycle, Wi-Fi/mobile transitions, sleep/wake, real-app behavior and longer stability checks are satisfactory.
 
 ## Release gate
 No Release until all relevant build, lint, regression, stability, privacy, DNS/VPN lifecycle, blocklist integrity and manual-device checks are green and there are no known critical issues.
@@ -20,7 +23,7 @@ No Release until all relevant build, lint, regression, stability, privacy, DNS/V
 - Keep memory bounded with large lists and avoid UI/service ANRs.
 - Improve false-positive recovery and per-domain controls.
 - Add stronger diagnostics for Private DNS / DoH conflicts and unsupported traffic classes.
-- Preserve privacy: no MITM, no remote executable code, no telemetry/profiling backend.
+- Preserve privacy: no MITM, no remote executable code, no telemetry/profiling backend, no Android backup of local protection state.
 
 ## UI / UX
 - Refresh the dark TITAN dashboard with clearer protection state and health indicators.
@@ -30,10 +33,13 @@ No Release until all relevant build, lint, regression, stability, privacy, DNS/V
 
 ## Test plan
 - Gradle compile + lint + unit tests in CI.
+- Privacy/network manifest gate.
 - Manifest and signing checks.
 - APK integrity/checksum checks.
 - VPN start/stop/restart/boot lifecycle regression coverage where possible.
 - Parser/blocklist regression fixtures.
-- DNS packet and NXDOMAIN response fixtures.
+- DNS packet malformed/fragmented/query-shape regression fixtures.
+- DNS upstream failover/half-open recovery tests.
 - Memory/large-list stress checks.
+- Manual device tests for Wi-Fi ↔ mobile data, sleep/wake and longer VPN stability.
 - No Release from this branch until manual Android device validation is also satisfactory.
