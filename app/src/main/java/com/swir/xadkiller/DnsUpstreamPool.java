@@ -26,6 +26,11 @@ import java.util.Map;
  * while faster healthy resolvers move ahead. Fast responses decay that penalty
  * again so temporary network congestion does not permanently demote a provider.
  *
+ * A single valid-but-extreme RTT sample is dampened before it enters the EWMA
+ * once a resolver has an established baseline. The real RTT still increments
+ * the slow-response streak, so repeated slowness is penalized while one scheduler,
+ * radio or handover spike cannot inflate adaptive timeouts for many later queries.
+ *
  * Latency-only health is also aged after long periods without observations.
  * Android can switch between Wi-Fi and mobile networks while the VPN stays up;
  * carrying an old RTT penalty forever would bias the new network with stale
@@ -41,6 +46,9 @@ final class DnsUpstreamPool {
     private static final long SLOW_RTT_MS = 1500L;
     private static final int MAX_SLOW_STREAK = 4;
     private static final double SLOW_STREAK_PENALTY_MS = 260d;
+    private static final int OUTLIER_BASELINE_SUCCESSES = 2;
+    private static final double OUTLIER_MIN_CEILING_MS = 800d;
+    private static final double OUTLIER_EWMA_MULTIPLIER = 3.0d;
     private static final long STALE_LATENCY_STEP_MS = 10L * 60L * 1000L;
     private static final double STALE_RTT_RETAIN = 0.50d;
 
@@ -110,7 +118,12 @@ final class DnsUpstreamPool {
         State state = byServer.get(server);
         if (state == null) return;
         ageStateLatency(state, nowMs);
-        double sample = Math.max(1d, Math.min(5000d, (double)rttMs));
+        double rawSample = Math.max(1d, Math.min(5000d, (double)rttMs));
+        double sample = rawSample;
+        if (state.successes >= OUTLIER_BASELINE_SUCCESSES) {
+            double ceiling = Math.max(OUTLIER_MIN_CEILING_MS, state.ewmaRttMs * OUTLIER_EWMA_MULTIPLIER);
+            sample = Math.min(rawSample, ceiling);
+        }
         state.ewmaRttMs = state.successes == 0
                 ? sample
                 : (state.ewmaRttMs * 0.72d + sample * 0.28d);
