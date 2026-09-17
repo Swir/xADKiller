@@ -44,6 +44,17 @@
       <small id="rulesInfo">—</small>
     </section>
 
+    <section class="card compactCard budgetCard">
+      <strong data-i18n="ruleBudget">Rule Budget</strong>
+      <div class="budgetGrid">
+        <div><b id="ruleBudgetStandard">0</b><span data-i18n="ruleBudgetStandard">STANDARD static</span></div>
+        <div><b id="ruleBudgetUltra">0</b><span data-i18n="ruleBudgetUltra">ULTRA add-on</span></div>
+        <div><b id="ruleBudgetBoost">0</b><span data-i18n="ruleBudgetBoost">TITAN Boost</span></div>
+        <div><b id="ruleBudgetRuntime">0</b><span data-i18n="ruleBudgetRuntime">runtime rules</span></div>
+      </div>
+      <small data-i18n="ruleBudgetHint">Live diagnostics show packaged and runtime rule buckets without inventing a browser-limit percentage.</small>
+    </section>
+
     <section class="card compactCard">
       <div class="row">
         <div>
@@ -149,5 +160,6 @@
   </main>
   <script src="popup.js"></script>
   <script src="feed-health-ui.js"></script>
+  <script src="rule-budget-ui.js"></script>
 </body>
 </html>
