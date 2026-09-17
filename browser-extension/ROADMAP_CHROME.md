@@ -42,10 +42,10 @@ Status: **in development / hardening** on `chrome-v150-adaptive-memory`.
 
 ### Phase 4 — Live Shield hardening
 
-- [ ] Publish/migrate protection feeds to the v2 data contract with explicit expiry metadata. The extension-side Feed Guard already supports v1 for current production compatibility and validates v2 `expires_at` with bounded lifetime/expiry checks; this item stays open until the published production feeds are actually migrated.
+- [ ] Publish/migrate protection feeds to the v2 data contract with explicit expiry metadata. Feed Guard supports v1 for current production compatibility and validates v2 `expires_at` with bounded lifetime/expiry checks. The development service worker now places a local `feed-v2-compat` adapter **after Feed Guard**, so a fully validated v2 payload can be consumed by the current v1-shaped Live Matrix/TITAN readers without weakening validation; CI gates this ordering and preserves v2 expiry/rollback metadata. This roadmap item stays open until the published production feeds are actually migrated.
 - [x] Reject stale or malformed feed payloads without replacing a known-good cache.
 - [x] Add deterministic feed checksums in the repository.
-- [ ] Publish rollback metadata for bad rule-data releases. Feed Guard now validates v2 `rollback.previous_version` + safe repository-relative `previous_ref`, but this item stays open until that metadata exists in the published production feeds.
+- [ ] Publish rollback metadata for bad rule-data releases. Feed Guard validates v2 `rollback.previous_version` + safe repository-relative `previous_ref`, and the v2 consumer adapter preserves those fields, but this item stays open until that metadata exists in the published production feeds.
 
 ### Phase 5 — Store beta
 
