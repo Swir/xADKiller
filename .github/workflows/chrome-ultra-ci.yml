@@ -40,10 +40,12 @@ jobs:
       - name: JavaScript syntax
         run: |
           node --check dist/chrome/service-worker.js
+          node --check dist/chrome/feed-guard.js
           node --check dist/chrome/background.js
           node --check dist/chrome/live-signatures.js
           node --check dist/chrome/titan-engine.js
           node --check dist/chrome/static-boost.js
+          node --check dist/chrome/standard-core-boost.js
           node --check dist/chrome/temporary-site-guard.js
           node --check dist/chrome/titan-main.js
           node --check dist/chrome/network-scout.js
@@ -57,8 +59,11 @@ jobs:
           node --check dist/chrome/build-meta.js
           node --check tests/chrome-adaptive-memory-runtime.mjs
           node --check tests/chrome-temporary-pause-runtime.mjs
+          node --check tests/chrome-feed-guard-runtime.mjs
           node --check tests/chrome-blocking-benchmark.mjs
           node --check tools/validate-v150-safety.mjs
+      - name: GitHub feed integrity regression test
+        run: npm run test:feeds
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Chromium TITAN runtime test
