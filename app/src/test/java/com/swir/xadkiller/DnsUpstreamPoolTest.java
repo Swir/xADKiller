@@ -49,6 +49,33 @@ public class DnsUpstreamPoolTest {
         assertEquals("1.1.1.1", pool.order(2_001L)[0]);
     }
 
+    @Test public void staleLatencyPenaltyAgesWithoutNewDnsTraffic() {
+        DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
+        pool.recordSuccess("1.1.1.1", 1900L, 1_000L);
+        pool.recordSuccess("1.1.1.1", 1900L, 1_100L);
+        pool.recordSuccess("1.1.1.1", 1900L, 1_200L);
+        assertEquals(3, pool.slowStreak("1.1.1.1"));
+        assertEquals(3200, pool.timeoutMs("1.1.1.1", 1_201L));
+
+        long afterFortyMinutes = 1_200L + 40L * 60L * 1000L;
+        pool.order(afterFortyMinutes);
+        assertEquals(0, pool.slowStreak("1.1.1.1"));
+        assertTrue(pool.timeoutMs("1.1.1.1", afterFortyMinutes) < 2200);
+        assertEquals(0, pool.failureStreak("1.1.1.1"));
+    }
+
+    @Test public void staleLatencyAgingNeverClearsCircuitBreakerFailureState() {
+        DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
+        pool.recordSuccess("1.1.1.1", 1900L, 1_000L);
+        pool.recordFailure("1.1.1.1", 1_100L);
+        assertEquals(1, pool.failureStreak("1.1.1.1"));
+
+        long afterTwoHours = 1_100L + 2L * 60L * 60L * 1000L;
+        assertEquals("1.1.1.1", pool.order(afterTwoHours)[0]);
+        assertEquals(1, pool.failureStreak("1.1.1.1"));
+        assertTrue(pool.snapshot(afterTwoHours).contains("probe"));
+    }
+
     @Test public void coolingResolverIsMovedBehindHealthyResolvers() {
         DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
         pool.recordSuccess("1.1.1.1", 20L, 1_000L);
