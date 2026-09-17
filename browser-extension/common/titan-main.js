@@ -48,14 +48,13 @@
     try { existing = root.querySelector?.("style[data-xadkiller-titan-shadow='1']") || null; } catch (_) {}
     if (existing) {
       shadowStyles.add(existing);
-      try { existing.disabled = !active; } catch (_) {}
+      try { existing.textContent = active ? SHADOW_CSS : ""; } catch (_) {}
       return existing;
     }
     try {
       const style = document.createElement("style");
       style.dataset.xadkillerTitanShadow = "1";
-      style.textContent = SHADOW_CSS;
-      style.disabled = !active;
+      style.textContent = active ? SHADOW_CSS : "";
       root.appendChild(style);
       shadowStyles.add(style);
       return style;
@@ -63,9 +62,10 @@
   }
 
   function updateShadowStyles() {
+    const css = active ? SHADOW_CSS : "";
     for (const style of [...shadowStyles]) {
       if (!style?.isConnected) { shadowStyles.delete(style); continue; }
-      try { style.disabled = !active; } catch (_) {}
+      try { if (style.textContent !== css) style.textContent = css; } catch (_) {}
     }
   }
 
@@ -83,6 +83,7 @@
     try { root.querySelectorAll(AD_SELECTOR).forEach(rememberAndHide); } catch (_) {}
   }
   function reconcileShadowProtection() {
+    if (!active) restoreShadowHidden();
     for (const root of [...shadowRoots]) {
       if (!root?.host?.isConnected) {
         shadowRoots.delete(root);
@@ -92,7 +93,6 @@
       if (active) hideShadow(root);
     }
     updateShadowStyles();
-    if (!active) restoreShadowHidden();
   }
 
   window.addEventListener("xadkiller:preflight-config", (event) => {
@@ -118,7 +118,7 @@
   if (typeof nativeAttachShadow === "function") {
     Element.prototype.attachShadow = function(init) {
       const root = Reflect.apply(nativeAttachShadow, this, arguments);
-      guardShadow(root); // keeps a private reference for both open and closed roots
+      guardShadow(root);
       return root;
     };
   }
