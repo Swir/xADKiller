@@ -76,7 +76,9 @@ const BENIGN_CASES = [
   ["https://www.python.org/static/js/main-min.js", "script"],
   ["https://gradle.org/releases/", "main_frame"],
   ["https://www.android.com/intl/en_us/phones/", "main_frame"],
-  ["https://kernel.org/theme/js/main.js", "script"]
+  ["https://kernel.org/theme/js/main.js", "script"],
+  ["https://publisher.xad.test/ima3d/model.js", "script"],
+  ["https://publisher.xad.test/commercially/feature.mp4", "media"]
 ];
 
 async function findWorker(browser, timeoutMs = 25000) {
@@ -162,8 +164,8 @@ try {
     log("Benign matches", [...new Set([...standardFalse, ...ultraFalse].map((x) => x.url))].join(" | "));
   }
 
-  if (standard.pct < 80) throw new Error(`STANDARD synthetic coverage below 80%: ${standard.pct.toFixed(1)}%`);
-  if (ultra.pct < 90) throw new Error(`ULTRA synthetic coverage below 90%: ${ultra.pct.toFixed(1)}%`);
+  if (standard.pct < 98) throw new Error(`STANDARD synthetic coverage below 98%: ${standard.pct.toFixed(1)}%`);
+  if (ultra.pct < 98) throw new Error(`ULTRA synthetic coverage below 98%: ${ultra.pct.toFixed(1)}%`);
   if (ultra.pct + 0.001 < standard.pct) throw new Error(`ULTRA regressed below STANDARD: ${ultra.pct.toFixed(1)} < ${standard.pct.toFixed(1)}`);
   if (standardFalse.length || ultraFalse.length) throw new Error("benign control request matched a blocking rule");
 
