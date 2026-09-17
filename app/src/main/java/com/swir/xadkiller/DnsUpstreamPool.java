@@ -25,6 +25,12 @@ import java.util.Map;
  * ranking penalty. They remain usable as fallbacks and are not marked failed,
  * while faster healthy resolvers move ahead. Fast responses decay that penalty
  * again so temporary network congestion does not permanently demote a provider.
+ *
+ * Latency-only health is also aged after long periods without observations.
+ * Android can switch between Wi-Fi and mobile networks while the VPN stays up;
+ * carrying an old RTT penalty forever would bias the new network with stale
+ * information. Failure/circuit-breaker state is deliberately not forgotten by
+ * this passive aging and still requires a bounded half-open recovery probe.
  */
 final class DnsUpstreamPool {
     private static final int DEFAULT_RTT_MS = 180;
@@ -35,6 +41,8 @@ final class DnsUpstreamPool {
     private static final long SLOW_RTT_MS = 1500L;
     private static final int MAX_SLOW_STREAK = 4;
     private static final double SLOW_STREAK_PENALTY_MS = 260d;
+    private static final long STALE_LATENCY_STEP_MS = 10L * 60L * 1000L;
+    private static final double STALE_RTT_RETAIN = 0.50d;
 
     private static final class State {
         final String server;
@@ -45,6 +53,8 @@ final class DnsUpstreamPool {
         long cooldownUntilMs;
         long successes;
         long failures;
+        long lastObservationAtMs;
+        long lastLatencyDecayAtMs;
 
         State(String server, int ordinal) {
             this.server = server;
@@ -69,6 +79,7 @@ final class DnsUpstreamPool {
     }
 
     synchronized String[] order(long nowMs) {
+        ageStaleLatency(nowMs);
         List<State> ordered = new ArrayList<>(states);
         final State probe = recoveryProbeCandidate(nowMs);
         ordered.sort(Comparator
@@ -86,6 +97,7 @@ final class DnsUpstreamPool {
     }
 
     synchronized int timeoutMs(String server, long nowMs) {
+        ageStaleLatency(nowMs);
         State state = byServer.get(server);
         if (state == null) return 2200;
         int adaptive = (int)Math.round(900d + state.ewmaRttMs * 4.0d + state.failureStreak * 180d);
@@ -97,6 +109,7 @@ final class DnsUpstreamPool {
     synchronized void recordSuccess(String server, long rttMs, long nowMs) {
         State state = byServer.get(server);
         if (state == null) return;
+        ageStateLatency(state, nowMs);
         double sample = Math.max(1d, Math.min(5000d, (double)rttMs));
         state.ewmaRttMs = state.successes == 0
                 ? sample
@@ -109,20 +122,26 @@ final class DnsUpstreamPool {
         } else {
             state.slowStreak = Math.max(0, state.slowStreak - 1);
         }
+        state.lastObservationAtMs = nowMs;
+        state.lastLatencyDecayAtMs = nowMs;
     }
 
     synchronized void recordFailure(String server, long nowMs) {
         State state = byServer.get(server);
         if (state == null) return;
+        ageStateLatency(state, nowMs);
         state.failures++;
         state.failureStreak = Math.min(12, state.failureStreak + 1);
         state.slowStreak = Math.max(0, state.slowStreak - 1);
         int shift = Math.min(5, Math.max(0, state.failureStreak - 1));
         long cooldown = Math.min(MAX_COOLDOWN_MS, 1500L << shift);
         state.cooldownUntilMs = Math.max(state.cooldownUntilMs, nowMs + cooldown);
+        state.lastObservationAtMs = nowMs;
+        state.lastLatencyDecayAtMs = nowMs;
     }
 
     synchronized String snapshot(long nowMs) {
+        ageStaleLatency(nowMs);
         StringBuilder out = new StringBuilder();
         State probe = recoveryProbeCandidate(nowMs);
         String[] order = order(nowMs);
@@ -169,6 +188,22 @@ final class DnsUpstreamPool {
     synchronized int slowStreak(String server) {
         State state = byServer.get(server);
         return state == null ? 0 : state.slowStreak;
+    }
+
+    private void ageStaleLatency(long nowMs) {
+        for (State state : states) ageStateLatency(state, nowMs);
+    }
+
+    private void ageStateLatency(State state, long nowMs) {
+        if (state.lastObservationAtMs <= 0L || nowMs <= state.lastObservationAtMs) return;
+        long anchor = Math.max(state.lastObservationAtMs, state.lastLatencyDecayAtMs);
+        long elapsed = nowMs - anchor;
+        if (elapsed < STALE_LATENCY_STEP_MS) return;
+        long steps = Math.min(12L, elapsed / STALE_LATENCY_STEP_MS);
+        double retain = Math.pow(STALE_RTT_RETAIN, steps);
+        state.ewmaRttMs = DEFAULT_RTT_MS + (state.ewmaRttMs - DEFAULT_RTT_MS) * retain;
+        state.slowStreak = Math.max(0, state.slowStreak - (int)steps);
+        state.lastLatencyDecayAtMs = anchor + steps * STALE_LATENCY_STEP_MS;
     }
 
     private State recoveryProbeCandidate(long nowMs) {
