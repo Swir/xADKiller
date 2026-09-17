@@ -11,7 +11,7 @@ Status: **in development / hardening** on `chrome-v150-adaptive-memory`.
 
 <img width="100%" src="../assets/readme/chrome/progress-mini.svg" alt="xADKiller Chrome v1.5.0 roadmap progress" />
 
-**Development progress:** **53.8% — 14/26 verified roadmap items.**  
+**Development progress:** **57.7% — 15/26 verified roadmap items.**  
 **Release readiness:** **BLOCKED** — manual browser/beta validation and the remaining hardening items are not complete.
 
 ### Phase 1 — Adaptive Memory
@@ -37,7 +37,7 @@ Status: **in development / hardening** on `chrome-v150-adaptive-memory`.
 
 - [ ] Re-rank static rule selection using source agreement + resource-type coverage.
 - [ ] Deduplicate equivalent domain/path rules across static, dynamic and session layers.
-- [ ] Add a rule-budget dashboard for STANDARD/ULTRA/TITAN Boost.
+- [x] Add a rule-budget dashboard for STANDARD/ULTRA/TITAN Boost.
 - [ ] Measure startup cost, memory use and DOM scan time in CI as a reproducible performance budget.
 
 ### Phase 4 — Live Shield hardening
@@ -57,7 +57,7 @@ Status: **in development / hardening** on `chrome-v150-adaptive-memory`.
 
 ## Release gate
 
-No merge or release based only on the 53.8% development counter or a green build. The release gate also requires the remaining functional/performance items, benchmark/integrity gates and manual browser regression validation to pass without known critical issues.
+No merge or release based only on the 57.7% development counter or a green build. The release gate also requires the remaining functional/performance items, benchmark/integrity gates and manual browser regression validation to pass without known critical issues.
 
 ## Later
 
