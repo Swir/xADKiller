@@ -35,7 +35,7 @@
 | 🛡️ Local DNS filtering | Blocks known advertising, tracking and malicious domains device-wide without root. |
 | 🔒 Local VPN architecture | Routes only the virtual DNS path needed by the filter; xADKiller does not operate a remote VPN relay. |
 | ⚡ STANDARD / ULTRA lists | Uses maintained public blocklists plus a bundled offline starter list and user rules. |
-| 🧠 Adaptive DNS upstream pool | Tracks aggregate resolver latency/failures, uses bounded recovery probes and falls back between Cloudflare, Quad9 and Google DNS. |
+| 🧠 Adaptive DNS upstream pool | Tracks aggregate resolver latency/failures, uses bounded half-open recovery probes, ages stale latency-only penalties after long network idle/transitions, and falls back between Cloudflare, Quad9 and Google DNS. |
 | ♻️ Safe list updates | Keeps a known-good cache, rejects obviously incomplete updates and uses rollback-safe replacement. |
 | 🎛️ Custom allow/block rules | Lets the owner recover false positives or add local rules. |
 | 📋 Local diagnostics | Stores blocking and system diagnostics on the device; no cloud log upload is required. |
@@ -83,7 +83,7 @@ The branch CI additionally validates the manifest, APK archive integrity and SHA
 |---|---|
 | `AdBlockVpnServiceV121` | Local TUN lifecycle, DNS query processing, forwarding and runtime status. |
 | `DnsPacket` | Strict IPv4/UDP/DNS parsing and upstream response validation. |
-| `DnsUpstreamPool` | Resolver health scoring, cooldown and bounded half-open recovery. |
+| `DnsUpstreamPool` | Resolver health scoring, stale-latency aging, cooldown and bounded half-open recovery. |
 | `BlocklistManager` | Offline bootstrap, remote list parsing/cache, user rules and memory-bounded hashed lookup. |
 | `PrivateDnsHelper` | Diagnostics for Android Private DNS conflicts. |
 | `SystemLogStore` / `LogStore` | Local diagnostics and blocking records. |
