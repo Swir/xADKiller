@@ -7,6 +7,7 @@
   const shadowRoots = new Set();
   const shadowStyles = new Set();
   const shadowHidden = new Map();
+  const scheduledShadowScans = new WeakSet();
   const AD_SELECTOR = ".adsbygoogle,.adbox.banner_ads.adsbox,.textads,[data-ad-client],[data-ad-slot],[data-ad-unit],[data-sponsored='true'],[aria-label='Advertisement'],[aria-label='Sponsored'],[id^='google_ads_'],[id^='ad-container'],[id^='ad-slot'],[class~='ad-container'],[class~='ad-wrapper'],[class~='ad-slot']";
   const SHADOW_CSS = `${AD_SELECTOR}{display:none!important;visibility:hidden!important;max-height:0!important;min-height:0!important}`;
   const STRONG_URL = /(doubleclick\.net|googlesyndication\.com|googleadservices\.com|amazon-adsystem\.com|adnxs\.com|adsrvr\.org|pubmatic\.com|rubiconproject\.com|criteo\.(?:com|net)|taboola\.com|outbrain\.com|smartadserver\.com|adform\.net|\/ads?(?:[._\/-]|$)|\/adserver|\/adservice|\/adrequest|\/pagead|\/gampad|\/securepubads|\/prebid|\/vast|\/vmap|\/ima3|[?&](?:ad_unit|adunit|ad_slot|adslot|gdfp_req|iu)=)/i;
@@ -42,13 +43,20 @@
     }
   }
 
+  function setShadowStyle(style, css) {
+    if (!style) return;
+    try {
+      if (style.textContent !== css) style.textContent = css;
+    } catch (_) {}
+  }
+
   function installShadowStyle(root) {
     if (!root) return null;
     let existing = null;
     try { existing = root.querySelector?.("style[data-xadkiller-titan-shadow='1']") || null; } catch (_) {}
     if (existing) {
       shadowStyles.add(existing);
-      try { existing.textContent = active ? SHADOW_CSS : ""; } catch (_) {}
+      setShadowStyle(existing, active ? SHADOW_CSS : "");
       return existing;
     }
     try {
@@ -65,7 +73,7 @@
     const css = active ? SHADOW_CSS : "";
     for (const style of [...shadowStyles]) {
       if (!style?.isConnected) { shadowStyles.delete(style); continue; }
-      try { if (style.textContent !== css) style.textContent = css; } catch (_) {}
+      setShadowStyle(style, css);
     }
   }
 
@@ -81,6 +89,14 @@
   function hideShadow(root) {
     if (!active || !root?.querySelectorAll) return;
     try { root.querySelectorAll(AD_SELECTOR).forEach(rememberAndHide); } catch (_) {}
+  }
+  function scheduleShadowScan(root) {
+    if (!active || !root?.querySelectorAll || scheduledShadowScans.has(root)) return;
+    scheduledShadowScans.add(root);
+    setTimeout(() => {
+      scheduledShadowScans.delete(root);
+      if (active) hideShadow(root);
+    }, 0);
   }
   function reconcileShadowProtection() {
     if (!active) restoreShadowHidden();
@@ -107,9 +123,16 @@
     installShadowStyle(root);
     hideShadow(root);
     try {
-      const observer = new MutationObserver(() => queueMicrotask(() => {
-        if (active) hideShadow(root);
-      }));
+      const observer = new MutationObserver((mutations) => {
+        if (!active) return;
+        for (const mutation of mutations) {
+          if (!mutation.addedNodes?.length) continue;
+          const target = mutation.target;
+          if (target instanceof Element && target.matches?.("style[data-xadkiller-titan-shadow='1']")) continue;
+          scheduleShadowScan(root);
+          break;
+        }
+      });
       observer.observe(root, { childList:true, subtree:true });
     } catch (_) {}
   }
