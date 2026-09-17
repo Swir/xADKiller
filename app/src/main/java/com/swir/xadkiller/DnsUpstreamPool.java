@@ -14,11 +14,18 @@ import java.util.Map;
  * The VPN must never get stuck retrying the same unhealthy resolver first for
  * every query. This class keeps only aggregate latency/failure counters; it
  * never sees or stores host names, DNS payloads or browsing history.
+ *
+ * v1.6 adds a circuit-breaker style half-open recovery probe. Once a resolver's
+ * cooldown expires, exactly one recovering resolver is allowed to move ahead of
+ * healthy resolvers for a bounded probe. A successful probe restores it
+ * immediately; another failure returns it to exponential cooldown. This avoids
+ * permanently starving a resolver after a temporary network/provider outage.
  */
 final class DnsUpstreamPool {
     private static final int DEFAULT_RTT_MS = 180;
     private static final int MIN_TIMEOUT_MS = 1200;
     private static final int MAX_TIMEOUT_MS = 3200;
+    private static final int HALF_OPEN_TIMEOUT_MAX_MS = 1800;
     private static final long MAX_COOLDOWN_MS = 60_000L;
 
     private static final class State {
@@ -54,10 +61,11 @@ final class DnsUpstreamPool {
 
     synchronized String[] order(long nowMs) {
         List<State> ordered = new ArrayList<>(states);
+        final State probe = recoveryProbeCandidate(nowMs);
         ordered.sort(Comparator
-                .comparingInt((State s) -> s.cooldownUntilMs > nowMs ? 1 : 0)
-                .thenComparingLong(s -> s.cooldownUntilMs > nowMs ? s.cooldownUntilMs : 0L)
+                .comparingInt((State s) -> orderClass(s, probe, nowMs))
                 .thenComparingDouble(this::score)
+                .thenComparingLong(s -> s.cooldownUntilMs)
                 .thenComparingInt(s -> s.ordinal));
         String[] result = new String[ordered.size()];
         for (int i = 0; i < ordered.size(); i++) result[i] = ordered.get(i).server;
@@ -65,10 +73,16 @@ final class DnsUpstreamPool {
     }
 
     synchronized int timeoutMs(String server) {
+        return timeoutMs(server, System.currentTimeMillis());
+    }
+
+    synchronized int timeoutMs(String server, long nowMs) {
         State state = byServer.get(server);
         if (state == null) return 2200;
         int adaptive = (int)Math.round(900d + state.ewmaRttMs * 4.0d + state.failureStreak * 180d);
-        return Math.max(MIN_TIMEOUT_MS, Math.min(MAX_TIMEOUT_MS, adaptive));
+        adaptive = Math.max(MIN_TIMEOUT_MS, Math.min(MAX_TIMEOUT_MS, adaptive));
+        if (isHalfOpen(state, nowMs)) adaptive = Math.min(adaptive, HALF_OPEN_TIMEOUT_MAX_MS);
+        return adaptive;
     }
 
     synchronized void recordSuccess(String server, long rttMs, long nowMs) {
@@ -95,6 +109,7 @@ final class DnsUpstreamPool {
 
     synchronized String snapshot(long nowMs) {
         StringBuilder out = new StringBuilder();
+        State probe = recoveryProbeCandidate(nowMs);
         String[] order = order(nowMs);
         for (String server : order) {
             State state = byServer.get(server);
@@ -108,8 +123,10 @@ final class DnsUpstreamPool {
                 out.append(" cool=")
                         .append(Math.max(1L, (state.cooldownUntilMs - nowMs + 999L) / 1000L))
                         .append('s');
+            } else if (state == probe) {
+                out.append(" probe");
             } else if (state.failureStreak > 0) {
-                out.append(" fail=").append(state.failureStreak);
+                out.append(" recover=").append(state.failureStreak);
             } else {
                 out.append(" ok");
             }
@@ -125,6 +142,35 @@ final class DnsUpstreamPool {
     synchronized long failures(String server) {
         State state = byServer.get(server);
         return state == null ? 0L : state.failures;
+    }
+
+    synchronized int failureStreak(String server) {
+        State state = byServer.get(server);
+        return state == null ? 0 : state.failureStreak;
+    }
+
+    private State recoveryProbeCandidate(long nowMs) {
+        State best = null;
+        for (State state : states) {
+            if (!isHalfOpen(state, nowMs)) continue;
+            if (best == null
+                    || state.cooldownUntilMs < best.cooldownUntilMs
+                    || (state.cooldownUntilMs == best.cooldownUntilMs && state.ordinal < best.ordinal)) {
+                best = state;
+            }
+        }
+        return best;
+    }
+
+    private boolean isHalfOpen(State state, long nowMs) {
+        return state.failureStreak > 0 && state.cooldownUntilMs > 0L && state.cooldownUntilMs <= nowMs;
+    }
+
+    private int orderClass(State state, State probe, long nowMs) {
+        if (state == probe) return 0;                         // one bounded recovery probe
+        if (state.failureStreak == 0) return 1;               // healthy pool
+        if (state.cooldownUntilMs <= nowMs) return 2;         // other recoverable servers wait
+        return 3;                                             // active cooldown always last
     }
 
     private double score(State state) {
