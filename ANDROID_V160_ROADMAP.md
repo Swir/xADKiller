@@ -8,13 +8,13 @@ This branch develops the Android APK independently from the current stable 1.5.1
 **Release readiness:** **BLOCKED** — manual physical-device VPN lifecycle and stability evidence is still required.
 
 ## Current validation snapshot — 2026-09-18
-- Development APK CI was **GREEN** before the current DNS framing hardening batch; the new exact-framing/truncated-response tests must pass the full gate before this snapshot is promoted to verified GREEN.
-- Deterministic offline DNS ad fixture coverage: **100.0% (96/96)** on the last verified full gate.
-- Benign DNS control false positives: **0/20** on the last verified full gate.
+- Development APK CI is **GREEN** after the exact IPv4/UDP framing and truncated-upstream-response hardening batch: SWIR progress SVG consistency, privacy/network manifest gate, lint, unit tests + deterministic benchmark, APK build/package validation, ZIP integrity and SHA-256 all passed.
+- Deterministic offline DNS ad fixture coverage: **100.0% (96/96)**.
+- Benign DNS control false positives: **0/20**.
 - Bundled offline starter list: **95 high-confidence domains**, with larger maintained lists loaded at runtime.
-- DNS parser hardening now requires the IPv4 payload to contain exactly one complete UDP datagram and rejects IPv4 fragments, inconsistent IP/UDP lengths, response packets, non-standard opcodes, ambiguous multi-question DNS messages and invalid source port 0. This prevents unexplained trailing IPv4 payload from being silently ignored by the DNS parser.
+- DNS parser hardening requires the IPv4 payload to contain exactly one complete UDP datagram and rejects IPv4 fragments, inconsistent IP/UDP lengths, response packets, non-standard opcodes, ambiguous multi-question DNS messages and invalid source port 0. This prevents unexplained trailing IPv4 payload from being silently ignored by the DNS parser.
 - Upstream DNS response validation rejects mismatched question/name/type/class, malformed receive lengths and DNS responses carrying the TC (truncated) flag so the resolver pool can fail over instead of forwarding an incomplete UDP answer.
-- Upstream DNS health scoring is GREEN on its last verified gate: failure cooldown/half-open recovery remains bounded, persistently slow but successful resolvers are demoted without being marked failed, and stale latency-only penalties decay after long idle periods so a Wi-Fi ↔ mobile transition does not keep biasing a new network with old RTT history.
+- Upstream DNS health scoring is GREEN: failure cooldown/half-open recovery remains bounded, persistently slow but successful resolvers are demoted without being marked failed, and stale latency-only penalties decay after long idle periods so a Wi-Fi ↔ mobile transition does not keep biasing a new network with old RTT history.
 - Established healthy resolvers dampen a **single valid-but-extreme RTT spike** before it enters the EWMA while still counting the real sample toward the slow-response streak; one scheduler/radio/handover stall therefore cannot pin adaptive DNS timeouts near their maximum, while repeated slowness is still penalized.
 - Stale-latency aging never clears circuit-breaker failure state: a failed resolver still requires its bounded half-open recovery probe after cooldown.
 - VPN service status has a **traffic-independent 5-second heartbeat** while the TUN worker is alive, so an idle connection no longer depends on DNS packet traffic to keep UI/service liveness fresh; the scheduler is shut down with the VPN/service lifecycle.
