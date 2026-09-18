@@ -112,17 +112,12 @@ try {
   let found = await findWorker(browser);
   let popup = await openPopup(browser, found.extensionId);
 
-  // Wait for the initial service-worker refresh to settle before testing a
-  // read-modify-write memory sequence. This isolates Adaptive Memory itself
-  // from the deliberately concurrent startup feed/session refresh.
   const ready = await waitStats(popup, (s) => s.session >= 1200 && s.regex >= 1, 20000);
   log("Startup settled", JSON.stringify(ready));
   const mode = await send(popup, { type:"setMode", mode:"ultra" });
   if (!mode?.ok || mode.mode !== "ultra") throw new Error(`could not enter ULTRA: ${JSON.stringify(mode)}`);
   await delay(500);
 
-  // Network Scout must never learn private/local browsing context. A first-party
-  // /ads/ or /adserver/ path on loopback is not evidence of public ad-tech.
   const beforeLocal = await send(popup, { type:"getTitanStats" });
   if (!beforeLocal?.ok) throw new Error(`could not read memory before local fixture: ${JSON.stringify(beforeLocal)}`);
   localFixture = await startLocalFixture();
@@ -137,9 +132,6 @@ try {
   }
   log("Local/private learning guard", `memory=${afterLocal.memory} learned=${afterLocal.learned}`);
 
-  // A generic campaign/impression query on an unrelated third-party host is not
-  // enough evidence to learn a blocking rule. Only strong ad-tech hosts may be
-  // learned cross-site; generic path/query heuristics remain first-party only.
   const beforeGeneric = await send(popup, { type:"getTitanStats" });
   const publicPage = await browser.newPage();
   await publicPage.goto(`http://publisher.example.org:${localFixture.port}/cross-site-query`, { waitUntil:"networkidle0", timeout:12000 });
@@ -151,9 +143,6 @@ try {
   }
   log("Cross-site generic-query guard", `memory=${afterGeneric.memory} learned=${afterGeneric.learned}`);
 
-  // Provider names are matched as canonical DNS suffixes, never as arbitrary
-  // substrings. A benign host containing the word "branch" must not be promoted
-  // just because branch.io is a known attribution provider.
   const beforeSubstring = await send(popup, { type:"getTitanStats" });
   const substringPage = await browser.newPage();
   await substringPage.goto(`http://publisher.example.org:${localFixture.port}/cross-site-provider-name`, { waitUntil:"networkidle0", timeout:12000 });
@@ -164,6 +153,36 @@ try {
     throw new Error(`provider-name substring caused false learning: before=${JSON.stringify(beforeSubstring)} after=${JSON.stringify(afterSubstring)}`);
   }
   log("Canonical provider-suffix guard", `memory=${afterSubstring.memory} learned=${afterSubstring.learned}`);
+
+  const directFalse = await send(popup, {
+    type:"titanLearnResource",
+    url:"https://branch.office.net/runtime/ad.js",
+    pageHost:"publisher.example.org"
+  });
+  if (directFalse?.ok !== false || directFalse?.ignored !== true) {
+    throw new Error(`TITAN accepted non-canonical provider substring: ${JSON.stringify(directFalse)}`);
+  }
+  const afterDirectFalse = await send(popup, { type:"getTitanStats" });
+  if (!afterDirectFalse?.ok || afterDirectFalse.memory !== afterSubstring.memory || afterDirectFalse.learned !== afterSubstring.learned) {
+    throw new Error(`direct false-provider message polluted Adaptive Memory: before=${JSON.stringify(afterSubstring)} after=${JSON.stringify(afterDirectFalse)}`);
+  }
+  log("TITAN direct canonical-suffix guard", JSON.stringify(directFalse));
+
+  const poisonNow = Date.now();
+  await found.worker.evaluate(async (ts) => {
+    await chrome.storage.local.set({
+      xadTitanHostMemoryV1:[{ host:"branch.office.net", seen:5, firstSeen:ts - 1000, lastSeen:ts }]
+    });
+  }, poisonNow);
+  const cleanedLegacy = await send(popup, { type:"getTitanStats" });
+  if (!cleanedLegacy?.ok || cleanedLegacy.memory !== 0 || cleanedLegacy.promoted !== 0) {
+    throw new Error(`legacy substring memory was not purged: ${JSON.stringify(cleanedLegacy)}`);
+  }
+  const cleanedStore = await found.worker.evaluate(async () => await chrome.storage.local.get({ xadTitanHostMemoryV1:[] }));
+  if (cleanedStore.xadTitanHostMemoryV1?.length) {
+    throw new Error(`legacy poisoned memory remained in storage: ${JSON.stringify(cleanedStore)}`);
+  }
+  log("Legacy poisoned memory cleanup", JSON.stringify(cleanedLegacy));
 
   await new Promise((resolve) => localFixture.server.close(resolve));
   localFixture = null;
@@ -207,7 +226,7 @@ try {
   const finalStore = await found.worker.evaluate(async () => await chrome.storage.local.get({ xadTitanHostMemoryV1:[] }));
   if (finalStore.xadTitanHostMemoryV1?.length) throw new Error(`memory storage not cleared: ${JSON.stringify(finalStore)}`);
 
-  log("PASS", "persistent host-only memory, local/private exclusion, generic-query and provider-suffix false-positive guards, restart restore and user reset all verified");
+  log("PASS", "persistent host-only memory, local/private exclusion, canonical provider defense-in-depth, legacy poison cleanup, restart restore and user reset all verified");
 } finally {
   if (localFixture?.server) { try { await new Promise((resolve) => localFixture.server.close(resolve)); } catch (_) {} }
   if (browser) { try { await browser.close(); } catch (_) {} }
