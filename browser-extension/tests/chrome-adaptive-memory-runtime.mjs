@@ -184,6 +184,23 @@ try {
   }
   log("TITAN direct canonical-suffix guard", JSON.stringify(directFalse));
 
+  for (const genericKey of ["campaign", "impression"]) {
+    const beforeDirectGeneric = await send(popup, { type:"getTitanStats" });
+    const directGeneric = await send(popup, {
+      type:"titanLearnResource",
+      url:`https://publisher.example.org/pixel.gif?${genericKey}=spring-sale`,
+      pageHost:"publisher.example.org"
+    });
+    if (directGeneric?.ok !== false || directGeneric?.ignored !== true) {
+      throw new Error(`TITAN accepted generic ${genericKey} query via direct message: ${JSON.stringify(directGeneric)}`);
+    }
+    const afterDirectGeneric = await send(popup, { type:"getTitanStats" });
+    if (!afterDirectGeneric?.ok || afterDirectGeneric.memory !== beforeDirectGeneric.memory || afterDirectGeneric.learned !== beforeDirectGeneric.learned) {
+      throw new Error(`direct generic ${genericKey} query polluted learned rules: before=${JSON.stringify(beforeDirectGeneric)} after=${JSON.stringify(afterDirectGeneric)}`);
+    }
+    log(`TITAN direct generic-${genericKey} guard`, JSON.stringify(directGeneric));
+  }
+
   const poisonNow = Date.now();
   await found.worker.evaluate(async (ts) => {
     await chrome.storage.local.set({
@@ -242,7 +259,7 @@ try {
   const finalStore = await found.worker.evaluate(async () => await chrome.storage.local.get({ xadTitanHostMemoryV1:[] }));
   if (finalStore.xadTitanHostMemoryV1?.length) throw new Error(`memory storage not cleared: ${JSON.stringify(finalStore)}`);
 
-  log("PASS", "persistent host-only memory, local/private exclusion, generic first-party query exclusion, canonical provider defense-in-depth, legacy poison cleanup, restart restore and user reset all verified");
+  log("PASS", "persistent host-only memory, local/private exclusion, generic first-party query exclusion, direct generic-query rejection, canonical provider defense-in-depth, legacy poison cleanup, restart restore and user reset all verified");
 } finally {
   if (localFixture?.server) { try { await new Promise((resolve) => localFixture.server.close(resolve)); } catch (_) {} }
   if (browser) { try { await browser.close(); } catch (_) {} }
