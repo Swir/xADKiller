@@ -12,40 +12,29 @@
     "/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json":"live-matrix",
     "/Swir/xADKiller/main/browser-intelligence/xadkiller-titan-feed.json":"titan"
   });
-  const ALLOWED_SUCCESS_CONTENT_TYPES = new Set([
-    "application/json",
-    "text/plain",
-    "application/octet-stream"
-  ]);
+  const ALLOWED_SUCCESS_CONTENT_TYPES = new Set(["application/json", "text/plain", "application/octet-stream"]);
 
   function fail(reason) { throw new TypeError(`xad_feed_guard_${reason}`); }
-
   function guardedKind(urlValue) {
     let url;
     try { url = new URL(String(urlValue || "")); } catch (_) { return ""; }
     if (url.protocol !== "https:" || url.hostname !== RAW_HOST || url.port || url.username || url.password) return "";
     return APPROVED_PATHS[url.pathname] || "";
   }
-
   function requestMethod(input, init) {
     return String(init?.method || input?.method || "GET").trim().toUpperCase();
   }
-
   function publicDataHeaders(sourceHeaders) {
     const source = new Headers(sourceHeaders || undefined);
-    const headers = new Headers();
     const accept = String(source.get("accept") || "").trim();
-    headers.set("accept", accept || FEED_ACCEPT);
-    return headers;
+    return Object.freeze({ accept: accept || FEED_ACCEPT });
   }
-
   function hardenedInit(init) {
     return {
       ...(init || {}),
-      // Protection feeds are public data. Strip every caller header except content
-      // negotiation so Authorization/Cookie/API-key style secrets can never hitchhike
-      // to GitHub. Disable the browser HTTP cache as a second unvalidated fallback;
-      // xADKiller's validated known-good cache remains the only offline fallback.
+      // Public protection data never needs caller secrets. Keep only Accept negotiation,
+      // strip Authorization/Cookie/API-key style headers, bypass HTTP cache, and rely on
+      // xADKiller's separately validated known-good cache for offline fallback.
       headers:publicDataHeaders(init?.headers),
       cache:"no-store",
       redirect:"error",
@@ -53,7 +42,6 @@
       referrerPolicy:"no-referrer"
     };
   }
-
   function timedInit(input, init, timeoutMs = FEED_FETCH_TIMEOUT_MS) {
     const next = hardenedInit(init);
     const controller = new AbortController();
@@ -72,7 +60,6 @@
     next.signal = controller.signal;
     return { init:next, cleanup:() => { clearTimeout(timer); detach(); } };
   }
-
   function validateContentLength(response) {
     const raw = String(response?.headers?.get?.("content-length") || "").trim();
     if (!raw) return 0;
@@ -82,7 +69,6 @@
     if (bytes > MAX_FEED_BYTES) fail("payload_size");
     return bytes;
   }
-
   function validateContentType(response) {
     const raw = String(response?.headers?.get?.("content-type") || "").trim().toLowerCase();
     if (!raw) return "";
@@ -90,7 +76,6 @@
     if (!ALLOWED_SUCCESS_CONTENT_TYPES.has(mediaType)) fail("content_type");
     return mediaType;
   }
-
   function validateResponse(kind, response) {
     if (!response || typeof response !== "object") fail("transport_response");
     if (response.redirected === true) fail("transport_redirect");
@@ -100,7 +85,6 @@
     if (response.ok) validateContentType(response);
     return response;
   }
-
   async function bufferBoundedBody(response) {
     if (!response?.body || typeof response.body.getReader !== "function" || typeof Response !== "function") return response;
     const reader = response.body.getReader();
@@ -119,7 +103,6 @@
         chunks.push(chunk);
       }
     } finally { try { reader.releaseLock?.(); } catch (_) {} }
-
     const payload = new Uint8Array(total);
     let offset = 0;
     for (const chunk of chunks) { payload.set(chunk, offset); offset += chunk.byteLength; }
@@ -128,7 +111,6 @@
     try { Object.defineProperty(buffered, "redirected", { value:Boolean(response.redirected), configurable:true }); } catch (_) {}
     return buffered;
   }
-
   globalThis.fetch = async (input, init) => {
     const urlValue = typeof input === "string" ? input : input?.url;
     const kind = guardedKind(urlValue);
@@ -141,7 +123,6 @@
       return await bufferBoundedBody(response);
     } finally { timed.cleanup(); }
   };
-
   globalThis.XAD_FEED_TRANSPORT_GUARD = Object.freeze({
     MAX_FEED_BYTES, FEED_FETCH_TIMEOUT_MS, FEED_ACCEPT, guardedKind, requestMethod,
     publicDataHeaders, hardenedInit, timedInit, validateContentLength,
