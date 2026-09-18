@@ -24,7 +24,7 @@ let lastInit = null;
 let responseFactory = () => ({
   ok:true,
   status:200,
-  url:`${LIVE_MATRIX}?v=123`,
+  url:LIVE_MATRIX,
   redirected:false,
   headers:headers({ "content-length":"1024", "content-type":"text/plain; charset=utf-8" })
 });
@@ -51,13 +51,14 @@ context.globalThis = context;
 vm.createContext(context);
 vm.runInContext(source, context, { filename:"feed-transport-guard.js" });
 
-const first = await context.fetch(`${LIVE_MATRIX}?v=123`, { cache:"no-store", headers:{ accept:"application/json" } });
+const first = await context.fetch(LIVE_MATRIX, { cache:"force-cache", headers:{ accept:"application/json, x-secret=must-not-leak" } });
 if (!first.ok || nativeCalls !== 1) throw new Error(`approved feed request failed: calls=${nativeCalls}`);
 if (lastInit?.redirect !== "error" || lastInit?.credentials !== "omit" || lastInit?.referrerPolicy !== "no-referrer") {
   throw new Error(`protected fetch did not enforce transport privacy: ${JSON.stringify(lastInit)}`);
 }
-if (lastInit?.cache !== "no-store" || lastInit?.headers?.accept !== "application/json") {
-  throw new Error("caller fetch options were not preserved while hardening transport");
+const policy = context.XAD_FEED_TRANSPORT_GUARD;
+if (lastInit?.cache !== "no-store" || lastInit?.headers?.accept !== policy.FEED_ACCEPT) {
+  throw new Error("protected fetch did not force deterministic public-data request options");
 }
 if (!lastInit?.signal || lastInit.signal.aborted) throw new Error("protected fetch did not receive a live timeout signal");
 
@@ -191,10 +192,10 @@ responseFactory = () => ({ ok:true, status:200, url:"https://example.com/data.js
 await context.fetch("https://example.com/data.json", { credentials:"include" });
 if (nativeCalls !== 10 || lastInit?.credentials !== "include") throw new Error("non-feed fetch was unexpectedly modified");
 
-const policy = context.XAD_FEED_TRANSPORT_GUARD;
 if (policy.FEED_FETCH_TIMEOUT_MS !== 15000) throw new Error(`unexpected feed timeout ${policy.FEED_FETCH_TIMEOUT_MS}`);
 if (policy.MAX_FEED_BYTES !== MAX_FEED_BYTES) throw new Error(`unexpected feed size ceiling ${policy.MAX_FEED_BYTES}`);
-if (policy.guardedKind(`${LIVE_MATRIX}?cache=1`) !== "live-matrix") throw new Error("approved query-string feed URL not recognized");
+if (policy.guardedKind(`${LIVE_MATRIX}?cache=1`) !== "") throw new Error("noncanonical query-string feed URL treated as canonical");
+if (!policy.hasApprovedPath(`${LIVE_MATRIX}?cache=1`)) throw new Error("approved path detector missed noncanonical feed variant");
 if (policy.guardedKind("http://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json")) throw new Error("non-HTTPS feed URL accepted");
 if (policy.guardedKind("https://raw.githubusercontent.com.evil.example/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json")) throw new Error("lookalike raw GitHub host accepted");
 if (policy.validateContentType({ headers:headers({ "content-type":"application/octet-stream" }) }) !== "application/octet-stream") {
@@ -212,4 +213,4 @@ await new Promise((resolve) => setTimeout(resolve, 20));
 if (!timeoutTimed.init.signal.aborted) throw new Error("bounded feed timeout did not abort stalled request signal");
 timeoutTimed.cleanup();
 
-console.log("[xADKiller FEED TRANSPORT CI] PASS • GET-only • redirect denied • credentials/referrer omitted • provenance pinned • declared + streamed body size bounded • approved MIME • caller abort + full-transfer timeout • HTTP error classification preserved • non-feed fetch untouched");
+console.log("[xADKiller FEED TRANSPORT CI] PASS • exact canonical URL • deterministic Accept • GET-only • redirect denied • credentials/referrer omitted • provenance pinned • declared + streamed body size bounded • approved MIME • caller abort + full-transfer timeout • HTTP error classification preserved • non-feed fetch untouched");
