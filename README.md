@@ -36,7 +36,7 @@
 | 🔒 Local VPN architecture | Routes only the virtual DNS path needed by the filter; xADKiller does not operate a remote VPN relay. |
 | 💓 VPN liveness heartbeat | Refreshes local service/UI liveness every 5 seconds even when no DNS packets are flowing, while still shutting the heartbeat down with the VPN lifecycle. |
 | ⚡ STANDARD / ULTRA lists | Uses maintained public blocklists plus a bundled offline starter list and user rules. |
-| 🧠 Adaptive DNS upstream pool | Tracks aggregate resolver latency/failures, uses bounded half-open recovery probes, ages stale latency-only penalties after long network idle/transitions, and falls back between Cloudflare, Quad9 and Google DNS. |
+| 🧠 Adaptive DNS upstream pool | Tracks aggregate resolver latency/failures, uses bounded half-open recovery probes, ages stale latency-only penalties, and starts each newly established VPN session with a fresh RTT/slow-response epoch while preserving failure/cooldown evidence. |
 | 🔎 Private DNS diagnostics | Distinguishes strict Private DNS conflicts, active encrypted system DNS, automatic/unknown states and no-network states without pretending that per-app DoH can be detected. |
 | ♻️ Safe list updates | Keeps a known-good cache, rejects obviously incomplete updates and uses rollback-safe replacement. |
 | 🎛️ Custom allow/block rules | Lets the owner recover false positives or add local rules. |
@@ -84,16 +84,16 @@ The branch CI additionally validates the manifest, APK archive integrity and SHA
 
 | Layer | Responsibility |
 |---|---|
-| `AdBlockVpnServiceV121` | Local TUN lifecycle, DNS query processing/forwarding, traffic-independent liveness heartbeat and runtime status. |
+| `AdBlockVpnServiceV121` | Local TUN lifecycle, DNS query processing/forwarding, traffic-independent liveness heartbeat, fresh resolver-latency epoch on VPN establishment and runtime status. |
 | `DnsPacket` | Strict IPv4/UDP/DNS parsing and upstream response validation. |
-| `DnsUpstreamPool` | Resolver health scoring, stale-latency aging, cooldown and bounded half-open recovery. |
+| `DnsUpstreamPool` | Resolver health scoring, network-epoch latency reset, stale-latency aging, cooldown and bounded half-open recovery while preserving failure evidence. |
 | `BlocklistManager` | Offline bootstrap, remote list parsing/cache, user rules and memory-bounded hashed lookup. |
 | `PrivateDnsHelper` + `DnsPrivacyDiagnostics` | System Private DNS inspection plus testable conflict/risk classification; per-app DoH is deliberately not claimed as detectable. |
 | `SystemLogStore` / `LogStore` | Local diagnostics and blocking records. |
 
 ## Limitations
 
-DNS filtering cannot reliably remove ads served from the same hostname as wanted content. Applications that use their own encrypted DNS/DoH path can bypass ordinary DNS interception, and Android's system Private DNS APIs cannot reliably identify that behavior per app. Per-app attribution depends on Android platform support. The v1.6.0 development branch is **not release-ready** until the manual-device lifecycle/stability gate is completed, including physical validation of the new heartbeat across idle, sleep/wake and network transitions.
+DNS filtering cannot reliably remove ads served from the same hostname as wanted content. Applications that use their own encrypted DNS/DoH path can bypass ordinary DNS interception, and Android's system Private DNS APIs cannot reliably identify that behavior per app. Per-app attribution depends on Android platform support. The fresh resolver-latency epoch is applied when the VPN protection session is established; physical-device Wi-Fi ↔ mobile handover behavior still requires the manual lifecycle gate. The v1.6.0 development branch is **not release-ready** until the manual-device lifecycle/stability gate is completed, including physical validation of the heartbeat across idle, sleep/wake and network transitions.
 
 ## Development roadmap
 
