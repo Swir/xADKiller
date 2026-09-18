@@ -1,5 +1,6 @@
 package com.swir.xadkiller;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -33,6 +34,52 @@ public class DnsPacketHardeningTest {
         int opt = base.length;
         DnsPacket.put16(dns, opt + 7, 0x8000); // DO is the defined EDNS request flag.
         assertNotNull(DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length));
+    }
+
+    @Test public void stripsEcsAndCookieButPreservesOtherEdnsOptionsAndDoFlag() {
+        byte[] base = query(0x0100, 1);
+        byte[] ecs = ednsOption(8, new byte[] { 0, 1, 24, 0, (byte)192, 0, 2 });
+        byte[] unknown = ednsOption(65001, new byte[] { 3, 4 });
+        byte[] cookie = ednsOption(10, new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 });
+        byte[] dns = withAdditional(base, 41, concat(ecs, unknown, cookie));
+        int opt = base.length;
+        DnsPacket.put16(dns, opt + 7, 0x8000);
+
+        DnsPacket.Query parsed = DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length);
+        assertNotNull(parsed);
+        assertEquals(1, DnsPacket.u16(parsed.dnsPayload, 10));
+        assertEquals(0x8000, DnsPacket.u16(parsed.dnsPayload, opt + 7));
+        assertEquals(unknown.length, DnsPacket.u16(parsed.dnsPayload, opt + 9));
+        assertEquals(65001, DnsPacket.u16(parsed.dnsPayload, opt + 11));
+        assertEquals(2, DnsPacket.u16(parsed.dnsPayload, opt + 13));
+        assertEquals(3, parsed.dnsPayload[opt + 15] & 0xFF);
+        assertEquals(4, parsed.dnsPayload[opt + 16] & 0xFF);
+        assertEquals(opt + 11 + unknown.length, parsed.dnsPayload.length);
+    }
+
+    @Test public void keepsEmptyOptRecordAfterAllPrivacyOptionsAreRemoved() {
+        byte[] base = query(0x0100, 1);
+        byte[] dns = withAdditional(base, 41, concat(
+                ednsOption(8, new byte[] { 0, 1, 0, 0 }),
+                ednsOption(10, new byte[] { 9, 8, 7, 6, 5, 4, 3, 2 })));
+        int opt = base.length;
+
+        DnsPacket.Query parsed = DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length);
+        assertNotNull(parsed);
+        assertEquals(1, DnsPacket.u16(parsed.dnsPayload, 10));
+        assertEquals(41, DnsPacket.u16(parsed.dnsPayload, opt + 1));
+        assertEquals(0, DnsPacket.u16(parsed.dnsPayload, opt + 9));
+        assertEquals(opt + 11, parsed.dnsPayload.length);
+    }
+
+    @Test public void leavesNonPrivacyEdnsOptionsByteExact() {
+        byte[] base = query(0x0100, 1);
+        byte[] dns = withAdditional(base, 41, concat(
+                ednsOption(12, new byte[] { 0, 0, 0, 0 }),
+                ednsOption(65001, new byte[] { 1, 2, 3 })));
+        DnsPacket.Query parsed = DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length);
+        assertNotNull(parsed);
+        assertArrayEquals(dns, parsed.dnsPayload);
     }
 
     @Test public void rejectsEdnsExtendedRcodeInQuery() {
@@ -221,6 +268,20 @@ public class DnsPacketHardeningTest {
         write16(out, 0); // flags low half
         write16(out, rdata.length);
         out.write(rdata, 0, rdata.length);
+        return out.toByteArray();
+    }
+
+    private static byte[] ednsOption(int code, byte[] data) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        write16(out, code);
+        write16(out, data.length);
+        out.write(data, 0, data.length);
+        return out.toByteArray();
+    }
+
+    private static byte[] concat(byte[]... values) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        for (byte[] value : values) out.write(value, 0, value.length);
         return out.toByteArray();
     }
 
