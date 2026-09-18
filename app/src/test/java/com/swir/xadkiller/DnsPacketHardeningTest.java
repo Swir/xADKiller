@@ -26,6 +26,48 @@ public class DnsPacketHardeningTest {
         assertEquals("ads.example.com", parsed.host);
     }
 
+    @Test public void acceptsEdnsDnssecOkFlag() {
+        byte[] base = query(0x0100, 1);
+        byte[] dns = withAdditional(base, 41, new byte[0]);
+        int opt = base.length;
+        DnsPacket.put16(dns, opt + 7, 0x8000); // DO is the defined EDNS request flag.
+        assertNotNull(DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length));
+    }
+
+    @Test public void rejectsEdnsExtendedRcodeInQuery() {
+        byte[] base = query(0x0100, 1);
+        byte[] dns = withAdditional(base, 41, new byte[0]);
+        int opt = base.length;
+        dns[opt + 5] = 1;
+        assertNull(DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length));
+    }
+
+    @Test public void rejectsUnsupportedEdnsVersion() {
+        byte[] base = query(0x0100, 1);
+        byte[] dns = withAdditional(base, 41, new byte[0]);
+        int opt = base.length;
+        dns[opt + 6] = 1;
+        assertNull(DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length));
+    }
+
+    @Test public void rejectsReservedEdnsZFlags() {
+        byte[] base = query(0x0100, 1);
+        byte[] dns = withAdditional(base, 41, new byte[0]);
+        int opt = base.length;
+        DnsPacket.put16(dns, opt + 7, 0x0001);
+        assertNull(DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length));
+    }
+
+    @Test public void rejectsTruncatedEdnsOptionHeader() {
+        byte[] dns = withAdditional(query(0x0100, 1), 41, new byte[] { 0, 10, 0 });
+        assertNull(DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length));
+    }
+
+    @Test public void rejectsEdnsOptionLengthPastRdata() {
+        byte[] dns = withAdditional(query(0x0100, 1), 41, new byte[] { 0, 10, 0, 4, 1, 2 });
+        assertNull(DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length));
+    }
+
     @Test public void rejectsUndeclaredTrailingDnsBytes() {
         byte[] dns = Arrays.copyOf(query(0x0100, 1), query(0x0100, 1).length + 3);
         dns[dns.length - 1] = 7;
