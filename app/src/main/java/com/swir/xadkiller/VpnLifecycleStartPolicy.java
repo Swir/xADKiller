@@ -6,7 +6,6 @@ final class VpnLifecycleStartPolicy {
     static final String ACTION_MY_PACKAGE_REPLACED = "android.intent.action.MY_PACKAGE_REPLACED";
     static final long PACKAGE_RESTART_HEARTBEAT_MAX_AGE_MS = 5L * 60L * 1000L;
     static final long DUPLICATE_RESTART_WINDOW_MS = 15L * 1000L;
-    static final long DUPLICATE_RESTART_MAX_FUTURE_SKEW_MS = 30L * 1000L;
     private static final long PACKAGE_RESTART_MAX_FUTURE_SKEW_MS = 30L * 1000L;
 
     private VpnLifecycleStartPolicy() {}
@@ -37,20 +36,15 @@ final class VpnLifecycleStartPolicy {
         return vpnConsentGranted && shouldStart(action, autoStartEnabled, wasRunningBeforeRestart, heartbeatAtMs, nowMs);
     }
 
-    static boolean isDuplicateRestart(String action, String lastAction, long lastAttemptAtMs, long nowMs) {
-        // Treat any two managed lifecycle signals in the same short burst as one restart
-        // transaction, even when OEM/update ordering produces BOOT_COMPLETED followed by
-        // MY_PACKAGE_REPLACED (or the reverse). The first signal already reconciles stale
-        // liveness and attempts the service start; a second managed signal seconds later
-        // must not race another foreground-service launch or clear freshly restored state.
-        // Wall-clock correction may move `now` slightly backwards between broadcasts; keep
-        // the duplicate guard active for a tightly bounded future skew instead of launching
-        // a second VPN start during the same restart burst.
+    static boolean isDuplicateRestart(String action, String lastAction, long lastAttemptElapsedMs, long nowElapsedMs) {
+        // Duplicate suppression is driven by SystemClock.elapsedRealtime(), not wall time.
+        // That makes short BOOT/UPDATE bursts immune to user/NTP clock changes. A reboot
+        // resets elapsedRealtime; persisted pre-reboot values will then be greater than the
+        // new clock and are intentionally treated as stale rather than suppressing startup.
         if (!isManagedRestartAction(action) || !isManagedRestartAction(lastAction)) return false;
-        if (lastAttemptAtMs <= 0L || nowMs <= 0L) return false;
-        long ageMs = nowMs - lastAttemptAtMs;
-        return ageMs >= -DUPLICATE_RESTART_MAX_FUTURE_SKEW_MS
-                && ageMs <= DUPLICATE_RESTART_WINDOW_MS;
+        if (lastAttemptElapsedMs <= 0L || nowElapsedMs <= 0L) return false;
+        long ageMs = nowElapsedMs - lastAttemptElapsedMs;
+        return ageMs >= 0L && ageMs <= DUPLICATE_RESTART_WINDOW_MS;
     }
 
     static boolean isRecentHeartbeat(long heartbeatAtMs, long nowMs) {
