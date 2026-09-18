@@ -42,10 +42,10 @@ Status: **in development / hardening** on `chrome-v150-adaptive-memory`.
 
 ### Phase 4 — Live Shield hardening
 
-- [ ] Publish/migrate protection feeds to the v2 data contract with explicit expiry metadata. Feed Guard supports v1 for current production compatibility and validates v2 `expires_at` with bounded lifetime/expiry checks. The development service worker now places a local `feed-v2-compat` adapter **after Feed Guard**, so a fully validated v2 payload can be consumed by the current v1-shaped Live Matrix/TITAN readers without weakening validation; CI gates this ordering and preserves v2 expiry/rollback metadata. This roadmap item stays open until the published production feeds are actually migrated.
+- [ ] Publish/migrate protection feeds to the v2 data contract with explicit expiry metadata. Feed Guard supports v1 for current production compatibility and validates v2 `expires_at` with bounded lifetime/expiry checks. The development service worker places a local `feed-v2-compat` adapter **after Feed Guard**, so a fully validated v2 payload can be consumed by the current v1-shaped Live Matrix/TITAN readers without weakening validation. A new deterministic migration preflight now re-fetches the exact pinned production v1 blobs, verifies their Git blob SHA-1 and metadata, constructs the planned v2 candidates without changing protection payloads, checks expiry/rollback safety, rejects executable-looking data keys, and can emit local candidate JSON with `npm run build:feed-v2-candidates`. This item stays open until the published production feeds are actually migrated.
 - [x] Reject stale or malformed feed payloads without replacing a known-good cache.
 - [x] Add deterministic feed checksums in the repository.
-- [ ] Publish rollback metadata for bad rule-data releases. Feed Guard validates v2 `rollback.previous_version` + safe repository-relative `previous_ref`, and the v2 consumer adapter preserves those fields, but this item stays open until that metadata exists in the published production feeds.
+- [ ] Publish rollback metadata for bad rule-data releases. Feed Guard validates v2 `rollback.previous_version` + safe repository-relative `previous_ref`, the v2 consumer adapter preserves those fields, and the migration preflight now verifies each planned rollback target against the exact pinned production feed. This item stays open until that metadata exists in the published production feeds.
 
 ### Phase 5 — Store beta
 
@@ -57,7 +57,7 @@ Status: **in development / hardening** on `chrome-v150-adaptive-memory`.
 
 ## Release gate
 
-No merge or release based only on the 80.8% development counter or a green build. The release gate also requires the remaining functional/performance items, benchmark/integrity gates and manual browser regression validation to pass without known critical issues.
+No merge or release based only on the 80.8% development counter or a green build. The release gate also requires the remaining functional/performance items, benchmark/integrity gates and manual browser regression validation to pass without known critical issues. The v2 migration preflight is a safety gate only; it does not count as production feed publication.
 
 ## Later
 
