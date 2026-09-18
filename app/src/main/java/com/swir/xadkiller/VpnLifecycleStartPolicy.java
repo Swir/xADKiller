@@ -8,8 +8,14 @@ final class VpnLifecycleStartPolicy {
     private VpnLifecycleStartPolicy() {}
 
     static boolean shouldStart(String action, boolean autoStartEnabled, boolean wasRunningBeforeRestart) {
-        if (!autoStartEnabled || action == null) return false;
-        if (ACTION_BOOT_COMPLETED.equals(action)) return true;
+        if (action == null) return false;
+
+        // Device boot follows the explicit autostart preference. A package replacement is
+        // different: Android has just killed our process while the user may have manually
+        // enabled protection. Resume only that previously-running session, even when the
+        // user intentionally disabled boot autostart. This preserves both preferences:
+        // "do not start at boot" and "do not silently turn protection off after an update".
+        if (ACTION_BOOT_COMPLETED.equals(action)) return autoStartEnabled;
         if (ACTION_MY_PACKAGE_REPLACED.equals(action)) return wasRunningBeforeRestart;
         return false;
     }
