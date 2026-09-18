@@ -37,7 +37,12 @@ final class VpnLifecycleStartPolicy {
     }
 
     static boolean isDuplicateRestart(String action, String lastAction, long lastAttemptAtMs, long nowMs) {
-        if (!isManagedRestartAction(action) || !action.equals(lastAction)) return false;
+        // Treat any two managed lifecycle signals in the same short burst as one restart
+        // transaction, even when OEM/update ordering produces BOOT_COMPLETED followed by
+        // MY_PACKAGE_REPLACED (or the reverse). The first signal already reconciles stale
+        // liveness and attempts the service start; a second managed signal seconds later
+        // must not race another foreground-service launch or clear freshly restored state.
+        if (!isManagedRestartAction(action) || !isManagedRestartAction(lastAction)) return false;
         if (lastAttemptAtMs <= 0L || nowMs <= 0L) return false;
         long ageMs = nowMs - lastAttemptAtMs;
         return ageMs >= 0L && ageMs <= DUPLICATE_RESTART_WINDOW_MS;
