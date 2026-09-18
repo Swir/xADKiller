@@ -36,6 +36,38 @@ async function findWorker(browser, timeout = 22000) {
   throw new Error("xADKiller worker not found");
 }
 
+async function launchBrowser() {
+  return puppeteer.launch({
+    executablePath: chromium.executablePath(),
+    headless: true,
+    pipe: true,
+    enableExtensions: [extensionPath],
+    args: ["--no-sandbox", "--disable-dev-shm-usage", "--no-first-run", "--no-default-browser-check"],
+    timeout: 60000
+  });
+}
+
+async function launchWithWorker() {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const candidate = await launchBrowser();
+    try {
+      // A cold Chromium profile can very occasionally delay the MV3 worker target even
+      // though the same extension package is healthy. Retry only this startup discovery
+      // failure in a fresh browser; all no-COMPAT/mode assertions below remain strict.
+      const worker = await findWorker(candidate, attempt === 1 ? 14000 : 22000);
+      if (attempt > 1) log("Worker startup recovered", "fresh Chromium retry");
+      return { browser:candidate, worker };
+    } catch (error) {
+      lastError = error;
+      try { await candidate.close(); } catch (_) {}
+      if (!String(error?.message || error).includes("worker not found") || attempt === 2) throw error;
+      log("Worker startup retry", "MV3 service worker target was late; retrying fresh Chromium once");
+    }
+  }
+  throw lastError || new Error("xADKiller worker not found");
+}
+
 async function snapshot(worker) {
   return await worker.evaluate(async () => ({
     enabled: await chrome.declarativeNetRequest.getEnabledRulesets(),
@@ -74,15 +106,9 @@ log("Manifest policy", `STANDARD=${standardRules.length} BLOCK, ULTRA=${ultraRul
 
 let browser = null;
 try {
-  browser = await puppeteer.launch({
-    executablePath: chromium.executablePath(),
-    headless: true,
-    pipe: true,
-    enableExtensions: [extensionPath],
-    args: ["--no-sandbox", "--disable-dev-shm-usage", "--no-first-run", "--no-default-browser-check"],
-    timeout: 60000
-  });
-  const worker = await findWorker(browser);
+  const session = await launchWithWorker();
+  browser = session.browser;
+  const worker = session.worker;
   const extensionId = await worker.evaluate(() => chrome.runtime.id);
 
   const initial = await waitMode(worker, "standard", 18000);
