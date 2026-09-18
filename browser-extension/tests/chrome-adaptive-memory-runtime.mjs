@@ -20,7 +20,7 @@ async function launch() {
     userDataDir:profile,
     args:[
       "--no-sandbox","--disable-dev-shm-usage","--no-first-run","--no-default-browser-check",
-      "--host-resolver-rules=MAP publisher.example.org 127.0.0.1, MAP metrics.example.net 127.0.0.1"
+      "--host-resolver-rules=MAP publisher.example.org 127.0.0.1, MAP metrics.example.net 127.0.0.1, MAP branch.office.example 127.0.0.1"
     ],
     timeout:60000
   });
@@ -82,7 +82,14 @@ async function startLocalFixture() {
         res.end(`<!doctype html><html><body><img src="http://metrics.example.net:${port}/pixel.gif?campaign=spring-sale"></body></html>`);
         return;
       }
-      if (req.url === "/ads/banner.png" || req.url?.startsWith("/pixel.gif")) {
+      if (req.url?.startsWith("/cross-site-provider-name")) {
+        const address = server.address();
+        const port = typeof address === "object" && address ? address.port : 0;
+        res.writeHead(200, { "content-type":"text/html; charset=utf-8" });
+        res.end(`<!doctype html><html><body><img src="http://branch.office.example:${port}/asset.gif"></body></html>`);
+        return;
+      }
+      if (req.url === "/ads/banner.png" || req.url?.startsWith("/pixel.gif") || req.url?.startsWith("/asset.gif")) {
         res.writeHead(204, { "content-type":"image/gif" });
         res.end();
         return;
@@ -144,10 +151,24 @@ try {
   }
   log("Cross-site generic-query guard", `memory=${afterGeneric.memory} learned=${afterGeneric.learned}`);
 
+  // Provider names are matched as canonical DNS suffixes, never as arbitrary
+  // substrings. A benign host containing the word "branch" must not be promoted
+  // just because branch.io is a known attribution provider.
+  const beforeSubstring = await send(popup, { type:"getTitanStats" });
+  const substringPage = await browser.newPage();
+  await substringPage.goto(`http://publisher.example.org:${localFixture.port}/cross-site-provider-name`, { waitUntil:"networkidle0", timeout:12000 });
+  await delay(1000);
+  await substringPage.close();
+  const afterSubstring = await send(popup, { type:"getTitanStats" });
+  if (!afterSubstring?.ok || afterSubstring.memory !== beforeSubstring.memory || afterSubstring.learned !== beforeSubstring.learned) {
+    throw new Error(`provider-name substring caused false learning: before=${JSON.stringify(beforeSubstring)} after=${JSON.stringify(afterSubstring)}`);
+  }
+  log("Canonical provider-suffix guard", `memory=${afterSubstring.memory} learned=${afterSubstring.learned}`);
+
   await new Promise((resolve) => localFixture.server.close(resolve));
   localFixture = null;
 
-  const sample = { type:"titanLearnResource", url:"https://cdn-adnxs.example.net/runtime/ad.js", pageHost:"example.org" };
+  const sample = { type:"titanLearnResource", url:"https://ib.adnxs.com/runtime/ad.js", pageHost:"example.org" };
   const first = await send(popup, sample);
   if (!first?.ok || first.memorySeen !== 1 || first.promoted !== false) throw new Error(`first memory observation invalid: ${JSON.stringify(first)}`);
   log("First observation", JSON.stringify(first));
@@ -162,7 +183,7 @@ try {
   const stored = await found.worker.evaluate(async () => await chrome.storage.local.get({ xadTitanHostMemoryV1:[] }));
   const rawText = JSON.stringify(stored.xadTitanHostMemoryV1 || []);
   if (!Array.isArray(stored.xadTitanHostMemoryV1) || stored.xadTitanHostMemoryV1.length !== 1) throw new Error(`unexpected memory storage: ${rawText}`);
-  if (!rawText.includes("cdn-adnxs.example.net")) throw new Error(`learned host missing from memory: ${rawText}`);
+  if (!rawText.includes("ib.adnxs.com")) throw new Error(`learned host missing from memory: ${rawText}`);
   if (rawText.includes("example.org") || rawText.includes("/runtime/ad.js") || rawText.includes("https://")) throw new Error(`memory leaked browsing/page URL context: ${rawText}`);
   log("Privacy storage shape OK", rawText);
 
@@ -186,7 +207,7 @@ try {
   const finalStore = await found.worker.evaluate(async () => await chrome.storage.local.get({ xadTitanHostMemoryV1:[] }));
   if (finalStore.xadTitanHostMemoryV1?.length) throw new Error(`memory storage not cleared: ${JSON.stringify(finalStore)}`);
 
-  log("PASS", "persistent host-only memory, local/private exclusion, cross-site generic-query guard, restart restore and user reset all verified");
+  log("PASS", "persistent host-only memory, local/private exclusion, generic-query and provider-suffix false-positive guards, restart restore and user reset all verified");
 } finally {
   if (localFixture?.server) { try { await new Promise((resolve) => localFixture.server.close(resolve)); } catch (_) {} }
   if (browser) { try { await browser.close(); } catch (_) {} }
