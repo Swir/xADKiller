@@ -84,8 +84,8 @@ jobs:
         run: gradle --no-daemon lintDebug
       - name: DNS framing EDNS0 privacy scrub UDP-size clamp incoming and synthesized UDP checksum regression
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsPacketHardeningTest
-      - name: DNS upstream cooldown suppression half-open and emergency fallback regression
-        run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsUpstreamPoolTest
+      - name: DNS upstream cooldown suppression half-open and bounded emergency fallback regression
+        run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsUpstreamPoolTest --tests com.swir.xadkiller.DnsEmergencyTimeoutTest
       - name: DNS Wi-Fi mobile handover immediate bounded resolver revalidation regression
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsNetworkHandoverRecoveryTest
       - name: VPN boot package-update stale-heartbeat action allowlist and liveness cleanup lifecycle regression
