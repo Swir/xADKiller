@@ -153,6 +153,27 @@ const titan = {
 }
 
 {
+  const guard = makeGuard({ [TITAN]:{ ...titan, regex_signatures:[{ regex:"^(a+)+$", types:["script"] }] } });
+  await expectReject(guard.fetch(TITAN), "regex_signatures_regex_unsafe");
+}
+
+{
+  const guard = makeGuard({ [TITAN]:{ ...titan, regex_signatures:[{ regex:"^(.*)+$", types:["xmlhttprequest"] }] } });
+  await expectReject(guard.fetch(TITAN), "regex_signatures_regex_unsafe");
+}
+
+{
+  const guard = makeGuard({ [TITAN]:{ ...titan, regex_signatures:[{ regex:"^(a+)\\1+$", types:["script"] }] } });
+  await expectReject(guard.fetch(TITAN), "regex_signatures_regex_unsafe");
+}
+
+{
+  const bounded = { ...titan, regex_signatures:[{ regex:"^https?://[^/]+/(?:[^/?#]+/){0,4}(?:ads?|prebid)(?:[._/-]|$)", types:["script","xmlhttprequest"] }] };
+  const guard = makeGuard({ [TITAN]:bounded });
+  await guard.fetch(TITAN);
+}
+
+{
   const duplicate = [
     { regex:"(?:ads?|prebid)", types:["script","xmlhttprequest"] },
     { regex:"(?:ads?|prebid)", types:["xmlhttprequest","script"], third_party:false }
@@ -171,6 +192,9 @@ const titan = {
   if (!contract.validDomain("xn--bcher-kva.example")) throw new Error("valid punycode domain rejected");
   if (contract.validDomain("ads.example.com/path")) throw new Error("domain path accepted");
   if (!contract.validCosmeticSelector("iframe[src*='doubleclick.net']")) throw new Error("valid selector rejected");
+  if (!contract.validRegexPattern("^https?://[^/]+/(?:[^/?#]+/){0,4}ads$")) throw new Error("bounded nested TITAN regex rejected");
+  if (contract.validRegexPattern("^(a+)+$")) throw new Error("nested unbounded regex accepted");
+  if (contract.validRegexPattern("^(a+)\\1+$")) throw new Error("backreference regex accepted");
 }
 
-console.log("[xADKiller FEED DATA CONTRACT CI] PASS • strict top-level schema + bounded collections + semantic duplicate rejection + canonical domains + DNR signature schema + safe cosmetic selectors + compiled TITAN regex verified");
+console.log("[xADKiller FEED DATA CONTRACT CI] PASS • strict top-level schema + bounded collections + semantic duplicate rejection + canonical domains + DNR signature schema + safe cosmetic selectors + compiled/ReDoS-guarded TITAN regex verified");
