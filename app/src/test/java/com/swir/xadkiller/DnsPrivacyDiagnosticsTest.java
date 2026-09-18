@@ -19,11 +19,32 @@ public class DnsPrivacyDiagnosticsTest {
     }
 
     @Test
+    public void strictConfiguredButNotEstablishedGetsActionableWarning() {
+        DnsPrivacyDiagnostics.Assessment a = DnsPrivacyDiagnostics.assess(
+                true, "hostname", "dns.example", false, "", 0);
+        assertEquals(DnsPrivacyDiagnostics.Severity.WARNING, a.severity);
+        assertEquals("strict_private_dns_pending", a.code);
+        assertTrue(a.localDnsConflict);
+        assertFalse(a.encryptedSystemDnsActive);
+        assertTrue(a.summary(false).contains("configured but inactive"));
+        assertTrue(a.summary(true).contains("skonfigurowany, ale nieaktywny"));
+    }
+
+    @Test
     public void unknownModeWithSpecifierIsAlsoTreatedAsStrict() {
         DnsPrivacyDiagnostics.Assessment a = DnsPrivacyDiagnostics.assess(
-                true, "unknown", "dns.example", false, "", 1);
+                true, "unknown", "dns.example", true, "dns.example", 1);
         assertEquals("strict_private_dns", a.code);
         assertTrue(a.localDnsConflict);
+    }
+
+    @Test
+    public void unknownModeWithSpecifierButNoEstablishedResolverIsPendingStrict() {
+        DnsPrivacyDiagnostics.Assessment a = DnsPrivacyDiagnostics.assess(
+                true, "unknown", "dns.example", false, "", 1);
+        assertEquals("strict_private_dns_pending", a.code);
+        assertTrue(a.localDnsConflict);
+        assertFalse(a.encryptedSystemDnsActive);
     }
 
     @Test
@@ -37,13 +58,33 @@ public class DnsPrivacyDiagnosticsTest {
     }
 
     @Test
-    public void privateDnsOffIsHealthySystemDnsPath() {
+    public void privateDnsOffIsHealthySystemDnsPathWhenResolversExist() {
         DnsPrivacyDiagnostics.Assessment a = DnsPrivacyDiagnostics.assess(
                 true, "off", "", false, "", 2);
         assertEquals(DnsPrivacyDiagnostics.Severity.OK, a.severity);
         assertEquals("private_dns_off", a.code);
         assertFalse(a.localDnsConflict);
         assertFalse(a.encryptedSystemDnsActive);
+    }
+
+    @Test
+    public void privateDnsOffWithNoReportedResolversIsNoticeNotHealthy() {
+        DnsPrivacyDiagnostics.Assessment a = DnsPrivacyDiagnostics.assess(
+                true, "off", "", false, "", 0);
+        assertEquals(DnsPrivacyDiagnostics.Severity.NOTICE, a.severity);
+        assertEquals("no_dns_servers", a.code);
+        assertFalse(a.localDnsConflict);
+        assertFalse(a.encryptedSystemDnsActive);
+    }
+
+    @Test
+    public void automaticModeWithNoReportedResolversSurfacesHandoverState() {
+        DnsPrivacyDiagnostics.Assessment a = DnsPrivacyDiagnostics.assess(
+                true, "opportunistic", "", false, "", 0);
+        assertEquals(DnsPrivacyDiagnostics.Severity.NOTICE, a.severity);
+        assertEquals("no_dns_servers", a.code);
+        assertTrue(a.summary(false).contains("reports no DNS servers"));
+        assertTrue(a.summary(true).contains("nie raportuje obecnie serwerów DNS"));
     }
 
     @Test
@@ -59,7 +100,11 @@ public class DnsPrivacyDiagnosticsTest {
     public void summariesExplicitlyStateAppDohIsNotDetectable() {
         DnsPrivacyDiagnostics.Assessment strict = DnsPrivacyDiagnostics.assess(
                 true, "hostname", "dns.example", true, "dns.example", 2);
+        DnsPrivacyDiagnostics.Assessment noResolvers = DnsPrivacyDiagnostics.assess(
+                true, "off", "", false, "", 0);
         assertTrue(strict.summary(false).contains("app DoH: not detectable"));
         assertTrue(strict.summary(true).contains("DoH aplikacji: niewykrywalny"));
+        assertTrue(noResolvers.summary(false).contains("app DoH: not detectable"));
+        assertTrue(noResolvers.summary(true).contains("DoH aplikacji: niewykrywalny"));
     }
 }
