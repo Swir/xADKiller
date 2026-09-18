@@ -20,7 +20,7 @@ async function launch() {
     userDataDir:profile,
     args:[
       "--no-sandbox","--disable-dev-shm-usage","--no-first-run","--no-default-browser-check",
-      "--host-resolver-rules=MAP publisher.example.org 127.0.0.1, MAP metrics.example.net 127.0.0.1, MAP branch.office.example 127.0.0.1"
+      "--host-resolver-rules=MAP publisher.example.org 127.0.0.1, MAP metrics.example.net 127.0.0.1, MAP branch.office.net 127.0.0.1"
     ],
     timeout:60000
   });
@@ -86,7 +86,7 @@ async function startLocalFixture() {
         const address = server.address();
         const port = typeof address === "object" && address ? address.port : 0;
         res.writeHead(200, { "content-type":"text/html; charset=utf-8" });
-        res.end(`<!doctype html><html><body><img src="http://branch.office.example:${port}/asset.gif"></body></html>`);
+        res.end(`<!doctype html><html><body><img src="http://branch.office.net:${port}/asset.gif"></body></html>`);
         return;
       }
       if (req.url === "/ads/banner.png" || req.url?.startsWith("/pixel.gif") || req.url?.startsWith("/asset.gif")) {
