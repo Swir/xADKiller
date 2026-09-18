@@ -18,14 +18,17 @@ final class DnsPrivacyDiagnostics {
         final boolean localDnsConflict;
         final boolean encryptedSystemDnsActive;
         final boolean applicationDohDetectable;
+        final boolean strictResolverMismatch;
 
         Assessment(Severity severity, String code, boolean localDnsConflict,
-                   boolean encryptedSystemDnsActive, boolean applicationDohDetectable) {
+                   boolean encryptedSystemDnsActive, boolean applicationDohDetectable,
+                   boolean strictResolverMismatch) {
             this.severity = severity;
             this.code = code;
             this.localDnsConflict = localDnsConflict;
             this.encryptedSystemDnsActive = encryptedSystemDnsActive;
             this.applicationDohDetectable = applicationDohDetectable;
+            this.strictResolverMismatch = strictResolverMismatch;
         }
 
         String summary(boolean polish) {
@@ -38,6 +41,11 @@ final class DnsPrivacyDiagnostics {
                 return polish
                         ? "STRICT Private DNS skonfigurowany, ale nieaktywny • możliwa awaria rozwiązywania nazw • DoH aplikacji: niewykrywalny"
                         : "STRICT Private DNS configured but inactive • name resolution may fail • app DoH: not detectable";
+            }
+            if ("strict_private_dns_mismatch".equals(code)) {
+                return polish
+                        ? "STRICT Private DNS • aktywny resolver nie zgadza się z konfiguracją • możliwe przełączanie lub błąd OEM • DoH aplikacji: niewykrywalny"
+                        : "STRICT Private DNS • active resolver differs from configured hostname • handover or OEM state may be stale • app DoH: not detectable";
             }
             if ("strict_private_dns".equals(code)) {
                 return polish
@@ -71,11 +79,11 @@ final class DnsPrivacyDiagnostics {
                              boolean privateDnsActive, String privateDnsServerName,
                              int dnsServerCount) {
         String normalizedMode = normalize(mode);
-        String normalizedSpecifier = normalize(specifier);
-        String normalizedServer = normalize(privateDnsServerName);
+        String normalizedSpecifier = normalizeHostname(specifier);
+        String normalizedServer = normalizeHostname(privateDnsServerName);
 
         if (!networkAvailable) {
-            return new Assessment(Severity.NOTICE, "no_network", false, false, false);
+            return assessment(Severity.NOTICE, "no_network", false, false, false);
         }
 
         boolean strict = "hostname".equals(normalizedMode)
@@ -86,34 +94,53 @@ final class DnsPrivacyDiagnostics {
             if (!encryptedEstablished) {
                 // A configured STRICT resolver that Android has not established is more actionable
                 // than a generic conflict warning: DNS may be unavailable until the resolver works.
-                return new Assessment(Severity.WARNING, "strict_private_dns_pending", true, false, false);
+                return assessment(Severity.WARNING, "strict_private_dns_pending", true, false, false);
             }
-            return new Assessment(Severity.WARNING, "strict_private_dns", true, true, false);
+            if (!normalizedSpecifier.isEmpty()
+                    && !normalizedServer.isEmpty()
+                    && !normalizedSpecifier.equals(normalizedServer)) {
+                // During network handover or on buggy OEM builds the Settings provider and
+                // LinkProperties can temporarily disagree. Do not silently claim that STRICT DNS
+                // is healthy when Android says a different resolver is actually active.
+                return assessment(Severity.WARNING, "strict_private_dns_mismatch", true, true, true);
+            }
+            return assessment(Severity.WARNING, "strict_private_dns", true, true, false);
         }
 
         if (encryptedEstablished) {
-            return new Assessment(Severity.NOTICE, "encrypted_system_dns", false, true, false);
+            return assessment(Severity.NOTICE, "encrypted_system_dns", false, true, false);
         }
 
         // OEMs and transient handovers can briefly expose an empty LinkProperties DNS list.
         // Treat it as a notice rather than a hard failure, but surface it instead of claiming the
         // local DNS path is healthy when Android currently reports no resolver at all.
         if (dnsServerCount <= 0) {
-            return new Assessment(Severity.NOTICE, "no_dns_servers", false, false, false);
+            return assessment(Severity.NOTICE, "no_dns_servers", false, false, false);
         }
 
         if ("off".equals(normalizedMode)) {
-            return new Assessment(Severity.OK, "private_dns_off", false, false, false);
+            return assessment(Severity.OK, "private_dns_off", false, false, false);
         }
 
-        return new Assessment(Severity.NOTICE, "private_dns_auto_or_unknown", false, false, false);
+        return assessment(Severity.NOTICE, "private_dns_auto_or_unknown", false, false, false);
     }
 
     static boolean isPolishLocale() {
         return "pl".equalsIgnoreCase(Locale.getDefault().getLanguage());
     }
 
+    private static Assessment assessment(Severity severity, String code, boolean localDnsConflict,
+                                         boolean encryptedSystemDnsActive, boolean mismatch) {
+        return new Assessment(severity, code, localDnsConflict, encryptedSystemDnsActive, false, mismatch);
+    }
+
     private static String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static String normalizeHostname(String value) {
+        String normalized = normalize(value);
+        while (normalized.endsWith(".")) normalized = normalized.substring(0, normalized.length() - 1);
+        return normalized;
     }
 }
