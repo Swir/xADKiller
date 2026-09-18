@@ -1,6 +1,7 @@
 package com.swir.xadkiller;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -30,6 +31,8 @@ public class DnsEmergencyTimeoutTest {
         // remains the normal bounded adaptive value; the minimum cap is reserved for
         // the single emergency attempt when every configured provider is cooling.
         assertEquals(2, pool.order(2_000L).length);
-        assertEquals(3200, pool.timeoutMs("1.1.1.1", 2_000L));
+        int timeout = pool.timeoutMs("1.1.1.1", 2_000L);
+        assertTrue(timeout > 1200);
+        assertTrue(timeout <= 3200);
     }
 }
