@@ -15,16 +15,20 @@
   const ALLOWED_SUCCESS_CONTENT_TYPES = new Set(["application/json", "text/plain", "application/octet-stream"]);
 
   function fail(reason) { throw new TypeError(`xad_feed_guard_${reason}`); }
-  function guardedKind(urlValue) {
+  function parseApprovedUrl(urlValue) {
     let url;
-    try { url = new URL(String(urlValue || "")); } catch (_) { return ""; }
-    if (url.protocol !== "https:" || url.hostname !== RAW_HOST || url.port || url.username || url.password) return "";
-    // Approved feeds are exact immutable request targets. Query strings can carry tokens,
-    // cache-busters or accidental caller secrets to GitHub even when the pathname itself
-    // is approved, while fragments create a second spelling of the same protected URL.
-    // Reject both so provenance and request privacy are tied to one canonical URL.
-    if (url.search || url.hash) return "";
-    return APPROVED_PATHS[url.pathname] || "";
+    try { url = new URL(String(urlValue || "")); } catch (_) { return null; }
+    if (url.protocol !== "https:" || url.hostname !== RAW_HOST || url.port || url.username || url.password) return null;
+    const kind = APPROVED_PATHS[url.pathname] || "";
+    return kind ? { url, kind } : null;
+  }
+  function guardedKind(urlValue) {
+    const parsed = parseApprovedUrl(urlValue);
+    if (!parsed || parsed.url.search || parsed.url.hash) return "";
+    return parsed.kind;
+  }
+  function hasApprovedPath(urlValue) {
+    return Boolean(parseApprovedUrl(urlValue));
   }
   function requestMethod(input, init) {
     return String(init?.method || input?.method || "GET").trim().toUpperCase();
@@ -120,6 +124,10 @@
   globalThis.fetch = async (input, init) => {
     const urlValue = typeof input === "string" ? input : input?.url;
     const kind = guardedKind(urlValue);
+    // Do not let a caller bypass protection by appending query/fragment text to an
+    // otherwise approved raw-GitHub feed pathname. Such variants are invalid protected
+    // targets rather than ordinary unguarded network requests.
+    if (!kind && hasApprovedPath(urlValue)) fail("transport_canonical_url");
     if (!kind) return nativeFetch(input, init);
     if (requestMethod(input, init) !== "GET") fail("transport_method");
     const timed = timedInit(input, init);
@@ -130,8 +138,8 @@
     } finally { timed.cleanup(); }
   };
   globalThis.XAD_FEED_TRANSPORT_GUARD = Object.freeze({
-    MAX_FEED_BYTES, FEED_FETCH_TIMEOUT_MS, FEED_ACCEPT, guardedKind, requestMethod,
-    publicDataHeaders, hardenedInit, timedInit, validateContentLength,
+    MAX_FEED_BYTES, FEED_FETCH_TIMEOUT_MS, FEED_ACCEPT, guardedKind, hasApprovedPath,
+    requestMethod, publicDataHeaders, hardenedInit, timedInit, validateContentLength,
     validateContentType, validateResponse, bufferBoundedBody
   });
 })();
