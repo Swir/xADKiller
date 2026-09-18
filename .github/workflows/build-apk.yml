@@ -93,7 +93,7 @@ jobs:
           gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsUpstreamPeerPinningTest
       - name: DNS Wi-Fi mobile handover immediate bounded resolver revalidation regression
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsNetworkHandoverRecoveryTest
-      - name: VPN boot package-update stale-heartbeat action allowlist and liveness cleanup lifecycle regression
+      - name: VPN boot package-update stale-heartbeat cross-action restart-burst and liveness lifecycle regression
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.VpnLifecycleStartPolicyTest
       - name: Offline starter blocklist screenshot-derived coverage regression
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.BlocklistCoverageTest
