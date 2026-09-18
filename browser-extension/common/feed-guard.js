@@ -73,7 +73,7 @@
     return { expiresAt, previousVersion:String(rollback.previous_version), previousRef:String(rollback.previous_ref) };
   }
 
-  async function recordHealthNow(kind, ok, version, error, latencyMs, schema = 0) {
+  async function recordHealthNow(kind, ok, version, error, latencyMs, schema = 0, meta = {}) {
     try {
       const stored = await getLocal({ [HEALTH_KEY]:{ schema:1, feeds:{} } });
       const health = stored[HEALTH_KEY] && typeof stored[HEALTH_KEY] === "object"
@@ -81,6 +81,20 @@
       const feeds = health.feeds && typeof health.feeds === "object" ? { ...health.feeds } : {};
       const previous = feeds[kind] && typeof feeds[kind] === "object" ? feeds[kind] : {};
       const now = Date.now();
+
+      const acceptedAt = ok ? Math.max(0, Number(meta.updatedAt || 0)) : Math.max(0, Number(previous.lastFeedUpdatedAt || 0));
+      let highestAt = Math.max(0, Number(previous.highestFeedUpdatedAt || previous.lastFeedUpdatedAt || 0));
+      let highestVersion = String(previous.highestFeedVersion || previous.lastVersion || "").slice(0, 80);
+      let highestSchema = Math.max(0, Number(previous.highestFeedSchema || previous.lastSchema || 0));
+      if (ok && acceptedAt > 0 && (highestAt === 0 || acceptedAt > highestAt)) {
+        highestAt = acceptedAt;
+        highestVersion = validVersion(version) ? String(version).slice(0, 80) : highestVersion;
+        highestSchema = schema === 1 || schema === 2 ? schema : highestSchema;
+      } else if (ok && acceptedAt > 0 && acceptedAt === highestAt && !highestVersion && validVersion(version)) {
+        highestVersion = String(version).slice(0, 80);
+        highestSchema = schema === 1 || schema === 2 ? schema : highestSchema;
+      }
+
       feeds[kind] = {
         successCount:Math.max(0, Number(previous.successCount || 0)) + (ok ? 1 : 0),
         failureCount:Math.max(0, Number(previous.failureCount || 0)) + (ok ? 0 : 1),
@@ -91,7 +105,17 @@
         lastVersion:ok && validVersion(version) ? String(version).slice(0, 80) : String(previous.lastVersion || "").slice(0, 80),
         lastSchema:ok && (schema === 1 || schema === 2) ? schema : Math.max(0, Number(previous.lastSchema || 0)),
         lastError:ok ? "" : String(error || "unknown").slice(0, 120),
-        lastLatencyMs:Math.max(0, Math.min(60_000, Math.round(Number(latencyMs || 0))))
+        lastLatencyMs:Math.max(0, Math.min(60_000, Math.round(Number(latencyMs || 0)))),
+        lastFeedUpdatedAt:ok ? acceptedAt : Math.max(0, Number(previous.lastFeedUpdatedAt || 0)),
+        highestFeedUpdatedAt:highestAt,
+        highestFeedVersion:highestVersion,
+        highestFeedSchema:highestSchema,
+        rollbackPreviousVersion:ok
+          ? (schema === 2 ? String(meta.previousVersion || "").slice(0, 80) : "")
+          : String(previous.rollbackPreviousVersion || "").slice(0, 80),
+        rollbackPreviousRef:ok
+          ? (schema === 2 ? String(meta.previousRef || "").slice(0, 160) : "")
+          : String(previous.rollbackPreviousRef || "").slice(0, 160)
       };
       await setLocal({ [HEALTH_KEY]:{ schema:1, updatedAt:now, feeds } });
     } catch (_) {
@@ -99,10 +123,10 @@
     }
   }
 
-  function recordHealth(kind, ok, version = "", error = "", latencyMs = 0, schema = 0) {
+  function recordHealth(kind, ok, version = "", error = "", latencyMs = 0, schema = 0, meta = {}) {
     healthWriteChain = healthWriteChain.then(
-      () => recordHealthNow(kind, ok, version, error, latencyMs, schema),
-      () => recordHealthNow(kind, ok, version, error, latencyMs, schema)
+      () => recordHealthNow(kind, ok, version, error, latencyMs, schema, meta),
+      () => recordHealthNow(kind, ok, version, error, latencyMs, schema, meta)
     );
     return healthWriteChain;
   }
@@ -128,8 +152,37 @@
     if (!validVersion(data.feed_version)) fail("version");
     const now = Date.now();
     const updatedAt = validateFeedTimestamp(data.updated_at, now);
-    if (data.schema === 2) validateV2Contract(data, updatedAt, now);
-    return data;
+    const contract = data.schema === 2 ? validateV2Contract(data, updatedAt, now) : null;
+    return { data, updatedAt, contract };
+  }
+
+  async function validateTransition(kind, data, updatedAt) {
+    const health = await readHealth();
+    const previous = health?.feeds?.[kind];
+    if (!previous || typeof previous !== "object") return;
+
+    const version = String(data.feed_version || "");
+    const lastVersion = String(previous.lastVersion || "");
+    const lastSchema = Math.max(0, Number(previous.lastSchema || 0));
+    const lastAcceptedAt = Math.max(0, Number(previous.lastFeedUpdatedAt || 0));
+    const highestAt = Math.max(0, Number(previous.highestFeedUpdatedAt || lastAcceptedAt));
+    const highestVersion = String(previous.highestFeedVersion || lastVersion || "");
+    const highestSchema = Math.max(0, Number(previous.highestFeedSchema || lastSchema));
+    const rollbackVersion = String(previous.rollbackPreviousVersion || "");
+
+    // Re-fetching exactly the currently accepted immutable payload is always safe.
+    if (lastVersion && version === lastVersion && updatedAt === lastAcceptedAt && data.schema === lastSchema) return;
+
+    // Once a v2 high-water mark has been accepted, v1 can only reappear as the
+    // explicitly authorised rollback version advertised by that accepted v2 feed.
+    const authorisedRollback = !!rollbackVersion && version === rollbackVersion && updatedAt <= highestAt;
+    if (highestSchema === 2 && data.schema === 1 && !authorisedRollback) fail("schema_downgrade");
+
+    if (highestAt > 0) {
+      if (updatedAt < highestAt && !authorisedRollback) fail("replay");
+      if (updatedAt === highestAt && highestVersion && version !== highestVersion) fail("version_collision");
+      if (updatedAt > highestAt && highestVersion && version === highestVersion) fail("version_reuse");
+    }
   }
 
   async function validateLiveShield(data) {
@@ -181,11 +234,13 @@
   }
 
   async function validate(kind, response) {
-    const data = await parseProtectedResponse(response);
+    const parsed = await parseProtectedResponse(response);
+    const { data, updatedAt } = parsed;
+    await validateTransition(kind, data, updatedAt);
     if (kind === "live-shield") await validateLiveShield(data);
     else if (kind === "live-matrix") await validateLiveMatrix(data);
     else if (kind === "titan") await validateTitan(data);
-    return data;
+    return parsed;
   }
 
   globalThis.fetch = async (input, init) => {
@@ -201,8 +256,13 @@
         await recordHealth(kind, false, "", `http_${Number(response?.status || 0)}`, latency);
         return response;
       }
-      const data = await validate(kind, response);
-      await recordHealth(kind, true, data.feed_version, "", latency, data.schema);
+      const parsed = await validate(kind, response);
+      const { data, updatedAt, contract } = parsed;
+      await recordHealth(kind, true, data.feed_version, "", latency, data.schema, {
+        updatedAt,
+        previousVersion:contract?.previousVersion || "",
+        previousRef:contract?.previousRef || ""
+      });
       return response;
     } catch (error) {
       await recordHealth(kind, false, "", safeReason(error), Date.now() - started);
@@ -226,6 +286,7 @@
     minRelative,
     validateFeedTimestamp,
     validateV2Contract,
+    validateTransition,
     readHealth
   });
 })();

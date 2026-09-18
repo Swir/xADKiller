@@ -84,7 +84,7 @@ jobs:
           node --check tools/validate-feed-v2-candidate-artifacts.mjs
           node --check tools/validate-feed-checksums.mjs
           node --check tools/validate-v150-safety.mjs
-      - name: GitHub feed integrity regression test
+      - name: GitHub feed integrity anti-replay and downgrade regression test
         run: npm run test:feeds
       - name: Feed v2 consumer compatibility regression
         run: npm run test:feed-v2-consumers

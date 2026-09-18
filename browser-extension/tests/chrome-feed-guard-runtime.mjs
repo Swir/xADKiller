@@ -8,6 +8,11 @@ const LIVE_SHIELD = "https://raw.githubusercontent.com/Swir/xADKiller/live-shiel
 const LIVE_MATRIX = "https://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json";
 const TITAN = "https://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-titan-feed.json";
 const NOW_ISO = new Date().toISOString();
+const HOUR = 60 * 60 * 1000;
+const MINUS_1H_ISO = new Date(Date.now() - HOUR).toISOString();
+const MINUS_2H_ISO = new Date(Date.now() - 2 * HOUR).toISOString();
+const MINUS_3H_ISO = new Date(Date.now() - 3 * HOUR).toISOString();
+const MINUS_4H_ISO = new Date(Date.now() - 4 * HOUR).toISOString();
 const EXPIRES_7D_ISO = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
 function response(data, status = 200) {
@@ -114,6 +119,9 @@ function v2(feed, version = "2026.09.18.1") {
     if (feed.lastVersion !== "2026.09.17.1" || feed.lastSchema !== 1 || !feed.lastSuccessAt || feed.lastError) {
       throw new Error(`bad successful health metadata for ${kind}: ${JSON.stringify(feed)}`);
     }
+    if (!feed.lastFeedUpdatedAt || feed.highestFeedUpdatedAt !== feed.lastFeedUpdatedAt || feed.highestFeedSchema !== 1) {
+      throw new Error(`feed high-water metadata missing for ${kind}: ${JSON.stringify(feed)}`);
+    }
   }
   if (guard.__listeners.length !== 1) throw new Error("getFeedGuardHealth runtime listener missing");
 }
@@ -129,7 +137,62 @@ function v2(feed, version = "2026.09.18.1") {
     if (feed.lastSchema !== 2 || feed.lastVersion !== "2026.09.18.1" || feed.failureCount !== 0) {
       throw new Error(`v2 contract was not accepted/recorded for ${kind}: ${JSON.stringify(feed)}`);
     }
+    if (feed.highestFeedSchema !== 2 || feed.rollbackPreviousVersion !== "2026.09.17.1" || !feed.rollbackPreviousRef) {
+      throw new Error(`v2 transition metadata missing for ${kind}: ${JSON.stringify(feed)}`);
+    }
   }
+}
+
+// Stateful anti-replay / anti-downgrade gate. The highest accepted v2 timestamp
+// remains a high-water mark even after an explicitly authorised rollback.
+{
+  const current = {
+    ...v2(healthyShield, "2026.09.18.9"),
+    updated_at:MINUS_2H_ISO,
+    expires_at:EXPIRES_7D_ISO,
+    rollback:{ previous_version:"2026.09.17.1", previous_ref:"feed-data/2026.09.17.1" }
+  };
+  const payloads = { [LIVE_SHIELD]:current };
+  const guard = await makeGuard(payloads);
+  await guard.fetch(LIVE_SHIELD);
+
+  let feed = requireFeed(await guard.XAD_FEED_GUARD.readHealth(), "live-shield");
+  const highWater = Date.parse(MINUS_2H_ISO);
+  if (feed.highestFeedUpdatedAt !== highWater || feed.highestFeedVersion !== "2026.09.18.9" || feed.highestFeedSchema !== 2) {
+    throw new Error(`v2 high-water mark not recorded: ${JSON.stringify(feed)}`);
+  }
+
+  payloads[LIVE_SHIELD] = { ...current, feed_version:"2026.09.18.10" };
+  await expectReject(guard.fetch(LIVE_SHIELD), "same-timestamp version collision", "version_collision");
+
+  payloads[LIVE_SHIELD] = { ...current, updated_at:MINUS_1H_ISO };
+  await expectReject(guard.fetch(LIVE_SHIELD), "same version reused at newer timestamp", "version_reuse");
+
+  payloads[LIVE_SHIELD] = {
+    ...current,
+    feed_version:"2026.09.18.8",
+    updated_at:MINUS_3H_ISO,
+    rollback:{ previous_version:"2026.09.17.0", previous_ref:"feed-data/2026.09.17.0" }
+  };
+  await expectReject(guard.fetch(LIVE_SHIELD), "older unrelated v2 replay", "replay");
+
+  payloads[LIVE_SHIELD] = { ...healthyShield, feed_version:"2026.09.17.9", updated_at:MINUS_4H_ISO };
+  await expectReject(guard.fetch(LIVE_SHIELD), "unauthorised schema v1 downgrade", "schema_downgrade");
+
+  payloads[LIVE_SHIELD] = { ...healthyShield, feed_version:"2026.09.17.1", updated_at:MINUS_4H_ISO };
+  await guard.fetch(LIVE_SHIELD);
+  await guard.fetch(LIVE_SHIELD); // idempotent re-fetch of the accepted rollback remains valid
+
+  feed = requireFeed(await guard.XAD_FEED_GUARD.readHealth(), "live-shield");
+  if (feed.lastSchema !== 1 || feed.lastVersion !== "2026.09.17.1" || feed.highestFeedUpdatedAt !== highWater || feed.highestFeedSchema !== 2) {
+    throw new Error(`authorised rollback/high-water preservation failed: ${JSON.stringify(feed)}`);
+  }
+  if (feed.rollbackPreviousVersion || feed.rollbackPreviousRef) {
+    throw new Error(`rollback authorisation should clear after schema-v1 rollback: ${JSON.stringify(feed)}`);
+  }
+
+  payloads[LIVE_SHIELD] = { ...healthyShield, feed_version:"2026.09.18.11", updated_at:NOW_ISO };
+  await expectReject(guard.fetch(LIVE_SHIELD), "schema v1 cannot advance past a v2 high-water mark", "schema_downgrade");
 }
 
 {
@@ -222,4 +285,4 @@ function v2(feed, version = "2026.09.18.1") {
   if (feed.failureCount !== 1 || feed.lastError !== "http_503") throw new Error(`HTTP failure health missing: ${JSON.stringify(feed)}`);
 }
 
-console.log("[xADKiller FEED GUARD CI] PASS • schema v1 compatibility + schema v2 expiry/rollback contract + age/anti-shrink guards + local health counters verified");
+console.log("[xADKiller FEED GUARD CI] PASS • schema v1/v2 + expiry/rollback + anti-replay/downgrade high-water + age/anti-shrink + local health counters verified");
