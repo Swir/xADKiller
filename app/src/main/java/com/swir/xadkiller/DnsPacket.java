@@ -6,6 +6,7 @@ import java.util.Arrays;
 final class DnsPacket {
     static final int DNS_PORT = 53;
     private static final int MAX_RESPONSE_RR_COUNT = 512;
+    private static final int MAX_EDNS_UDP_PAYLOAD = 1232;
     private static final int EDNS_OPTION_CLIENT_SUBNET = 8;
     private static final int EDNS_OPTION_COOKIE = 10;
 
@@ -86,9 +87,9 @@ final class DnsPacket {
         // The local VPN may forward the query to a different public resolver than the
         // application/OS originally targeted. Do not leak EDNS Client Subnet (option 8)
         // or a resolver-specific EDNS COOKIE (option 10) across that privacy boundary.
-        // All other well-framed EDNS options, the advertised UDP size and DO flag are
-        // preserved for compatibility. The OPT record itself remains present even when
-        // every privacy-sensitive option is removed.
+        // Also cap oversized advertised EDNS UDP payloads at 1232 bytes to reduce the
+        // chance of large UDP replies/fragmentation across changing mobile paths. The
+        // DO flag and all other structurally valid EDNS options are preserved.
         byte[] upstreamDns = sanitizeEdnsPrivacy(dns, qEnd, arCount);
 
         byte[] srcIp = Arrays.copyOfRange(packet, 12, 16);
@@ -194,16 +195,20 @@ final class DnsPacket {
 
     /**
      * Remove EDNS options that disclose client network identity or carry state scoped to
-     * another resolver. Input has already passed hasWellFormedQueryTail(), so this method
-     * only rewrites the validated TLV list and its RDLEN. Unknown options are preserved.
+     * another resolver, and cap oversized advertised UDP payloads at the conservative
+     * 1232-byte size used to reduce fragmentation risk on modern Internet paths. Input has
+     * already passed hasWellFormedQueryTail(); unknown options and smaller payload sizes
+     * remain intact for forward compatibility.
      */
     private static byte[] sanitizeEdnsPrivacy(byte[] dns, int qEnd, int arCount) {
         if (dns == null || arCount != 1) return dns;
         int optionStart = qEnd + 11;
         int optionEnd = optionStart + u16(dns, qEnd + 9);
+        int advertisedUdpSize = u16(dns, qEnd + 3);
+        boolean clampUdpSize = advertisedUdpSize > MAX_EDNS_UDP_PAYLOAD;
         int pos = optionStart;
         int keptBytes = 0;
-        boolean changed = false;
+        boolean changed = clampUdpSize;
 
         while (pos < optionEnd) {
             int code = u16(dns, pos);
@@ -219,6 +224,7 @@ final class DnsPacket {
         if (!changed) return dns;
 
         byte[] sanitized = Arrays.copyOf(dns, optionStart + keptBytes);
+        if (clampUdpSize) put16(sanitized, qEnd + 3, MAX_EDNS_UDP_PAYLOAD);
         put16(sanitized, qEnd + 9, keptBytes);
         int source = optionStart;
         int dest = optionStart;
