@@ -13,19 +13,31 @@ public class BootReceiverV121 extends BroadcastReceiver {
         SharedPreferences prefs = context.getSharedPreferences(BlocklistManager.PREFS, Context.MODE_PRIVATE);
         boolean auto = prefs.getBoolean(BlocklistManager.KEY_AUTOSTART, true);
         boolean wasRunning = prefs.getBoolean("running", false);
+        long heartbeatAt = prefs.getLong(AdBlockVpnServiceV121.KEY_HEARTBEAT, 0L);
+        long now = System.currentTimeMillis();
         String action = intent.getAction();
-        if (!VpnLifecycleStartPolicy.shouldStart(action, auto, wasRunning)) return;
+        boolean managedRestart = VpnLifecycleStartPolicy.isManagedRestartAction(action);
+        boolean shouldStart = VpnLifecycleStartPolicy.shouldStart(action, auto, wasRunning, heartbeatAt, now);
 
-        // Process death during a package update can leave the persisted heartbeat/running
-        // flag looking alive for a few seconds. Clear it before requesting the fresh
-        // foreground service so the UI never mistakes stale pre-update state for a new VPN.
-        prefs.edit()
-                .putBoolean("running", false)
-                .putLong(AdBlockVpnServiceV121.KEY_HEARTBEAT, 0)
-                .apply();
+        // BOOT_COMPLETED and MY_PACKAGE_REPLACED both imply the old process is gone.
+        // Always clear pre-restart liveness before making a start decision, including the
+        // "autostart disabled" and stale-heartbeat paths. This prevents the UI from showing
+        // a dead pre-reboot/pre-update VPN as active when no replacement service is started.
+        if (managedRestart) {
+            prefs.edit()
+                    .putBoolean("running", false)
+                    .putLong(AdBlockVpnServiceV121.KEY_HEARTBEAT, 0)
+                    .apply();
+        }
+        if (!shouldStart) {
+            if (VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED.equals(action) && wasRunning) {
+                SystemLogStore.warn(context, "BOOT", "Pomijam wznowienie po aktualizacji: brak świeżego heartbeat aktywnego VPN");
+            }
+            return;
+        }
 
         String reason = VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED.equals(action)
-                ? "MY_PACKAGE_REPLACED • resume previously-running protection"
+                ? "MY_PACKAGE_REPLACED • resume recent previously-running protection"
                 : "BOOT_COMPLETED • autostart";
         SystemLogStore.info(context, "BOOT", reason + " • v1.6.0-dev");
 
