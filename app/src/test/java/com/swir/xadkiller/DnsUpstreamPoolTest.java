@@ -96,7 +96,7 @@ public class DnsUpstreamPoolTest {
         assertEquals(2L, pool.successes("1.1.1.1"));
     }
 
-    @Test public void networkChangePreservesCircuitBreakerAndLifetimeCounters() {
+    @Test public void networkChangePreservesFailureHistoryAndArmsBoundedRecoveryProbe() {
         DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
         pool.recordSuccess("1.1.1.1", 1700L, 1_000L);
         pool.recordFailure("1.1.1.1", 1_100L);
@@ -105,8 +105,9 @@ public class DnsUpstreamPoolTest {
         assertEquals(1, pool.failureStreak("1.1.1.1"));
         assertEquals(1L, pool.failures("1.1.1.1"));
         assertEquals(1L, pool.successes("1.1.1.1"));
-        assertTrue(!"1.1.1.1".equals(pool.order(1_201L)[0]));
-        assertTrue(pool.snapshot(1_201L).contains("cool="));
+        assertEquals("1.1.1.1", pool.order(1_201L)[0]);
+        assertTrue(pool.snapshot(1_201L).contains("probe"));
+        assertTrue(pool.timeoutMs("1.1.1.1", 1_201L) <= 1800);
     }
 
     @Test public void firstSampleAfterNetworkChangeStartsFreshLatencyBaseline() {
