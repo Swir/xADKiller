@@ -73,9 +73,11 @@ jobs:
         run: gradle --no-daemon lintDebug
       - name: DNS framing EDNS0 privacy scrub UDP-size clamp incoming and synthesized UDP checksum regression
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsPacketHardeningTest
+      - name: DNS upstream cooldown suppression half-open and emergency fallback regression
+        run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsUpstreamPoolTest
       - name: VPN boot and package-update lifecycle policy regression
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.VpnLifecycleStartPolicyTest
-      - name: Unit tests DNS query EDNS response framing lifecycle and blocking benchmark
+      - name: Unit tests DNS query EDNS response framing lifecycle upstream health and blocking benchmark
         run: gradle --no-daemon testDebugUnitTest
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
