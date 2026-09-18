@@ -12,6 +12,9 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+README_MARKER = "<!-- SWIR-README-STANDARD:v2 -->"
+LEGACY_UNICODE_BAR_RE = re.compile(r"[█▓▒░▰▱■□]{5,}")
+LEGACY_ASCII_BAR_RE = re.compile(r"\[[#=\-]{8,}\]")
 
 CONFIG = {
     "android": {
@@ -230,6 +233,61 @@ def validate_svg(text: str, expected_fraction: float | None, *, track_width: flo
             raise ValueError(f"progress fill mismatch: {actual} != {expected}")
 
 
+def legacy_meter_lines(text: str) -> list[str]:
+    return [
+        line.strip()
+        for line in text.splitlines()
+        if LEGACY_UNICODE_BAR_RE.search(line) or LEGACY_ASCII_BAR_RE.search(line)
+    ]
+
+
+def search_keyword_count(readme: str) -> int:
+    marker = "## 🔎 Search Keywords"
+    start = readme.find(marker)
+    if start < 0:
+        return 0
+    section = readme[start + len(marker):]
+    next_heading = re.search(r"^##\s+", section, re.MULTILINE)
+    if next_heading:
+        section = section[:next_heading.start()]
+    return len(re.findall(r"`[^`]+`", section))
+
+
+def validate_presentation(cfg: dict[str, str | None]) -> None:
+    readme_path = ROOT / "README.md"
+    roadmap_path = ROOT / str(cfg["source"])
+    readme = readme_path.read_text(encoding="utf-8")
+    roadmap = roadmap_path.read_text(encoding="utf-8")
+
+    if README_MARKER not in readme or "SWIR-README-STANDARD:v1" in readme:
+        raise ValueError("README must use SWIR README PRO v2 and must not downgrade to v1")
+    keywords = search_keyword_count(readme)
+    if not 8 <= keywords <= 20:
+        raise ValueError(f"README Search Keywords must contain 8-20 backticked phrases, found {keywords}")
+
+    output = str(cfg["output"]).replace("\\", "/")
+    card_ref = f"{output}/progress-card.svg"
+    roadmap_prefix = "../" if roadmap_path.parent != ROOT else ""
+    mini_ref = f"{roadmap_prefix}{output}/progress-mini.svg"
+    if readme.count(card_ref) != 1:
+        raise ValueError(f"README must embed exactly one project progress card: {card_ref}")
+    if "progress-mini.svg" in readme or "progress-template.svg" in readme:
+        raise ValueError("README must not embed progress-mini.svg or the TEMPLATE")
+    if roadmap.count(mini_ref) != 1:
+        raise ValueError(f"roadmap must embed exactly one progress mini: {mini_ref}")
+    if "progress-card.svg" in roadmap or "progress-template.svg" in roadmap:
+        raise ValueError("roadmap must not embed the card or TEMPLATE")
+    if "Release readiness" not in readme or "Release readiness" not in roadmap:
+        raise ValueError("development progress and release readiness must remain separately labelled")
+
+    for path, text in ((readme_path, readme), (roadmap_path, roadmap)):
+        bad = legacy_meter_lines(text)
+        if bad:
+            raise ValueError(
+                f"legacy ASCII/Unicode progress meter found in {path.relative_to(ROOT)}: {bad[0][:120]}"
+            )
+
+
 def generated_files(track: str) -> tuple[dict[Path, str], dict[str, object]]:
     cfg = CONFIG[track]
     data = measure(cfg)
@@ -242,16 +300,22 @@ def generated_files(track: str) -> tuple[dict[Path, str], dict[str, object]]:
     validate_svg(files[output / "progress-card.svg"], data["fraction"], track_width=1100.0)
     validate_svg(files[output / "progress-mini.svg"], data["fraction"], track_width=700.0)
     validate_svg(files[output / "progress-template.svg"], None, track_width=1100.0)
+    validate_presentation(cfg)
     return files, data
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("track", choices=sorted(CONFIG))
-    parser.add_argument("--check", action="store_true", help="fail when committed SVG output is stale")
+    parser.add_argument("--check", action="store_true", help="fail when committed SVG output or SVG-only presentation is stale")
     args = parser.parse_args()
 
-    files, data = generated_files(args.track)
+    try:
+        files, data = generated_files(args.track)
+    except (OSError, ValueError, ET.ParseError) as error:
+        print(f"SWIR progress SVG validation failed: {error}", file=sys.stderr)
+        return 1
+
     stale: list[str] = []
     for path, expected in files.items():
         if args.check:
@@ -268,7 +332,7 @@ def main() -> int:
     cfg = CONFIG[args.track]
     print(
         f"SWIR progress SVG {args.track}: {data['display']} • {data['counter']} "
-        f"• source={cfg['source']} • status={cfg['status']}"
+        f"• source={cfg['source']} • status={cfg['status']} • legacy-meter-clean"
     )
     return 0
 
