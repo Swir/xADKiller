@@ -52,6 +52,7 @@ jobs:
           node --check dist/chrome/service-worker.js
           node --check dist/chrome/feed-transport-guard.js
           node --check dist/chrome/feed-data-contract.js
+          node --check dist/chrome/feed-cache-integrity.js
           node --check dist/chrome/feed-guard.js
           node --check dist/chrome/feed-v2-compat.js
           node --check dist/chrome/feed-health-ui.js
@@ -74,6 +75,7 @@ jobs:
           node --check dist/chrome/build-meta.js
           node --check tests/chrome-adaptive-memory-runtime.mjs
           node --check tests/chrome-temporary-pause-runtime.mjs
+          node --check tests/chrome-feed-cache-integrity.mjs
           node --check tests/chrome-feed-guard-runtime.mjs
           node --check tests/chrome-feed-data-contract.mjs
           node --check tests/chrome-feed-offline-fallback.mjs
@@ -93,6 +95,8 @@ jobs:
           node --check tools/validate-feed-v2-candidate-artifacts.mjs
           node --check tools/validate-feed-checksums.mjs
           node --check tools/validate-v150-safety.mjs
+      - name: Protection feed fallback cache fail-closed integrity regression
+        run: node tests/chrome-feed-cache-integrity.mjs
       - name: Protection feed transport privacy provenance mandatory-MIME streamed-size and full-transfer timeout regression
         run: node tests/chrome-feed-transport-contract.mjs
       - name: Protection feed canonical URL deterministic-header and caller-secret stripping regression
