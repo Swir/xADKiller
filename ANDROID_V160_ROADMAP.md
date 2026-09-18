@@ -19,7 +19,7 @@ This branch develops the Android APK independently from the current stable 1.5.1
 - Established healthy resolvers dampen a **single valid-but-extreme RTT spike** before it enters the EWMA while still counting the real sample toward the slow-response streak; one scheduler/radio/handover stall therefore cannot pin adaptive DNS timeouts near their maximum, while repeated slowness is still penalized.
 - Stale-latency aging and the explicit network-epoch reset never clear circuit-breaker failure state: a failed resolver still requires its bounded half-open recovery probe after cooldown.
 - VPN service status has a **traffic-independent 5-second heartbeat** while the TUN worker is alive, so an idle connection no longer depends on DNS packet traffic to keep UI/service liveness fresh; the scheduler is shut down with the VPN/service lifecycle.
-- Private DNS diagnostics classify strict-hostname conflict risk, active encrypted system DNS, automatic/unknown state and no-network state with deterministic unit tests. The UI explicitly states that per-app DoH is **not reliably detectable** from Android system Private DNS APIs instead of claiming a false detection capability.
+- Private DNS diagnostics now distinguish an established STRICT resolver from a STRICT resolver that is configured but not currently established, and surface a separate notice when Android reports an active network with zero DNS servers. The latter remains a non-fatal handover/captive-portal signal instead of being misreported as a healthy local DNS path. Per-app DoH remains explicitly **not reliably detectable** from Android system Private DNS APIs.
 - Blocklist update hardening evaluates **normalized unique-domain counts**, preventing a duplicate-inflated remote feed from passing minimum-size or same-mode anti-shrink checks.
 - Privacy hardening: Android backup is disabled for local xADKiller state; cleartext traffic remains disabled; CI enforces these invariants and rejects QUERY_ALL_PACKAGES.
 - Release remains blocked until manual-device VPN lifecycle, Wi-Fi/mobile transitions, sleep/wake, real-app behavior and longer stability checks are satisfactory.
@@ -54,7 +54,7 @@ No Release until all relevant build, lint, regression, stability, privacy, DNS/V
 - DNS packet malformed/fragmented/query-shape/exact IPv4↔UDP length regression fixtures.
 - DNS upstream response regression fixtures including TC=1 truncated UDP rejection.
 - DNS upstream failover/half-open recovery, persistent-slow-resolver recovery, one-off RTT spike dampening, stale-latency aging and explicit network-epoch reset tests. The reset must clear latency-only state while preserving failure/cooldown state and lifetime counters.
-- Private DNS diagnostic classification fixtures: STRICT conflict, automatic encrypted DNS, Private DNS off, unknown/specifier fallback and no-network state; app-level DoH remains explicitly non-detectable by this system-level check.
+- Private DNS diagnostic classification fixtures: established STRICT conflict, configured-but-unestablished STRICT resolver, automatic encrypted DNS, Private DNS off with reported resolvers, zero-reported-resolver handover/captive-portal notice, unknown/specifier fallback and no-network state; app-level DoH remains explicitly non-detectable by this system-level check.
 - Memory/large-list stress checks.
 - Manual device tests for Wi-Fi ↔ mobile data, sleep/wake and longer VPN stability.
 - No Release from this branch until manual Android device validation is also satisfactory.
