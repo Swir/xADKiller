@@ -69,9 +69,19 @@ public class VpnLifecycleStartPolicyTest {
         assertFalse(VpnLifecycleStartPolicy.isDuplicateRestart(
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, outside, NOW));
-        assertFalse(VpnLifecycleStartPolicy.isDuplicateRestart(
+    }
+
+    @Test public void smallBackwardWallClockCorrectionStillSuppressesDuplicateRestartBurst() {
+        assertTrue(VpnLifecycleStartPolicy.isDuplicateRestart(
+                VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED,
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
-                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, NOW + 1L, NOW));
+                NOW + VpnLifecycleStartPolicy.DUPLICATE_RESTART_MAX_FUTURE_SKEW_MS,
+                NOW));
+        assertFalse(VpnLifecycleStartPolicy.isDuplicateRestart(
+                VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED,
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
+                NOW + VpnLifecycleStartPolicy.DUPLICATE_RESTART_MAX_FUTURE_SKEW_MS + 1L,
+                NOW));
     }
 
     @Test public void restartActionsAreExplicitlyClassifiedForStaleStateCleanup() {
