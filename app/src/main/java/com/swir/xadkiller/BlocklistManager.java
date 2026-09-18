@@ -292,6 +292,11 @@ final class BlocklistManager {
             conn.setConnectTimeout(15_000);
             conn.setReadTimeout(50_000);
             conn.setRequestProperty("User-Agent", "xADKiller/1.6");
+            conn.setRequestProperty("Accept", "text/plain, application/octet-stream;q=0.9");
+            // Keep the byte ceiling meaningful on the exact payload parsed by the app.
+            // A trusted feed is plain text, so unexpected compression is rejected instead
+            // of allowing a tiny compressed response to expand past the intended budget.
+            conn.setRequestProperty("Accept-Encoding", "identity");
             conn.setInstanceFollowRedirects(false);
             int code = conn.getResponseCode();
             if (isRedirectCode(code)) {
@@ -311,6 +316,16 @@ final class BlocklistManager {
             if (declared > MAX_REMOTE_BYTES) {
                 conn.disconnect();
                 throw new IOException("Lista przekracza limit " + MAX_REMOTE_BYTES + " B: " + current);
+            }
+            String contentType = conn.getContentType();
+            if (!isAllowedRemoteContentType(contentType)) {
+                conn.disconnect();
+                throw new IOException("Nieprawidłowy Content-Type listy: " + contentType + " z " + current);
+            }
+            String contentEncoding = conn.getContentEncoding();
+            if (!isAllowedRemoteContentEncoding(contentEncoding)) {
+                conn.disconnect();
+                throw new IOException("Nieoczekiwane kodowanie listy: " + contentEncoding + " z " + current);
             }
             return conn;
         }
@@ -341,6 +356,23 @@ final class BlocklistManager {
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    static boolean isAllowedRemoteContentType(String value) {
+        // Some otherwise valid raw/CDN responses omit Content-Type, so preserve
+        // compatibility when the header is absent. When a server does advertise a type,
+        // fail closed on HTML/JSON/script/error documents instead of parsing them as a list.
+        if (value == null || value.trim().isEmpty()) return true;
+        String type = value;
+        int separator = type.indexOf(';');
+        if (separator >= 0) type = type.substring(0, separator);
+        type = type.trim().toLowerCase(Locale.ROOT);
+        return "text/plain".equals(type) || "application/octet-stream".equals(type);
+    }
+
+    static boolean isAllowedRemoteContentEncoding(String value) {
+        if (value == null || value.trim().isEmpty()) return true;
+        return "identity".equalsIgnoreCase(value.trim());
     }
 
     static InputStream boundedRemoteInput(InputStream input, long maxBytes) {
