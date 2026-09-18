@@ -304,12 +304,60 @@ final class DnsPacket {
         put16(out, 10, ipv4Checksum(out, 0, 20));
 
         int udp = 20;
+        int udpLen = 8 + dnsResponse.length;
         put16(out, udp, DNS_PORT);
         put16(out, udp + 2, query.sourcePort);
-        put16(out, udp + 4, 8 + dnsResponse.length);
+        put16(out, udp + 4, udpLen);
         put16(out, udp + 6, 0);
         System.arraycopy(dnsResponse, 0, out, udp + 8, dnsResponse.length);
+
+        // IPv4 permits a zero UDP checksum, but the local VPN can cheaply provide end-to-end
+        // integrity for every synthesized DNS reply. Compute the checksum over the IPv4
+        // pseudo-header and complete UDP datagram after the payload is in place. RFC 768
+        // represents a computed zero checksum on the wire as 0xFFFF; literal zero means
+        // "checksum not supplied" and is intentionally avoided here.
+        int udpChecksum = udpIpv4Checksum(out, udp, udpLen);
+        put16(out, udp + 6, udpChecksum == 0 ? 0xFFFF : udpChecksum);
         return out;
+    }
+
+    private static int udpIpv4Checksum(byte[] packet, int udpOffset, int udpLen) {
+        long sum = 0;
+        // IPv4 pseudo-header: source + destination addresses, zero/protocol and UDP length.
+        sum = addWords(sum, packet, 12, 8);
+        sum += packet[9] & 0xFF;
+        sum += udpLen & 0xFFFF;
+        sum = fold(sum);
+
+        int end = udpOffset + udpLen;
+        int i = udpOffset;
+        while (i + 1 < end) {
+            sum += ((packet[i] & 0xFF) << 8) | (packet[i + 1] & 0xFF);
+            sum = fold(sum);
+            i += 2;
+        }
+        if (i < end) {
+            sum += (packet[i] & 0xFF) << 8;
+            sum = fold(sum);
+        }
+        return (int) (~fold(sum)) & 0xFFFF;
+    }
+
+    private static long addWords(long sum, byte[] data, int off, int len) {
+        int end = off + len;
+        int i = off;
+        while (i + 1 < end) {
+            sum += ((data[i] & 0xFF) << 8) | (data[i + 1] & 0xFF);
+            sum = fold(sum);
+            i += 2;
+        }
+        if (i < end) sum += (data[i] & 0xFF) << 8;
+        return fold(sum);
+    }
+
+    private static long fold(long sum) {
+        while ((sum >> 16) != 0) sum = (sum & 0xFFFF) + (sum >> 16);
+        return sum;
     }
 
     private static int ipv4Checksum(byte[] data, int off, int len) {
