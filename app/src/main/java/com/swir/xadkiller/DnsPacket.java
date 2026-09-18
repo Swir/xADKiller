@@ -136,8 +136,9 @@ final class DnsPacket {
     /**
      * Validate bytes after the single DNS question. Plain queries must end exactly at the
      * question. Modern EDNS queries may carry one OPT pseudo-record (TYPE 41) with a root
-     * owner name and bounded RDATA. Any undeclared trailing bytes or other additional RR
-     * types are rejected rather than forwarded ambiguously through the VPN.
+     * owner, EDNS version 0, only defined request flags and a structurally valid generic
+     * option TLV list. Unknown option codes remain allowed; malformed option framing does
+     * not. Any undeclared trailing bytes or other additional RR types are rejected.
      */
     private static boolean hasWellFormedQueryTail(byte[] dns, int qEnd, int arCount) {
         if (dns == null || qEnd < 12 || qEnd > dns.length) return false;
@@ -145,11 +146,33 @@ final class DnsPacket {
         if (arCount != 1) return false;
 
         // OPT owner name MUST be the root label. Fixed fields after it are:
-        // TYPE(2), UDP payload size/class(2), extended RCODE+version+flags/TTL(4), RDLEN(2).
+        // TYPE(2), UDP payload size/class(2), extended RCODE(1), version(1), flags(2), RDLEN(2).
         if (qEnd + 11 > dns.length || dns[qEnd] != 0) return false;
         if (u16(dns, qEnd + 1) != 41) return false;
+
+        int extendedRcode = dns[qEnd + 5] & 0xFF;
+        int ednsVersion = dns[qEnd + 6] & 0xFF;
+        int ednsFlags = u16(dns, qEnd + 7);
+        // Requests use EDNS(0). The DO bit (0x8000) is the only currently defined
+        // request flag; all remaining Z bits must be zero. Extended RCODE belongs to
+        // responses and must not be smuggled in a query.
+        if (extendedRcode != 0 || ednsVersion != 0 || (ednsFlags & 0x7FFF) != 0) return false;
+
         int rdLength = u16(dns, qEnd + 9);
-        return qEnd + 11 + rdLength == dns.length;
+        int optionPos = qEnd + 11;
+        int optionEnd = optionPos + rdLength;
+        if (optionEnd != dns.length) return false;
+
+        // EDNS options are generic CODE(2), LENGTH(2), DATA(LENGTH) TLVs. Keep option
+        // codes opaque for forward compatibility, but reject truncated headers/data.
+        while (optionPos < optionEnd) {
+            if (optionPos + 4 > optionEnd) return false;
+            int optionLength = u16(dns, optionPos + 2);
+            optionPos += 4;
+            if (optionLength > optionEnd - optionPos) return false;
+            optionPos += optionLength;
+        }
+        return optionPos == optionEnd;
     }
 
     /**
