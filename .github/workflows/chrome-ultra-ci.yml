@@ -91,7 +91,7 @@ jobs:
           node --check tools/validate-feed-v2-candidate-artifacts.mjs
           node --check tools/validate-feed-checksums.mjs
           node --check tools/validate-v150-safety.mjs
-      - name: Protection feed transport privacy provenance and size regression
+      - name: Protection feed transport privacy provenance MIME streamed-size and full-transfer timeout regression
         run: node tests/chrome-feed-transport-contract.mjs
       - name: Protection feed strict schema bounds dedupe data-only and ReDoS contract regression
         run: node tests/chrome-feed-data-contract.mjs
