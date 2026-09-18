@@ -98,12 +98,12 @@ final class DnsUpstreamPool {
     }
 
     synchronized String[] order(long nowMs) {
-        nowMs = stableNow(nowMs);
-        ageStaleLatency(nowMs);
+        final long stableNowMs = stableNow(nowMs);
+        ageStaleLatency(stableNowMs);
         List<State> ordered = new ArrayList<>(states);
-        final State probe = recoveryProbeCandidate(nowMs);
+        final State probe = recoveryProbeCandidate(stableNowMs);
         ordered.sort(Comparator
-                .comparingInt((State s) -> orderClass(s, probe, nowMs))
+                .comparingInt((State s) -> orderClass(s, probe, stableNowMs))
                 .thenComparingDouble(this::score)
                 .thenComparingLong(s -> s.cooldownUntilMs)
                 .thenComparingInt(s -> s.ordinal));
@@ -127,11 +127,6 @@ final class DnsUpstreamPool {
         return adaptive;
     }
 
-    /**
-     * Starts a fresh latency epoch for a newly established network path.
-     * Failure/cooldown state is intentionally preserved: a previously failing
-     * resolver must still prove recovery through the bounded half-open probe.
-     */
     synchronized void onNetworkChanged(long nowMs) {
         nowMs = stableNow(nowMs);
         for (State state : states) {
@@ -295,10 +290,10 @@ final class DnsUpstreamPool {
     }
 
     private int orderClass(State state, State probe, long nowMs) {
-        if (state == probe) return 0;                         // one bounded recovery probe
-        if (state.failureStreak == 0) return 1;               // healthy pool
-        if (state.cooldownUntilMs <= nowMs) return 2;         // other recoverable servers wait
-        return 3;                                             // active cooldown always last
+        if (state == probe) return 0;
+        if (state.failureStreak == 0) return 1;
+        if (state.cooldownUntilMs <= nowMs) return 2;
+        return 3;
     }
 
     private double score(State state) {
