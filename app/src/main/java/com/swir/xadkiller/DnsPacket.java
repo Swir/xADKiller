@@ -53,6 +53,13 @@ final class DnsPacket {
         // UDP length would make the DNS parser ignore unexplained trailing IP payload,
         // creating two different interpretations of the same packet.
         if (udpLen < 20 || udpLen != ipTotalLength - ihl || ihl + udpLen > length) return null;
+
+        // IPv4 permits UDP checksum 0 (not supplied). When a checksum is present,
+        // verify it before parsing DNS so corrupted or tampered TUN payloads cannot
+        // influence the local blocking decision or be forwarded upstream.
+        int wireUdpChecksum = u16(packet, ihl + 6);
+        if (wireUdpChecksum != 0 && udpIpv4Checksum(packet, ihl, udpLen) != 0) return null;
+
         int dnsLen = udpLen - 8;
         if (dnsLen < 12) return null;
 
