@@ -35,8 +35,6 @@ final class BlocklistManager {
             "https://adaway.org/hosts.txt"
     };
 
-    // v1.3.1 Ultra: maintained aggressive DNS lists. The parser below accepts
-    // plain domains, hosts files and ABP/AdGuard rules such as ||example.com^.
     private static final String ULTIMATE_URL =
             "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/ultimate-onlydomains.txt";
     private static final String ADGUARD_DNS_URL =
@@ -48,19 +46,18 @@ final class BlocklistManager {
     private static final int MAX_REMOTE_DOMAINS = 750_000;
     private static final int MIN_REMOTE_DOMAINS = 1_000;
     private static final double SAME_MODE_MIN_RATIO = 0.45d;
+    private static final int MAX_REMOTE_REDIRECTS = 4;
+    private static final long MAX_REMOTE_BYTES = 64L * 1024L * 1024L;
+    private static final String[] REMOTE_HOST_SUFFIXES = {
+            "githubusercontent.com", "jsdelivr.net", "adaway.org"
+    };
 
-    /*
-     * Memory-safe representation: instead of keeping hundreds of thousands of
-     * Java Strings in a HashSet, we keep sorted 64-bit FNV-1a hashes. 750k
-     * entries are only a few MB plus the temporary collector during reload.
-     */
     private static volatile long[] BLOCKED = new long[0];
     private static volatile Set<String> ALLOWED = Collections.emptySet();
     private static volatile boolean fullLoaded;
 
     private BlocklistManager() {}
 
-    /** Fast startup: bundled list + user rules only. Safe on UI thread. */
     static synchronized int bootstrap(Context context) {
         try {
             LongCollector c = new LongCollector(8192);
@@ -80,7 +77,6 @@ final class BlocklistManager {
         }
     }
 
-    /** Full load including downloaded cache. Call from a worker thread. */
     static synchronized int load(Context context) {
         try {
             LongCollector c = new LongCollector(32_768);
@@ -139,7 +135,6 @@ final class BlocklistManager {
 
     static int currentCount() { return BLOCKED.length; }
 
-    /** Downloads lists without building a giant String HashSet in RAM. */
     static synchronized int updateRemote(Context context) throws IOException {
         File tmp = new File(context.getFilesDir(), CACHE_FILE + ".tmp");
         File dst = new File(context.getFilesDir(), CACHE_FILE);
@@ -153,10 +148,7 @@ final class BlocklistManager {
 
         try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
                 new FileOutputStream(tmp), StandardCharsets.UTF_8), 64 * 1024)) {
-
             if (ultra) {
-                // Use curated aggressive lists first so a size cap can never cut
-                // off the strongest source after large overlapping normal lists.
                 written += downloadInto(ULTIMATE_URL, writer, MAX_REMOTE_DOMAINS - written);
                 if (written < MAX_REMOTE_DOMAINS)
                     written += downloadInto(ADGUARD_DNS_URL, writer, MAX_REMOTE_DOMAINS - written);
@@ -174,9 +166,6 @@ final class BlocklistManager {
             throw new IOException("Błąd pobierania list: " + t.getClass().getSimpleName(), t);
         }
 
-        // Guard on normalized unique domains, not raw accepted lines. A broken
-        // source that repeats one domain thousands of times must not be able to
-        // satisfy the minimum-size or anti-shrink checks.
         int uniqueDownloaded = countUniqueCacheEntries(tmp, MAX_REMOTE_DOMAINS);
         if (!candidateCountLooksHealthy(previousMode, mode, previousCount, uniqueDownloaded)) {
             tmp.delete();
@@ -274,19 +263,11 @@ final class BlocklistManager {
 
     private static int downloadInto(String source, BufferedWriter writer, int max) throws IOException {
         if (max <= 0) return 0;
-        HttpURLConnection conn = (HttpURLConnection) new URL(source).openConnection();
-        conn.setConnectTimeout(15_000);
-        conn.setReadTimeout(50_000);
-        conn.setRequestProperty("User-Agent", "xADKiller/1.6");
-        conn.setInstanceFollowRedirects(true);
-        int code = conn.getResponseCode();
-        if (code < 200 || code >= 300) {
-            conn.disconnect();
-            throw new IOException("HTTP " + code + " z " + source);
-        }
+        HttpURLConnection conn = openTrustedRemote(source);
         int count = 0;
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-                conn.getInputStream(), StandardCharsets.UTF_8), 64 * 1024)) {
+        try (InputStream limited = boundedRemoteInput(conn.getInputStream(), MAX_REMOTE_BYTES);
+             BufferedReader reader = new BufferedReader(new InputStreamReader(
+                     limited, StandardCharsets.UTF_8), 64 * 1024)) {
             String line;
             while (count < max && (line = reader.readLine()) != null) {
                 String n = normalizeLine(line);
@@ -299,6 +280,71 @@ final class BlocklistManager {
             conn.disconnect();
         }
         return count;
+    }
+
+    private static HttpURLConnection openTrustedRemote(String source) throws IOException {
+        URL current = new URL(source);
+        for (int hop = 0; hop <= MAX_REMOTE_REDIRECTS; hop++) {
+            if (!isAllowedRemoteUrl(current.toString())) {
+                throw new IOException("Niedozwolony adres listy: " + current);
+            }
+            HttpURLConnection conn = (HttpURLConnection) current.openConnection();
+            conn.setConnectTimeout(15_000);
+            conn.setReadTimeout(50_000);
+            conn.setRequestProperty("User-Agent", "xADKiller/1.6");
+            conn.setInstanceFollowRedirects(false);
+            int code = conn.getResponseCode();
+            if (isRedirectCode(code)) {
+                String location = conn.getHeaderField("Location");
+                conn.disconnect();
+                if (location == null || location.trim().isEmpty()) {
+                    throw new IOException("Przekierowanie bez Location z " + current);
+                }
+                current = new URL(current, location.trim());
+                continue;
+            }
+            if (code < 200 || code >= 300) {
+                conn.disconnect();
+                throw new IOException("HTTP " + code + " z " + current);
+            }
+            long declared = conn.getContentLengthLong();
+            if (declared > MAX_REMOTE_BYTES) {
+                conn.disconnect();
+                throw new IOException("Lista przekracza limit " + MAX_REMOTE_BYTES + " B: " + current);
+            }
+            return conn;
+        }
+        throw new IOException("Za dużo przekierowań listy: " + source);
+    }
+
+    private static boolean isRedirectCode(int code) {
+        return code == HttpURLConnection.HTTP_MOVED_PERM
+                || code == HttpURLConnection.HTTP_MOVED_TEMP
+                || code == HttpURLConnection.HTTP_SEE_OTHER
+                || code == 307 || code == 308;
+    }
+
+    static boolean isAllowedRemoteUrl(String value) {
+        try {
+            URL url = new URL(value);
+            if (!"https".equalsIgnoreCase(url.getProtocol())) return false;
+            if (url.getUserInfo() != null) return false;
+            int port = url.getPort();
+            if (port != -1 && port != 443) return false;
+            String host = url.getHost();
+            if (host == null) return false;
+            host = host.toLowerCase(Locale.ROOT);
+            for (String suffix : REMOTE_HOST_SUFFIXES) {
+                if (host.equals(suffix) || host.endsWith("." + suffix)) return true;
+            }
+            return false;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    static InputStream boundedRemoteInput(InputStream input, long maxBytes) {
+        return new BoundedRemoteInputStream(input, maxBytes);
     }
 
     private static void parseDomainStream(InputStream input, LongCollector out, int max) throws IOException {
@@ -315,31 +361,16 @@ final class BlocklistManager {
         }
     }
 
-    /**
-     * Accepts:
-     *   example.com
-     *   0.0.0.0 example.com
-     *   *.example.com
-     *   ||example.com^
-     *   ||example.com^$important
-     * Ignores AdGuard/ABP exception, regex and cosmetic rules because a DNS
-     * engine cannot apply their request-context semantics safely.
-     */
     private static String normalizeLine(String line) {
         if (line == null) return null;
         line = line.trim();
         if (line.isEmpty()) return null;
-
-        // Comments / metadata / cosmetic rules / exceptions.
         if (line.charAt(0) == '#' || line.charAt(0) == '!' || line.charAt(0) == '[') return null;
         if (line.startsWith("@@")) return null;
         if (line.contains("##") || line.contains("#@#") || line.contains("#$#")) return null;
-
         int hash = line.indexOf('#');
         if (hash >= 0) line = line.substring(0, hash).trim();
         if (line.isEmpty()) return null;
-
-        // AdGuard / ABP DNS rule: ||domain.example^ or ||domain.example^$...
         if (line.startsWith("||")) {
             String d = line.substring(2);
             int cut = d.length();
@@ -350,10 +381,7 @@ final class BlocklistManager {
             if (cut <= 0) return null;
             return normalize(d.substring(0, cut));
         }
-
-        // Skip regex / URL-path rules that cannot be represented at DNS level.
         if (line.startsWith("/") || line.startsWith("|") || line.contains("://")) return null;
-
         int firstWs = firstWhitespace(line);
         String first = firstWs < 0 ? line : line.substring(0, firstWs);
         String candidate = first;
@@ -456,6 +484,45 @@ final class BlocklistManager {
             h *= 0x100000001b3L;
         }
         return h;
+    }
+
+    private static final class BoundedRemoteInputStream extends InputStream {
+        private final InputStream delegate;
+        private final long maxBytes;
+        private long consumed;
+
+        BoundedRemoteInputStream(InputStream delegate, long maxBytes) {
+            if (delegate == null) throw new IllegalArgumentException("input == null");
+            if (maxBytes < 0L) throw new IllegalArgumentException("maxBytes < 0");
+            this.delegate = delegate;
+            this.maxBytes = maxBytes;
+        }
+
+        @Override public int read() throws IOException {
+            int value = delegate.read();
+            if (value < 0) return -1;
+            if (consumed >= maxBytes) throw new IOException("Remote blocklist exceeds byte limit");
+            consumed++;
+            return value;
+        }
+
+        @Override public int read(byte[] buffer, int offset, int length) throws IOException {
+            if (length == 0) return 0;
+            long remaining = maxBytes - consumed;
+            if (remaining <= 0L) {
+                int probe = delegate.read();
+                if (probe < 0) return -1;
+                throw new IOException("Remote blocklist exceeds byte limit");
+            }
+            int allowed = (int)Math.min((long)length, remaining);
+            int read = delegate.read(buffer, offset, allowed);
+            if (read > 0) consumed += read;
+            return read;
+        }
+
+        @Override public void close() throws IOException {
+            delegate.close();
+        }
     }
 
     private static final class LongCollector {
