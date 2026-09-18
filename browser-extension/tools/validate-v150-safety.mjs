@@ -9,6 +9,7 @@ const read = (rel) => fs.readFileSync(path.join(base, rel), "utf8");
 for (const rel of [
   "temporary-site-guard.js",
   "titan-engine.js",
+  "feed-transport-guard.js",
   "feed-guard.js",
   "feed-health-ui.js",
   "service-worker.js",
@@ -23,13 +24,18 @@ for (const rel of [
 const worker = read("service-worker.js");
 const guard = read("temporary-site-guard.js");
 const titan = read("titan-engine.js");
+const feedTransport = read("feed-transport-guard.js");
 const feedGuard = read("feed-guard.js");
 const feedUi = read("feed-health-ui.js");
 const popupHtml = read("popup.html");
 const popupJs = read("popup.js");
 
+if (!worker.includes('"feed-transport-guard.js"') || worker.indexOf('"feed-transport-guard.js"') > worker.indexOf('"feed-guard.js"')) fail("Feed transport guard must load before Feed Guard");
 if (!worker.includes('"feed-guard.js"') || worker.indexOf('"feed-guard.js"') > worker.indexOf('"background.js"')) fail("Feed Guard must load before network feed consumers");
 if (!worker.includes('"temporary-site-guard.js"')) fail("temporary Breakage Guard is not imported by service-worker.js");
+for (const token of ["redirect:\"error\"","credentials:\"omit\"","referrerPolicy:\"no-referrer\"","transport_provenance","content_length","payload_size"]) {
+  if (!feedTransport.includes(token)) fail(`Feed transport hardening missing ${token}`);
+}
 for (const token of ["xadTemporaryPauseSitesV1","xadTemporaryPauseInjectedAllowSitesV1","905000","905199","allowAllRequests","setTemporarySitePause","getTemporarySitePause"]) {
   if (!guard.includes(token)) fail(`temporary Breakage Guard missing ${token}`);
 }
@@ -45,7 +51,7 @@ if (!popupHtml.includes('id="tempPauseBtn"') || !popupHtml.includes('id="pauseBa
 if (!popupHtml.includes('id="feedHealthBadge"') || !popupHtml.includes('src="feed-health-ui.js"')) fail("Feed Guard health card is not wired into popup");
 if (!popupJs.includes("setTemporarySitePause") || !popupJs.includes("getTemporarySitePause") || !popupJs.includes("resetTitanMemory")) fail("v1.5 popup wiring incomplete");
 
-for (const rel of ["temporary-site-guard.js","titan-engine.js","feed-guard.js","feed-health-ui.js","popup.js"]) {
+for (const rel of ["temporary-site-guard.js","titan-engine.js","feed-transport-guard.js","feed-guard.js","feed-health-ui.js","popup.js"]) {
   const code = read(rel);
   if (/\beval\s*\(|\bnew\s+Function\s*\(/.test(code)) fail(`${rel}: dynamic code execution forbidden`);
   if (/importScripts\s*\(\s*["']https?:/i.test(code)) fail(`${rel}: remote hosted code forbidden`);
@@ -62,4 +68,4 @@ for (const lang of ["en","pl"]) {
   }
 }
 
-if (!process.exitCode) console.log("OK: v1.5 Adaptive Memory + Breakage Guard + Feed Guard safety invariants validated");
+if (!process.exitCode) console.log("OK: v1.5 Adaptive Memory + Breakage Guard + Feed transport/validation safety invariants validated");
