@@ -15,6 +15,7 @@
     "test:feeds": "node tests/chrome-feed-guard-runtime.mjs",
     "test:feed-v2-consumers": "node tests/feed-v2-consumer-compat.mjs",
     "test:feed-v2-migration": "node tools/feed-v2-migration-preflight.mjs",
+    "test:feed-v2-artifacts": "node tools/validate-feed-v2-candidate-artifacts.mjs",
     "test:feed-checksums": "node tools/validate-feed-checksums.mjs",
     "test:layer-dedupe": "node tools/dedupe-rule-layers.mjs --check",
     "test:rule-ranking": "node tests/rule-quality-ranking.mjs",
