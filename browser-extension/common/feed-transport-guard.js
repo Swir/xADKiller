@@ -5,6 +5,7 @@
   const nativeFetch = globalThis.fetch.bind(globalThis);
   const MAX_FEED_BYTES = 2 * 1024 * 1024;
   const FEED_FETCH_TIMEOUT_MS = 15 * 1000;
+  const FEED_ACCEPT = "application/json,text/plain;q=0.9,application/octet-stream;q=0.8";
   const RAW_HOST = "raw.githubusercontent.com";
   const APPROVED_PATHS = Object.freeze({
     "/Swir/xADKiller/live-shield-feed/browser-intelligence/xadkiller-live-shield.json":"live-shield",
@@ -32,9 +33,21 @@
     return String(init?.method || input?.method || "GET").trim().toUpperCase();
   }
 
+  function publicDataHeaders() {
+    const headers = new Headers();
+    headers.set("accept", FEED_ACCEPT);
+    return headers;
+  }
+
   function hardenedInit(init) {
     return {
       ...(init || {}),
+      // Protection feeds are public immutable-style data. Do not inherit arbitrary
+      // caller headers (Authorization, Cookie, API keys, etc.) and do not let the
+      // browser HTTP cache become a second, unvalidated fallback layer. xADKiller's
+      // own validated known-good cache remains the only offline fallback.
+      headers:publicDataHeaders(),
+      cache:"no-store",
       redirect:"error",
       credentials:"omit",
       referrerPolicy:"no-referrer"
@@ -93,13 +106,9 @@
     if (!response || typeof response !== "object") fail("transport_response");
     if (response.redirected === true) fail("transport_redirect");
 
-    // Browser fetch responses expose the final URL. Test/mocked Response objects may
-    // leave it empty, so only enforce provenance when the runtime provides it.
     const finalUrl = String(response.url || "").trim();
     if (finalUrl && guardedKind(finalUrl) !== kind) fail("transport_provenance");
     validateContentLength(response);
-    // HTTP errors are classified by Feed Guard so Retry-After/backoff remains intact.
-    // Successful protection data, however, must not arrive as HTML/script/media.
     if (response.ok) validateContentType(response);
     return response;
   }
@@ -140,8 +149,6 @@
       statusText:response.statusText,
       headers:response.headers
     });
-    // Preserve provenance metadata for downstream diagnostics after the original stream
-    // has been consumed and replaced by the bounded in-memory response.
     try { Object.defineProperty(buffered, "url", { value:String(response.url || ""), configurable:true }); } catch (_) {}
     try { Object.defineProperty(buffered, "redirected", { value:Boolean(response.redirected), configurable:true }); } catch (_) {}
     return buffered;
@@ -153,10 +160,6 @@
     if (!kind) return nativeFetch(input, init);
     if (requestMethod(input, init) !== "GET") fail("transport_method");
 
-    // Protection feeds are public data-only payloads. Never send credentials/referrer,
-    // never follow redirects, and keep the timeout active through body consumption so a
-    // server cannot send headers quickly and then stall the MV3 worker. The streamed body
-    // is bounded independently of Content-Length, including decompressed payload bytes.
     const timed = timedInit(input, init);
     try {
       const response = await nativeFetch(input, timed.init);
@@ -170,8 +173,10 @@
   globalThis.XAD_FEED_TRANSPORT_GUARD = Object.freeze({
     MAX_FEED_BYTES,
     FEED_FETCH_TIMEOUT_MS,
+    FEED_ACCEPT,
     guardedKind,
     requestMethod,
+    publicDataHeaders,
     hardenedInit,
     timedInit,
     validateContentLength,
