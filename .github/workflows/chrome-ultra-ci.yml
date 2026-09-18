@@ -81,6 +81,7 @@ jobs:
           node --check tools/dedupe-rule-layers.mjs
           node --check tools/rule-quality.mjs
           node --check tools/feed-v2-migration-preflight.mjs
+          node --check tools/validate-feed-v2-candidate-artifacts.mjs
           node --check tools/validate-feed-checksums.mjs
           node --check tools/validate-v150-safety.mjs
       - name: GitHub feed integrity regression test
@@ -89,6 +90,10 @@ jobs:
         run: npm run test:feed-v2-consumers
       - name: Feed v2 production migration parity preflight
         run: npm run test:feed-v2-migration
+      - name: Build deterministic feed v2 migration candidates
+        run: npm run build:feed-v2-candidates
+      - name: Validate feed v2 candidate artifact manifest
+        run: npm run test:feed-v2-artifacts
       - name: Production GitHub feed checksum audit
         run: npm run test:feed-checksums
       - name: Install Chromium
@@ -115,8 +120,8 @@ jobs:
         run: timeout --signal=TERM --kill-after=10s 180s npm run test:benchmark
       - name: Package Chrome TITAN Adaptive Memory ZIP
         run: |
-          rm -rf packages
           mkdir -p packages
+          rm -f packages/xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip packages/SHA256SUMS.txt
           (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip .)
       - name: Checksums
         run: |
@@ -130,6 +135,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory-tested
-          path: browser-extension/packages/*
+          path: |
+            browser-extension/packages/xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip
+            browser-extension/packages/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
+      - name: Upload verified feed v2 migration candidates
+        uses: actions/upload-artifact@v4
+        with:
+          name: xADKiller-feed-v2-migration-candidates-verified
+          path: browser-extension/packages/feed-v2-candidates/*
+          if-no-files-found: error
+          retention-days: 14
