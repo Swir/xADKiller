@@ -22,13 +22,24 @@
     const kind = APPROVED_PATHS[url.pathname] || "";
     return kind ? { url, kind } : null;
   }
+  function safeCacheBuster(url) {
+    if (!url.search) return true;
+    if (url.hash) return false;
+    const params = [...url.searchParams.entries()];
+    return params.length === 1 && params[0][0] === "v" && /^\d{10,16}$/.test(params[0][1]);
+  }
   function guardedKind(urlValue) {
     const parsed = parseApprovedUrl(urlValue);
-    if (!parsed || parsed.url.search || parsed.url.hash) return "";
+    if (!parsed || parsed.url.hash || !safeCacheBuster(parsed.url)) return "";
     return parsed.kind;
   }
   function hasApprovedPath(urlValue) {
     return Boolean(parseApprovedUrl(urlValue));
+  }
+  function canonicalFeedUrl(urlValue) {
+    const parsed = parseApprovedUrl(urlValue);
+    if (!parsed || parsed.url.hash || !safeCacheBuster(parsed.url)) return "";
+    return `https://${RAW_HOST}${parsed.url.pathname}`;
   }
   function requestMethod(input, init) {
     return String(init?.method || input?.method || "GET").trim().toUpperCase();
@@ -42,9 +53,6 @@
   function hardenedInit(init) {
     return {
       ...(init || {}),
-      // Public protection data never needs caller secrets. Keep only deterministic Accept
-      // negotiation, strip Authorization/Cookie/API-key style headers, bypass HTTP cache,
-      // and rely on xADKiller's separately validated known-good cache for offline fallback.
       headers:publicDataHeaders(init?.headers),
       cache:"no-store",
       redirect:"error",
@@ -124,22 +132,24 @@
   globalThis.fetch = async (input, init) => {
     const urlValue = typeof input === "string" ? input : input?.url;
     const kind = guardedKind(urlValue);
-    // Do not let a caller bypass protection by appending query/fragment text to an
-    // otherwise approved raw-GitHub feed pathname. Such variants are invalid protected
-    // targets rather than ordinary unguarded network requests.
     if (!kind && hasApprovedPath(urlValue)) fail("transport_canonical_url");
     if (!kind) return nativeFetch(input, init);
     if (requestMethod(input, init) !== "GET") fail("transport_method");
+    const canonicalUrl = canonicalFeedUrl(urlValue);
+    if (!canonicalUrl) fail("transport_canonical_url");
     const timed = timedInit(input, init);
     try {
-      const response = await nativeFetch(input, timed.init);
+      // Legacy callers may append a numeric ?v=<timestamp> cache-buster. It is accepted
+      // only as local syntax and stripped before network I/O, so no query value is ever
+      // transmitted to GitHub. HTTP cache is already disabled and xADKiller owns fallback.
+      const response = await nativeFetch(canonicalUrl, timed.init);
       validateResponse(kind, response);
       return await bufferBoundedBody(response);
     } finally { timed.cleanup(); }
   };
   globalThis.XAD_FEED_TRANSPORT_GUARD = Object.freeze({
     MAX_FEED_BYTES, FEED_FETCH_TIMEOUT_MS, FEED_ACCEPT, guardedKind, hasApprovedPath,
-    requestMethod, publicDataHeaders, hardenedInit, timedInit, validateContentLength,
-    validateContentType, validateResponse, bufferBoundedBody
+    canonicalFeedUrl, requestMethod, publicDataHeaders, hardenedInit, timedInit,
+    validateContentLength, validateContentType, validateResponse, bufferBoundedBody
   });
 })();
