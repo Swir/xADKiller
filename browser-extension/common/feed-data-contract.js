@@ -4,6 +4,12 @@
 
   const nativeFetch = globalThis.fetch.bind(globalThis);
   const MAX_FEED_BYTES = 2 * 1024 * 1024;
+  const MAX_DOMAINS_PER_LIST = 30_000;
+  const MAX_SIGNATURES_PER_LIST = 10_000;
+  const MAX_COSMETIC_PER_LIST = 20_000;
+  const MAX_REGEX_PER_LIST = 2_000;
+  const MAX_PATHS_PER_LIST = 10_000;
+  const MAX_TOKENS_PER_LIST = 10_000;
   const ALLOWED_RESOURCE_TYPES = new Set([
     "main_frame", "sub_frame", "stylesheet", "script", "image", "font", "object",
     "xmlhttprequest", "ping", "csp_report", "media", "websocket", "webtransport", "other"
@@ -12,6 +18,14 @@
     "/Swir/xADKiller/live-shield-feed/browser-intelligence/xadkiller-live-shield.json":"live-shield",
     "/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json":"live-matrix",
     "/Swir/xADKiller/main/browser-intelligence/xadkiller-titan-feed.json":"titan"
+  });
+  const COMMON_TOP_LEVEL_FIELDS = Object.freeze([
+    "schema", "feed", "feed_version", "updated_at", "expires_at", "rollback", "maintainer", "description"
+  ]);
+  const PAYLOAD_FIELDS = Object.freeze({
+    "live-shield":["standard_domains", "ultra_domains"],
+    "live-matrix":["standard_domains", "ultra_domains", "standard_signatures", "ultra_signatures", "standard_cosmetic", "ultra_cosmetic"],
+    "titan":["regex_signatures", "path_signatures", "strong_tokens"]
   });
 
   function fail(reason) {
@@ -34,6 +48,36 @@
       && !/[\u0000-\u001f\u007f]/.test(value);
   }
 
+  function validateTopLevelShape(kind, data) {
+    const payloadFields = PAYLOAD_FIELDS[kind];
+    if (!payloadFields) fail("payload_kind");
+    const allowed = new Set([...COMMON_TOP_LEVEL_FIELDS, ...payloadFields]);
+    for (const key of Object.keys(data)) {
+      if (!allowed.has(key)) fail("payload_field");
+    }
+
+    if (data.schema !== 1 && data.schema !== 2) fail("schema");
+    if (data.feed !== undefined && !isSafeText(data.feed, 160)) fail("feed_name");
+    if (data.maintainer !== undefined && !isSafeText(data.maintainer, 160)) fail("maintainer");
+    if (data.description !== undefined && !isSafeText(data.description, 1024)) fail("description");
+
+    if (data.schema === 1) {
+      if (data.expires_at !== undefined || data.rollback !== undefined) fail("v1_metadata");
+      return;
+    }
+
+    if (!isSafeText(data.expires_at, 80) || !data.rollback || typeof data.rollback !== "object" || Array.isArray(data.rollback)) {
+      fail("v2_metadata");
+    }
+    const rollbackKeys = Object.keys(data.rollback);
+    if (rollbackKeys.length !== 2 || !rollbackKeys.includes("previous_version") || !rollbackKeys.includes("previous_ref")) {
+      fail("rollback_field");
+    }
+    if (!isSafeText(data.rollback.previous_version, 80) || !isSafeText(data.rollback.previous_ref, 160)) {
+      fail("rollback_value");
+    }
+  }
+
   function validDomain(value) {
     if (!isSafeText(value, 253) || value !== value.trim() || value !== value.toLowerCase()) return false;
     if (value.startsWith(".") || value.endsWith(".") || value.includes("..")) return false;
@@ -44,10 +88,16 @@
       && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label));
   }
 
-  function validateDomainList(value, field, required = true) {
-    if (value == null && !required) return;
+  function validateArray(value, field, required, maxItems) {
+    if (value == null && !required) return false;
     if (!Array.isArray(value)) fail(`${field}_array`);
     if (required && value.length === 0) fail(`${field}_empty`);
+    if (value.length > maxItems) fail(`${field}_limit`);
+    return true;
+  }
+
+  function validateDomainList(value, field, required = true) {
+    if (!validateArray(value, field, required, MAX_DOMAINS_PER_LIST)) return;
     const seen = new Set();
     for (const domain of value) {
       if (!validDomain(domain)) fail(`${field}_domain`);
@@ -66,10 +116,13 @@
     return true;
   }
 
+  function semanticRuleKey(pattern, types, thirdParty) {
+    return `${pattern}\n${[...types].sort().join(",")}\n${thirdParty === true ? "1" : "0"}`;
+  }
+
   function validateSignatureList(value, field, required = true) {
-    if (value == null && !required) return;
-    if (!Array.isArray(value)) fail(`${field}_array`);
-    if (required && value.length === 0) fail(`${field}_empty`);
+    if (!validateArray(value, field, required, MAX_SIGNATURES_PER_LIST)) return;
+    const seen = new Set();
     for (const item of value) {
       if (!item || typeof item !== "object" || Array.isArray(item)) fail(`${field}_object`);
       if (!isSafeText(item.filter, 512)) fail(`${field}_filter`);
@@ -78,6 +131,9 @@
       for (const key of Object.keys(item)) {
         if (!["filter", "types", "third_party"].includes(key)) fail(`${field}_field`);
       }
+      const key = semanticRuleKey(item.filter, item.types, item.third_party);
+      if (seen.has(key)) fail(`${field}_duplicate`);
+      seen.add(key);
     }
   }
 
@@ -89,9 +145,7 @@
   }
 
   function validateCosmeticList(value, field, required = true) {
-    if (value == null && !required) return;
-    if (!Array.isArray(value)) fail(`${field}_array`);
-    if (required && value.length === 0) fail(`${field}_empty`);
+    if (!validateArray(value, field, required, MAX_COSMETIC_PER_LIST)) return;
     const seen = new Set();
     for (const selector of value) {
       if (!validCosmeticSelector(selector)) fail(`${field}_selector`);
@@ -101,7 +155,8 @@
   }
 
   function validateRegexList(value, field) {
-    if (!Array.isArray(value) || value.length === 0) fail(`${field}_array`);
+    if (!validateArray(value, field, true, MAX_REGEX_PER_LIST)) return;
+    const seen = new Set();
     for (const item of value) {
       if (!item || typeof item !== "object" || Array.isArray(item)) fail(`${field}_object`);
       if (!isSafeText(item.regex, 768)) fail(`${field}_regex`);
@@ -111,13 +166,14 @@
       for (const key of Object.keys(item)) {
         if (!["regex", "types", "third_party"].includes(key)) fail(`${field}_field`);
       }
+      const key = semanticRuleKey(item.regex, item.types, item.third_party);
+      if (seen.has(key)) fail(`${field}_duplicate`);
+      seen.add(key);
     }
   }
 
-  function validateStringList(value, field, validator, required = true) {
-    if (value == null && !required) return;
-    if (!Array.isArray(value)) fail(`${field}_array`);
-    if (required && value.length === 0) fail(`${field}_empty`);
+  function validateStringList(value, field, validator, required = true, maxItems = MAX_PATHS_PER_LIST) {
+    if (!validateArray(value, field, required, maxItems)) return;
     const seen = new Set();
     for (const item of value) {
       if (!validator(item)) fail(`${field}_value`);
@@ -128,6 +184,7 @@
 
   function validatePayload(kind, data) {
     if (!data || typeof data !== "object" || Array.isArray(data)) fail("payload_object");
+    validateTopLevelShape(kind, data);
 
     if (kind === "live-shield") {
       validateDomainList(data.standard_domains, "standard_domains");
@@ -146,9 +203,9 @@
     if (kind === "titan") {
       validateRegexList(data.regex_signatures, "regex_signatures");
       validateStringList(data.path_signatures, "path_signatures",
-        (item) => isSafeText(item, 256) && item === item.trim() && item.startsWith("/") && !/[{}\s]/.test(item), false);
+        (item) => isSafeText(item, 256) && item === item.trim() && item.startsWith("/") && !/[{}\s]/.test(item), false, MAX_PATHS_PER_LIST);
       validateStringList(data.strong_tokens, "strong_tokens",
-        (item) => isSafeText(item, 96) && item === item.trim() && item === item.toLowerCase() && /^[a-z0-9._-]+$/.test(item), false);
+        (item) => isSafeText(item, 96) && item === item.trim() && item === item.toLowerCase() && /^[a-z0-9._-]+$/.test(item), false, MAX_TOKENS_PER_LIST);
       return data;
     }
     fail("payload_kind");
