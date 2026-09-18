@@ -4,6 +4,7 @@ on:
   push:
     branches: [ main, chrome-titan-v140, chrome-v141-pl-en, chrome-v150-adaptive-memory ]
     paths:
+      - "README.md"
       - "browser-extension/**"
       - "browser-intelligence/**"
       - "assets/readme/chrome/**"
@@ -72,6 +73,7 @@ jobs:
           node --check tests/chrome-adaptive-memory-runtime.mjs
           node --check tests/chrome-temporary-pause-runtime.mjs
           node --check tests/chrome-feed-guard-runtime.mjs
+          node --check tests/chrome-feed-offline-fallback.mjs
           node --check tests/feed-v2-consumer-compat.mjs
           node --check tests/rule-quality-ranking.mjs
           node --check tests/chrome-blocking-benchmark.mjs
