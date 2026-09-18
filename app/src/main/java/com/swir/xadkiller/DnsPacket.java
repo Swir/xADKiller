@@ -79,6 +79,12 @@ final class DnsPacket {
         if ((flags & 0x8000) != 0 || (flags & 0x7800) != 0 || qdCount != 1
                 || anCount != 0 || nsCount != 0 || arCount > 1) return null;
 
+        // Normal DNS clients emit an uncompressed QNAME in the question section. With one
+        // question there is no earlier owner name to reference legitimately, so accepting a
+        // compression pointer would only permit ambiguous/header-referencing encodings that
+        // can make the block decision disagree with other DNS parsers. Fail closed here.
+        if (!hasUncompressedQuestionName(dns)) return null;
+
         String host = extractQueryName(dns);
         if (host == null || host.isEmpty() || host.length() > 253) return null;
         int qEnd = questionEnd(dns);
@@ -95,6 +101,19 @@ final class DnsPacket {
         byte[] srcIp = Arrays.copyOfRange(packet, 12, 16);
         byte[] dstIp = Arrays.copyOfRange(packet, 16, 20);
         return new Query(upstreamDns, host, srcPort, srcIp, dstIp);
+    }
+
+    private static boolean hasUncompressedQuestionName(byte[] dns) {
+        if (dns == null || dns.length < 17) return false;
+        int pos = 12;
+        int guard = 0;
+        while (pos < dns.length && guard++ < 128) {
+            int len = dns[pos] & 0xFF;
+            if (len == 0) return pos + 5 <= dns.length;
+            if ((len & 0xC0) != 0 || len > 63 || pos + 1 + len > dns.length) return false;
+            pos += 1 + len;
+        }
+        return false;
     }
 
     static String extractQueryName(byte[] dns) {
