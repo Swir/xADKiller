@@ -15,11 +15,12 @@ import java.util.Map;
  * every query. This class keeps only aggregate latency/failure counters; it
  * never sees or stores host names, DNS payloads or browsing history.
  *
- * v1.6 adds a circuit-breaker style half-open recovery probe. Once a resolver's
- * cooldown expires, exactly one recovering resolver is allowed to move ahead of
- * healthy resolvers for a bounded probe. A successful probe restores it
- * immediately; another failure returns it to exponential cooldown. This avoids
- * permanently starving a resolver after a temporary network/provider outage.
+ * v1.6 adds a circuit-breaker style half-open recovery probe. Cooling resolvers
+ * are now actually removed from the per-query attempt list while healthy capacity
+ * exists; previously they were only sorted to the end and were still retried by
+ * every DNS query. Exactly one expired resolver is exposed as a half-open probe.
+ * If every resolver is still cooling, one earliest-recovery server is retained as
+ * a bounded emergency path so DNS does not become deterministically unavailable.
  *
  * Persistently slow but technically successful resolvers also receive a bounded
  * ranking penalty. They remain usable as fallbacks and are not marked failed,
@@ -100,16 +101,32 @@ final class DnsUpstreamPool {
     synchronized String[] order(long nowMs) {
         final long stableNowMs = stableNow(nowMs);
         ageStaleLatency(stableNowMs);
-        List<State> ordered = new ArrayList<>(states);
         final State probe = recoveryProbeCandidate(stableNowMs);
-        ordered.sort(Comparator
-                .comparingInt((State s) -> orderClass(s, probe, stableNowMs))
+        List<State> eligible = new ArrayList<>();
+
+        if (probe != null) eligible.add(probe);
+        for (State state : states) {
+            if (state != probe && state.failureStreak == 0) eligible.add(state);
+        }
+
+        // When every resolver is cooling, keep exactly one emergency path instead of
+        // retrying the entire failed pool for every application DNS query. This preserves
+        // reachability during provider-wide outages while bounding repeated user latency.
+        if (eligible.isEmpty()) {
+            State emergency = states.stream()
+                    .min(Comparator
+                            .comparingLong((State s) -> s.cooldownUntilMs)
+                            .thenComparingDouble(this::score)
+                            .thenComparingInt(s -> s.ordinal))
+                    .orElse(states.get(0));
+            eligible.add(emergency);
+        }
+
+        eligible.sort(Comparator
+                .comparingInt((State s) -> s == probe ? 0 : 1)
                 .thenComparingDouble(this::score)
-                .thenComparingLong(s -> s.cooldownUntilMs)
                 .thenComparingInt(s -> s.ordinal));
-        String[] result = new String[ordered.size()];
-        for (int i = 0; i < ordered.size(); i++) result[i] = ordered.get(i).server;
-        return result;
+        return serverArray(eligible);
     }
 
     synchronized int timeoutMs(String server) {
@@ -156,11 +173,8 @@ final class DnsUpstreamPool {
         state.successes++;
         state.failureStreak = 0;
         state.cooldownUntilMs = 0L;
-        if (rttMs >= SLOW_RTT_MS) {
-            state.slowStreak = Math.min(MAX_SLOW_STREAK, state.slowStreak + 1);
-        } else {
-            state.slowStreak = Math.max(0, state.slowStreak - 1);
-        }
+        if (rttMs >= SLOW_RTT_MS) state.slowStreak = Math.min(MAX_SLOW_STREAK, state.slowStreak + 1);
+        else state.slowStreak = Math.max(0, state.slowStreak - 1);
         state.lastObservationAtMs = nowMs;
         state.lastLatencyDecayAtMs = nowMs;
     }
@@ -185,62 +199,39 @@ final class DnsUpstreamPool {
         ageStaleLatency(nowMs);
         StringBuilder out = new StringBuilder();
         State probe = recoveryProbeCandidate(nowMs);
-        String[] order = order(nowMs);
-        for (String server : order) {
-            State state = byServer.get(server);
-            if (state == null) continue;
+        List<State> ordered = new ArrayList<>(states);
+        ordered.sort(Comparator
+                .comparingInt((State s) -> orderClass(s, probe, nowMs))
+                .thenComparingDouble(this::score)
+                .thenComparingLong(s -> s.cooldownUntilMs)
+                .thenComparingInt(s -> s.ordinal));
+        for (State state : ordered) {
             if (out.length() > 0) out.append(" • ");
-            out.append(server)
-                    .append(' ')
-                    .append(Math.round(state.ewmaRttMs))
-                    .append("ms");
+            out.append(state.server).append(' ').append(Math.round(state.ewmaRttMs)).append("ms");
             if (state.cooldownUntilMs > nowMs) {
-                out.append(" cool=")
-                        .append(Math.max(1L, (state.cooldownUntilMs - nowMs + 999L) / 1000L))
-                        .append('s');
-            } else if (state == probe) {
-                out.append(" probe");
-            } else if (state.failureStreak > 0) {
-                out.append(" recover=").append(state.failureStreak);
-            } else if (state.slowStreak > 0) {
-                out.append(" slow=").append(state.slowStreak);
-            } else {
-                out.append(" ok");
-            }
+                out.append(" cool=").append(Math.max(1L, (state.cooldownUntilMs - nowMs + 999L) / 1000L)).append('s');
+            } else if (state == probe) out.append(" probe");
+            else if (state.failureStreak > 0) out.append(" recover=").append(state.failureStreak);
+            else if (state.slowStreak > 0) out.append(" slow=").append(state.slowStreak);
+            else out.append(" ok");
         }
         return out.toString();
     }
 
-    synchronized long successes(String server) {
-        State state = byServer.get(server);
-        return state == null ? 0L : state.successes;
-    }
+    synchronized long successes(String server) { State state = byServer.get(server); return state == null ? 0L : state.successes; }
+    synchronized long failures(String server) { State state = byServer.get(server); return state == null ? 0L : state.failures; }
+    synchronized int failureStreak(String server) { State state = byServer.get(server); return state == null ? 0 : state.failureStreak; }
+    synchronized int slowStreak(String server) { State state = byServer.get(server); return state == null ? 0 : state.slowStreak; }
 
-    synchronized long failures(String server) {
-        State state = byServer.get(server);
-        return state == null ? 0L : state.failures;
-    }
-
-    synchronized int failureStreak(String server) {
-        State state = byServer.get(server);
-        return state == null ? 0 : state.failureStreak;
-    }
-
-    synchronized int slowStreak(String server) {
-        State state = byServer.get(server);
-        return state == null ? 0 : state.slowStreak;
+    private String[] serverArray(List<State> ordered) {
+        String[] result = new String[ordered.size()];
+        for (int i = 0; i < ordered.size(); i++) result[i] = ordered.get(i).server;
+        return result;
     }
 
     private long stableNow(long nowMs) {
-        if (lastNowMs == Long.MIN_VALUE) {
-            lastNowMs = nowMs;
-            return nowMs;
-        }
-        if (nowMs >= lastNowMs) {
-            lastNowMs = nowMs;
-            return nowMs;
-        }
-
+        if (lastNowMs == Long.MIN_VALUE) { lastNowMs = nowMs; return nowMs; }
+        if (nowMs >= lastNowMs) { lastNowMs = nowMs; return nowMs; }
         long delta = lastNowMs - nowMs;
         for (State state : states) {
             state.cooldownUntilMs = rebaseTimestamp(state.cooldownUntilMs, delta);
@@ -256,9 +247,7 @@ final class DnsUpstreamPool {
         return value > delta ? value - delta : 1L;
     }
 
-    private void ageStaleLatency(long nowMs) {
-        for (State state : states) ageStateLatency(state, nowMs);
-    }
+    private void ageStaleLatency(long nowMs) { for (State state : states) ageStateLatency(state, nowMs); }
 
     private void ageStateLatency(State state, long nowMs) {
         if (state.lastObservationAtMs <= 0L || nowMs <= state.lastObservationAtMs) return;
@@ -276,11 +265,8 @@ final class DnsUpstreamPool {
         State best = null;
         for (State state : states) {
             if (!isHalfOpen(state, nowMs)) continue;
-            if (best == null
-                    || state.cooldownUntilMs < best.cooldownUntilMs
-                    || (state.cooldownUntilMs == best.cooldownUntilMs && state.ordinal < best.ordinal)) {
-                best = state;
-            }
+            if (best == null || state.cooldownUntilMs < best.cooldownUntilMs
+                    || (state.cooldownUntilMs == best.cooldownUntilMs && state.ordinal < best.ordinal)) best = state;
         }
         return best;
     }
@@ -297,9 +283,7 @@ final class DnsUpstreamPool {
     }
 
     private double score(State state) {
-        return state.ewmaRttMs
-                + state.failureStreak * 550d
-                + state.slowStreak * SLOW_STREAK_PENALTY_MS;
+        return state.ewmaRttMs + state.failureStreak * 550d + state.slowStreak * SLOW_STREAK_PENALTY_MS;
     }
 
     @Override public synchronized String toString() {
