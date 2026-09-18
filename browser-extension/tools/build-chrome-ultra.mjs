@@ -1,5 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  agreementSummary,
+  qualityBoost,
+  registerSourceAgreement,
+  sourceAgreementCount
+} from "./rule-quality.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const common = path.join(root, "common");
@@ -145,13 +151,15 @@ function fnv1a(text) {
   for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193); }
   return h >>> 0;
 }
-function selectBest(parsedRules, budget) {
+function selectBest(parsedRules, budget, agreementMap = null) {
   const map = new Map();
   for (const parsed of parsedRules) {
     if (!parsed) continue;
     const key = ruleKey(parsed);
+    const agreement = agreementMap ? sourceAgreementCount(agreementMap, parsed) : 1;
+    const score = ruleScore(parsed) + (agreementMap ? qualityBoost(parsed, agreement) : 0);
     const old = map.get(key);
-    if (!old || ruleScore(parsed) > old.score) map.set(key, { parsed, score: ruleScore(parsed), hash: fnv1a(key) });
+    if (!old || score > old.score) map.set(key, { parsed, score, hash: fnv1a(key) });
   }
   return [...map.values()]
     .sort((a, b) => b.score - a.score || a.hash - b.hash)
@@ -211,6 +219,8 @@ const ultraSeen = new Set();
 const genericSelectors = new Set();
 const scopedSelectors = new Map();
 const sourceStatus = [];
+const standardAgreement = new Map();
+const standardBatches = [];
 
 const localDomains = fs.readFileSync(path.join(common, "rules", "domains.txt"), "utf8").split(/\r?\n/);
 addRules(standard, standardSeen, localDomains.map(parseDomainLine), STANDARD_CAP);
@@ -226,9 +236,10 @@ for (const source of SOURCES) {
       const blocks = parsed.filter((r) => r.action === "block");
       const allows = parsed.filter((r) => r.action === "allow");
       compatCandidates.push(...allows);
-      const best = selectBest(blocks, source.budget);
-      const added = addRules(standard, standardSeen, best, STANDARD_CAP);
-      sourceStatus.push({ id: source.id, ok: true, parsed: parsed.length, blockCandidates: blocks.length, allowCandidates: allows.length, selected: best.length, added });
+      for (const rule of blocks) registerSourceAgreement(standardAgreement, rule, source.id);
+      const status = { id: source.id, ok: true, parsed: parsed.length, blockCandidates: blocks.length, allowCandidates: allows.length, selected: 0, added: 0 };
+      sourceStatus.push(status);
+      standardBatches.push({ source, blocks, status });
     } else {
       const blocks = parsed.filter((r) => r.action === "block");
       const best = selectBest(blocks, source.budget);
@@ -240,6 +251,14 @@ for (const source of SOURCES) {
   }
 }
 
+for (const batch of standardBatches) {
+  const best = selectBest(batch.blocks, batch.source.budget, standardAgreement);
+  const added = addRules(standard, standardSeen, best, STANDARD_CAP);
+  batch.status.selected = best.length;
+  batch.status.added = added;
+}
+
+const qualityRanking = agreementSummary(standardAgreement);
 const compat = selectBest(compatCandidates, COMPAT_CAP);
 
 if (standard.length < 15000) throw new Error(`Too few STANDARD block rules: ${standard.length}`);
@@ -278,6 +297,10 @@ const buildMeta = {
   compatRules: compat.length,
   cosmeticGeneric: genericSelectors.size,
   cosmeticDomains: scopedSelectors.size,
+  standardQualityRanking: {
+    model: "source-agreement+resource-coverage-v1",
+    ...qualityRanking
+  },
   sources: sourceStatus
 };
 fs.writeFileSync(path.join(out, "build-meta.js"), `self.XAD_BUILD_META=${JSON.stringify(buildMeta)};\n`);
