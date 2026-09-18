@@ -35,12 +35,15 @@ import java.util.Map;
  * Latency-only health is also aged after long periods without observations.
  * Android can switch between Wi-Fi and mobile networks while the VPN stays up;
  * carrying an old RTT penalty forever would bias the new network with stale
- * information. Failure/circuit-breaker state is deliberately not forgotten by
- * this passive aging and still requires a bounded half-open recovery probe.
+ * information. Failure history remains intact, but an explicit network-epoch
+ * transition releases any old-path cooldown into the existing single half-open
+ * probe gate. This allows prompt recovery on the new path without clearing failure
+ * counters or retrying the entire failed resolver pool at once.
  *
- * A newly established VPN/network epoch can explicitly reset only latency-derived
- * state. Lifetime success/failure counters and circuit-breaker failures remain
- * intact, while RTT/slow penalties start from a neutral baseline for the new path.
+ * A newly established VPN/network epoch explicitly resets only latency-derived
+ * state and arms bounded resolver revalidation. Lifetime success/failure counters
+ * and failure streaks remain intact, while RTT/slow penalties start from a neutral
+ * baseline for the new path.
  *
  * Runtime timestamps are also rebased if the supplied clock moves backwards
  * (for example after a manual/NTP wall-clock correction). Remaining cooldown and
@@ -150,6 +153,12 @@ final class DnsUpstreamPool {
             state.ewmaRttMs = DEFAULT_RTT_MS;
             state.slowStreak = 0;
             state.latencySamples = 0;
+            // A cooldown learned on Wi-Fi should not suppress the same resolver for up to
+            // a minute after Android moves to LTE/5G (or vice versa). Keep failure history,
+            // but release old-path cooldowns into the existing one-probe half-open gate.
+            if (state.failureStreak > 0 && state.cooldownUntilMs > nowMs) {
+                state.cooldownUntilMs = nowMs;
+            }
             state.lastObservationAtMs = nowMs;
             state.lastLatencyDecayAtMs = nowMs;
         }
