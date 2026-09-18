@@ -50,6 +50,7 @@ jobs:
       - name: JavaScript syntax
         run: |
           node --check dist/chrome/service-worker.js
+          node --check dist/chrome/feed-transport-guard.js
           node --check dist/chrome/feed-guard.js
           node --check dist/chrome/feed-v2-compat.js
           node --check dist/chrome/feed-health-ui.js
@@ -75,6 +76,7 @@ jobs:
           node --check tests/chrome-feed-guard-runtime.mjs
           node --check tests/chrome-feed-offline-fallback.mjs
           node --check tests/chrome-feed-retry-contract.mjs
+          node --check tests/chrome-feed-transport-contract.mjs
           node --check tests/feed-v2-consumer-compat.mjs
           node --check tests/rule-quality-ranking.mjs
           node --check tests/chrome-blocking-benchmark.mjs
@@ -87,6 +89,8 @@ jobs:
           node --check tools/validate-feed-v2-candidate-artifacts.mjs
           node --check tools/validate-feed-checksums.mjs
           node --check tools/validate-v150-safety.mjs
+      - name: Protection feed transport privacy provenance and size regression
+        run: node tests/chrome-feed-transport-contract.mjs
       - name: GitHub feed integrity anti-replay and downgrade regression test
         run: npm run test:feeds
       - name: Feed transient retry contract 429 Abort recovery regression
