@@ -48,10 +48,17 @@ const legacyShield = {
 Object.assign(store, legacyShield);
 
 const first = await local.get({ liveFeedVersion:"", liveStandardDomains:[] });
-assert.equal(first.liveFeedVersion, legacyShield.liveFeedVersion, "legacy cache must remain usable during first integrity upgrade");
-assert.deepEqual(first.liveStandardDomains, legacyShield.liveStandardDomains);
+assert.equal(first.liveFeedVersion, "", "unsealed legacy cache must fail closed instead of being trusted once");
+assert.deepEqual(first.liveStandardDomains, []);
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.match(store.xadCacheDigestLiveShieldV1 || "", /^[a-f0-9]{64}$/, "legacy cache should be sealed with SHA-256");
+assert.equal(Object.hasOwn(store, "liveFeedVersion"), false, "unsealed legacy bundle must be purged");
+assert.equal(Object.hasOwn(store, "xadCacheDigestLiveShieldV1"), false, "no digest should be minted from untrusted legacy data");
+
+await local.set(legacyShield);
+assert.match(store.xadCacheDigestLiveShieldV1 || "", /^[a-f0-9]{64}$/, "validated refresh-style write should seal live shield cache");
+const sealedShield = await local.get({ liveFeedVersion:"", liveStandardDomains:[] });
+assert.equal(sealedShield.liveFeedVersion, legacyShield.liveFeedVersion);
+assert.deepEqual(sealedShield.liveStandardDomains, legacyShield.liveStandardDomains);
 
 store.liveStandardDomains.push("tampered.example");
 const tamperedShield = await local.get({ liveFeedVersion:"", liveStandardDomains:[] });
@@ -90,4 +97,4 @@ await local.set({ unrelatedPreference:"ultra" });
 assert.equal((await local.get("unrelatedPreference")).unrelatedPreference, "ultra", "unrelated storage must pass through unchanged");
 assert.equal(Object.hasOwn(await local.get(null), "xadCacheDigestLiveMatrixV1"), false, "internal digest keys must not leak through get(null)");
 
-console.log("OK: protection-feed fallback cache SHA-256 integrity, legacy sealing, tamper purge and storage isolation verified");
+console.log("OK: protection-feed fallback cache SHA-256 integrity, fail-closed legacy purge, sealed refresh writes, tamper purge and storage isolation verified");
