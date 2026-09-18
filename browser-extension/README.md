@@ -14,7 +14,7 @@
 
 <img width="100%" src="../assets/readme/chrome/progress-card.svg" alt="xADKiller Chrome v1.5.0 development progress" />
 
-**Development progress:** **76.9% — 20/26 verified v1.5.0 roadmap items.**  
+**Development progress:** **80.8% — 21/26 verified v1.5.0 roadmap items.**  
 **Release readiness:** **BLOCKED** — manual browser/beta validation and the remaining hardening items are not complete.
 
 | Item | Status |
@@ -35,6 +35,7 @@
 |---|---|
 | 🛡️ DeclarativeNetRequest | Uses Manifest V3 static, dynamic and session rules for network blocking. |
 | ⚡ STANDARD / ULTRA | Provides conservative and stronger protection modes with separately tested rule budgets. |
+| 🎯 Source-quality ranking | Ranks STANDARD static candidates with deterministic source agreement plus useful request-type coverage, while preserving per-source contribution budgets and recording the quality model in build metadata. |
 | ♻️ Cross-layer dedupe | Removes semantically equivalent rules across STANDARD/ULTRA static data, packaged dynamic intelligence and TITAN session rules, then re-checks zero overlap in CI. |
 | 📊 Rule Budget | Shows live packaged STANDARD/ULTRA/TITAN Boost counts plus current runtime rule buckets without inventing a browser-limit percentage. |
 | 🧠 TITAN Adaptive Memory | Persists only promoted high-confidence third-party ad/tracker hosts, with TTL, bounds and a user reset. |
@@ -79,6 +80,7 @@ Load it locally from `chrome://extensions` → **Developer mode** → **Load unp
 The v1.5 branch runs Chromium and integrity gates for:
 
 - TITAN runtime behavior;
+- deterministic source-agreement/resource-coverage ranking of STANDARD static rules with per-source contribution budgets;
 - deterministic semantic cross-layer dedupe across static, dynamic and session rule outputs;
 - Shadow DOM mutation soak;
 - broader real-page mutation soak with normal business UI, login/checkout/media controls and mixed DOM/Shadow ad layers;
