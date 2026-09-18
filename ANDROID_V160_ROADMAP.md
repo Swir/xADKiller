@@ -23,6 +23,7 @@ This branch develops the Android APK independently from the current stable 1.5.1
 - Established healthy resolvers dampen a **single valid-but-extreme RTT spike** before it enters the EWMA while still counting the real sample toward the slow-response streak; one scheduler/radio/handover stall therefore cannot pin adaptive DNS timeouts near their maximum, while repeated slowness is still penalized.
 - Stale-latency aging and the explicit network-epoch reset never clear circuit-breaker failure state: a failed resolver still requires its bounded half-open recovery probe after cooldown.
 - VPN service status has a **traffic-independent 5-second heartbeat** while the TUN worker is alive, so an idle connection no longer depends on DNS packet traffic to keep UI/service liveness fresh; the scheduler is shut down with the VPN/service lifecycle.
+- VPN lifecycle policy now distinguishes boot preference from update continuity: `BOOT_COMPLETED` follows the autostart setting, while `MY_PACKAGE_REPLACED` resumes protection only when it was actually running before the app update — even if boot autostart is disabled. This prevents a Play/APK update from silently turning off a manually-started VPN without changing the user's boot preference.
 - Private DNS diagnostics distinguish an established STRICT resolver from a STRICT resolver that is configured but not currently established, and surface a separate notice when Android reports an active network with zero DNS servers. The latter remains a non-fatal handover/captive-portal signal instead of being misreported as a healthy local DNS path. Per-app DoH remains explicitly **not reliably detectable** from Android system Private DNS APIs.
 - Blocklist update hardening evaluates **normalized unique-domain counts**, preventing a duplicate-inflated remote feed from passing minimum-size or same-mode anti-shrink checks.
 - Privacy hardening: Android backup is disabled for local xADKiller state; cleartext traffic remains disabled; CI enforces these invariants and rejects QUERY_ALL_PACKAGES.
@@ -53,7 +54,7 @@ No Release until all relevant build, lint, regression, stability, privacy, DNS/V
 - Manifest and signing checks.
 - APK integrity/checksum checks.
 - Deterministic SWIR Progress SVG math/XML/staleness check.
-- VPN start/stop/restart/boot lifecycle regression coverage where possible; physical-device validation remains required for the heartbeat and OS lifecycle transitions.
+- VPN start/stop/restart/boot lifecycle regression coverage where possible; package-update regression must preserve a previously-running VPN independently of the boot-autostart preference, while physical-device validation remains required for the heartbeat and OS lifecycle transitions.
 - Parser/blocklist regression fixtures, including duplicate-inflated update rejection.
 - DNS packet malformed/fragmented/query-shape/exact IPv4↔UDP length regression fixtures.
 - EDNS(0) privacy scrub regression: Client Subnet and COOKIE must be removed before upstream forwarding, while the OPT record, DO flag and unrelated well-framed options remain intact.
