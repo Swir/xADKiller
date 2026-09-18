@@ -7,6 +7,8 @@
   const STRONG_PATH = /\/(?:ads?|adserver|adservice|adrequest|pagead|gampad|securepubads|prebid|vast|vmap|ima3|commercial|sponsor|sponsored|promoted)(?:[._\/-]|$)/i;
   const STRONG_QUERY = /(?:^|[?&])(?:ad_unit|adunit|ad_slot|adslot|gdfp_req|iu|campaign|impression)=/i;
   const LOCAL_SUFFIXES = [".local", ".localhost", ".lan", ".home", ".home.arpa", ".internal", ".localdomain"];
+  const RESERVED_SUFFIXES = [".test", ".example", ".invalid"];
+  const LOCAL_NAMES = new Set(["localhost", "localhost.localdomain"]);
   const seen = new Set();
   let enabled = true;
   let mode = "standard";
@@ -21,8 +23,10 @@
   }
   function learningHostAllowed(value) {
     const host = normalizeHost(value);
-    if (!host || isIpv4Literal(host) || host.includes(":") || host.startsWith("[") || host.endsWith("]")) return false;
-    return !LOCAL_SUFFIXES.some((suffix) => host.endsWith(suffix));
+    if (!host || host.length > 253 || !host.includes(".") || host.includes("..") || !/^[a-z0-9.-]+$/.test(host)) return false;
+    if (isIpv4Literal(host) || host.includes(":") || host.startsWith("[") || host.endsWith("]") || LOCAL_NAMES.has(host)) return false;
+    return !LOCAL_SUFFIXES.some((suffix) => host.endsWith(suffix))
+      && !RESERVED_SUFFIXES.some((suffix) => host.endsWith(suffix));
   }
   function allowed() {
     const host = normalizeHost(location.hostname);
@@ -54,7 +58,12 @@
     if (!learningHostAllowed(location.hostname) || !learningHostAllowed(u.hostname)) return false;
     const own = sameSite(u.hostname, location.hostname);
     const pathQuery = `${u.pathname}${u.search}`;
-    return (!own && STRONG_HOST.test(u.hostname)) || (own && STRONG_PATH.test(pathQuery)) || STRONG_QUERY.test(pathQuery);
+    // Cross-site persistence is deliberately limited to known strong ad-tech hosts.
+    // Generic query markers such as campaign/impression are only evidence when the
+    // resource is first-party; otherwise ordinary affiliate/commerce links can look
+    // like ads and poison Adaptive Memory.
+    return (!own && STRONG_HOST.test(u.hostname))
+      || (own && (STRONG_PATH.test(pathQuery) || STRONG_QUERY.test(pathQuery)));
   }
   function learn(raw) {
     if (!active() || sent >= 60 || !worthy(raw)) return;

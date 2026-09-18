@@ -18,7 +18,10 @@ async function launch() {
     pipe:true,
     enableExtensions:[extensionPath],
     userDataDir:profile,
-    args:["--no-sandbox","--disable-dev-shm-usage","--no-first-run","--no-default-browser-check"],
+    args:[
+      "--no-sandbox","--disable-dev-shm-usage","--no-first-run","--no-default-browser-check",
+      "--host-resolver-rules=MAP publisher.example.org 127.0.0.1, MAP metrics.example.net 127.0.0.1"
+    ],
     timeout:60000
   });
 }
@@ -72,8 +75,15 @@ async function startLocalFixture() {
         res.end(`<!doctype html><html><body><img src="/ads/banner.png"><script src="/adserver/runtime.js"></script></body></html>`);
         return;
       }
-      if (req.url === "/ads/banner.png") {
-        res.writeHead(204, { "content-type":"image/png" });
+      if (req.url?.startsWith("/cross-site-query")) {
+        const address = server.address();
+        const port = typeof address === "object" && address ? address.port : 0;
+        res.writeHead(200, { "content-type":"text/html; charset=utf-8" });
+        res.end(`<!doctype html><html><body><img src="http://metrics.example.net:${port}/pixel.gif?campaign=spring-sale"></body></html>`);
+        return;
+      }
+      if (req.url === "/ads/banner.png" || req.url?.startsWith("/pixel.gif")) {
+        res.writeHead(204, { "content-type":"image/gif" });
         res.end();
         return;
       }
@@ -105,23 +115,37 @@ try {
   await delay(500);
 
   // Network Scout must never learn private/local browsing context. A first-party
-  // /ads/ or /adserver/ path on a loopback/LAN/private hostname is not evidence of
-  // public ad-tech and persisting it could break routers, NAS/admin panels or local apps.
+  // /ads/ or /adserver/ path on loopback is not evidence of public ad-tech.
   const beforeLocal = await send(popup, { type:"getTitanStats" });
   if (!beforeLocal?.ok) throw new Error(`could not read memory before local fixture: ${JSON.stringify(beforeLocal)}`);
   localFixture = await startLocalFixture();
   if (!localFixture.port) throw new Error("local fixture did not bind a port");
   const localPage = await browser.newPage();
   await localPage.goto(`http://127.0.0.1:${localFixture.port}/`, { waitUntil:"networkidle0", timeout:12000 });
-  await delay(1200);
+  await delay(1000);
   await localPage.close();
-  await new Promise((resolve) => localFixture.server.close(resolve));
-  localFixture = null;
   const afterLocal = await send(popup, { type:"getTitanStats" });
   if (!afterLocal?.ok || afterLocal.memory !== beforeLocal.memory || afterLocal.learned !== beforeLocal.learned) {
     throw new Error(`local/private resource leaked into Adaptive Memory: before=${JSON.stringify(beforeLocal)} after=${JSON.stringify(afterLocal)}`);
   }
   log("Local/private learning guard", `memory=${afterLocal.memory} learned=${afterLocal.learned}`);
+
+  // A generic campaign/impression query on an unrelated third-party host is not
+  // enough evidence to learn a blocking rule. Only strong ad-tech hosts may be
+  // learned cross-site; generic path/query heuristics remain first-party only.
+  const beforeGeneric = await send(popup, { type:"getTitanStats" });
+  const publicPage = await browser.newPage();
+  await publicPage.goto(`http://publisher.example.org:${localFixture.port}/cross-site-query`, { waitUntil:"networkidle0", timeout:12000 });
+  await delay(1000);
+  await publicPage.close();
+  const afterGeneric = await send(popup, { type:"getTitanStats" });
+  if (!afterGeneric?.ok || afterGeneric.memory !== beforeGeneric.memory || afterGeneric.learned !== beforeGeneric.learned) {
+    throw new Error(`generic cross-site query polluted Adaptive Memory: before=${JSON.stringify(beforeGeneric)} after=${JSON.stringify(afterGeneric)}`);
+  }
+  log("Cross-site generic-query guard", `memory=${afterGeneric.memory} learned=${afterGeneric.learned}`);
+
+  await new Promise((resolve) => localFixture.server.close(resolve));
+  localFixture = null;
 
   const sample = { type:"titanLearnResource", url:"https://cdn-adnxs.example.net/runtime/ad.js", pageHost:"example.org" };
   const first = await send(popup, sample);
@@ -162,7 +186,7 @@ try {
   const finalStore = await found.worker.evaluate(async () => await chrome.storage.local.get({ xadTitanHostMemoryV1:[] }));
   if (finalStore.xadTitanHostMemoryV1?.length) throw new Error(`memory storage not cleared: ${JSON.stringify(finalStore)}`);
 
-  log("PASS", "persistent host-only memory, local/private exclusion, restart restore and user reset all verified");
+  log("PASS", "persistent host-only memory, local/private exclusion, cross-site generic-query guard, restart restore and user reset all verified");
 } finally {
   if (localFixture?.server) { try { await new Promise((resolve) => localFixture.server.close(resolve)); } catch (_) {} }
   if (browser) { try { await browser.close(); } catch (_) {} }
