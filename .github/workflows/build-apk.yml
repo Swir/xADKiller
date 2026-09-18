@@ -75,6 +75,8 @@ jobs:
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsPacketHardeningTest
       - name: DNS upstream cooldown suppression half-open and emergency fallback regression
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsUpstreamPoolTest
+      - name: DNS Wi-Fi mobile handover immediate bounded resolver revalidation regression
+        run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsNetworkHandoverRecoveryTest
       - name: VPN boot and package-update lifecycle policy regression
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.VpnLifecycleStartPolicyTest
       - name: Unit tests DNS query EDNS response framing lifecycle upstream health and blocking benchmark
