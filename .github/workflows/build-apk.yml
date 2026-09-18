@@ -71,7 +71,7 @@ jobs:
           echo "Android privacy manifest gate: PASS"
       - name: Android lint
         run: gradle --no-daemon lintDebug
-      - name: Unit tests and blocking benchmark
+      - name: Unit tests DNS response framing and blocking benchmark
         run: gradle --no-daemon testDebugUnitTest
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug

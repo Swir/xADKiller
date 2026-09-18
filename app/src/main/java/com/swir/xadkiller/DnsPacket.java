@@ -5,6 +5,7 @@ import java.util.Arrays;
 
 final class DnsPacket {
     static final int DNS_PORT = 53;
+    private static final int MAX_RESPONSE_RR_COUNT = 512;
 
     static final class Query {
         final byte[] dnsPayload;
@@ -128,8 +129,9 @@ final class DnsPacket {
     /**
      * Accept an upstream DNS reply only when it is a real standard response to the exact
      * single question we forwarded. This is intentionally stricter than checking only the
-     * transaction id: mismatched question names/types/classes and query-shaped packets are
-     * rejected before they can be written back into the VPN tunnel.
+     * transaction id: mismatched question names/types/classes, query-shaped packets and
+     * structurally incomplete answer/authority/additional sections are rejected before
+     * they can be written back into the VPN tunnel.
      */
     static boolean isValidUpstreamResponse(byte[] query, byte[] response, int responseLength) {
         if (query == null || response == null || query.length < 17 || responseLength < 17 || responseLength > response.length) {
@@ -156,8 +158,52 @@ final class DnsPacket {
         int queryEnd = questionEnd(query);
         int responseEnd = questionEnd(trimmed);
         if (queryEnd < 4 || responseEnd < 4) return false;
-        return u16(query, queryEnd - 4) == u16(trimmed, responseEnd - 4)
-                && u16(query, queryEnd - 2) == u16(trimmed, responseEnd - 2);
+        if (u16(query, queryEnd - 4) != u16(trimmed, responseEnd - 4)
+                || u16(query, queryEnd - 2) != u16(trimmed, responseEnd - 2)) {
+            return false;
+        }
+        return hasWellFormedResponseSections(trimmed, responseEnd);
+    }
+
+    /**
+     * Validate the framing of every declared resource record without interpreting its
+     * payload. A response that claims records which are not fully present, uses an
+     * impossible/forward owner-name pointer, carries an excessive record count, or leaves
+     * undeclared trailing bytes is treated as malformed. This keeps parser work bounded
+     * and prevents ambiguous partial replies from entering the local tunnel.
+     */
+    private static boolean hasWellFormedResponseSections(byte[] dns, int pos) {
+        if (dns == null || pos < 12 || pos > dns.length) return false;
+        long total = (long)u16(dns, 6) + u16(dns, 8) + u16(dns, 10);
+        if (total > MAX_RESPONSE_RR_COUNT) return false;
+
+        for (long i = 0; i < total; i++) {
+            int next = skipResourceName(dns, pos);
+            if (next < 0 || next + 10 > dns.length) return false;
+            int rdLength = u16(dns, next + 8);
+            pos = next + 10;
+            if (rdLength > dns.length - pos) return false;
+            pos += rdLength;
+        }
+        return pos == dns.length;
+    }
+
+    /** Skip an RR owner name. Compression pointers must point backwards into this message. */
+    private static int skipResourceName(byte[] dns, int pos) {
+        int guard = 0;
+        while (pos < dns.length && guard++ < 128) {
+            int len = dns[pos] & 0xFF;
+            if (len == 0) return pos + 1;
+            if ((len & 0xC0) == 0xC0) {
+                if (pos + 1 >= dns.length) return -1;
+                int pointer = ((len & 0x3F) << 8) | (dns[pos + 1] & 0xFF);
+                if (pointer < 12 || pointer >= pos || pointer >= dns.length) return -1;
+                return pos + 2;
+            }
+            if ((len & 0xC0) != 0 || len > 63 || pos + 1 + len > dns.length) return -1;
+            pos += 1 + len;
+        }
+        return -1;
     }
 
     static byte[] nxdomain(byte[] query) { return errorResponse(query, 3); }
