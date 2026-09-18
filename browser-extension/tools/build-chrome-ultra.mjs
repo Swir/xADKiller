@@ -166,11 +166,11 @@ function selectBest(parsedRules, budget, agreementMap = null) {
     .slice(0, budget)
     .map((x) => x.parsed);
 }
-function addRules(target, seen, rules, cap) {
+function addRules(target, seen, rules, cap, maxAdds = Number.POSITIVE_INFINITY) {
   let added = 0;
   for (const parsed of rules) {
     if (!parsed) continue;
-    if (target.length >= cap) break;
+    if (target.length >= cap || added >= maxAdds) break;
     const key = ruleKey(parsed);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -251,10 +251,14 @@ for (const source of SOURCES) {
   }
 }
 
+// Rank each source by the shared quality model, then walk beyond overlapping
+// top rules until that source contributes its intended number of unique rules.
+// This preserves source diversity/budget while still preferring cross-source
+// agreement and useful request-type coverage at every selection point.
 for (const batch of standardBatches) {
-  const best = selectBest(batch.blocks, batch.source.budget, standardAgreement);
-  const added = addRules(standard, standardSeen, best, STANDARD_CAP);
-  batch.status.selected = best.length;
+  const ranked = selectBest(batch.blocks, batch.blocks.length, standardAgreement);
+  const added = addRules(standard, standardSeen, ranked, STANDARD_CAP, batch.source.budget);
+  batch.status.selected = Math.min(batch.source.budget, ranked.length);
   batch.status.added = added;
 }
 
