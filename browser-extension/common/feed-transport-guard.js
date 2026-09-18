@@ -104,6 +104,49 @@
     return response;
   }
 
+  async function bufferBoundedBody(response) {
+    if (!response?.body || typeof response.body.getReader !== "function" || typeof Response !== "function") {
+      return response;
+    }
+
+    const reader = response.body.getReader();
+    const chunks = [];
+    let total = 0;
+    try {
+      while (true) {
+        const part = await reader.read();
+        if (part?.done) break;
+        const chunk = part?.value instanceof Uint8Array ? part.value : new Uint8Array(part?.value || 0);
+        total += chunk.byteLength;
+        if (total > MAX_FEED_BYTES) {
+          try { await reader.cancel("xad_feed_guard_payload_size"); } catch (_) {}
+          fail("payload_size");
+        }
+        chunks.push(chunk);
+      }
+    } finally {
+      try { reader.releaseLock?.(); } catch (_) {}
+    }
+
+    const payload = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      payload.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+
+    const buffered = new Response(payload, {
+      status:response.status,
+      statusText:response.statusText,
+      headers:response.headers
+    });
+    // Preserve provenance metadata for downstream diagnostics after the original stream
+    // has been consumed and replaced by the bounded in-memory response.
+    try { Object.defineProperty(buffered, "url", { value:String(response.url || ""), configurable:true }); } catch (_) {}
+    try { Object.defineProperty(buffered, "redirected", { value:Boolean(response.redirected), configurable:true }); } catch (_) {}
+    return buffered;
+  }
+
   globalThis.fetch = async (input, init) => {
     const urlValue = typeof input === "string" ? input : input?.url;
     const kind = guardedKind(urlValue);
@@ -111,12 +154,14 @@
     if (requestMethod(input, init) !== "GET") fail("transport_method");
 
     // Protection feeds are public data-only payloads. Never send credentials/referrer,
-    // never follow redirects, and bound a stalled network fetch so the MV3 worker can
-    // fall back to its already validated local cache instead of hanging indefinitely.
+    // never follow redirects, and keep the timeout active through body consumption so a
+    // server cannot send headers quickly and then stall the MV3 worker. The streamed body
+    // is bounded independently of Content-Length, including decompressed payload bytes.
     const timed = timedInit(input, init);
     try {
       const response = await nativeFetch(input, timed.init);
-      return validateResponse(kind, response);
+      validateResponse(kind, response);
+      return await bufferBoundedBody(response);
     } finally {
       timed.cleanup();
     }
@@ -131,6 +176,7 @@
     timedInit,
     validateContentLength,
     validateContentType,
-    validateResponse
+    validateResponse,
+    bufferBoundedBody
   });
 })();
