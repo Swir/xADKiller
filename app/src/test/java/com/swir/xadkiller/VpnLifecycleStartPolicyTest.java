@@ -51,7 +51,7 @@ public class VpnLifecycleStartPolicyTest {
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, false, true, freshHeartbeat, NOW, false));
     }
 
-    @Test public void duplicateManagedRestartBurstIsSuppressedWithoutCrossActionSuppression() {
+    @Test public void duplicateManagedRestartBurstSuppressesSameAndCrossActionSignals() {
         long inside = NOW - VpnLifecycleStartPolicy.DUPLICATE_RESTART_WINDOW_MS + 1L;
         long outside = NOW - VpnLifecycleStartPolicy.DUPLICATE_RESTART_WINDOW_MS - 1L;
         assertTrue(VpnLifecycleStartPolicy.isDuplicateRestart(
@@ -60,9 +60,12 @@ public class VpnLifecycleStartPolicyTest {
         assertTrue(VpnLifecycleStartPolicy.isDuplicateRestart(
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED,
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, inside, NOW));
-        assertFalse(VpnLifecycleStartPolicy.isDuplicateRestart(
+        assertTrue(VpnLifecycleStartPolicy.isDuplicateRestart(
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, inside, NOW));
+        assertTrue(VpnLifecycleStartPolicy.isDuplicateRestart(
+                VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED,
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, inside, NOW));
         assertFalse(VpnLifecycleStartPolicy.isDuplicateRestart(
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, outside, NOW));
