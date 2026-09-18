@@ -71,7 +71,7 @@ jobs:
           echo "Android privacy manifest gate: PASS"
       - name: Android lint
         run: gradle --no-daemon lintDebug
-      - name: DNS framing EDNS0 and synthesized UDP checksum regression
+      - name: DNS framing EDNS0 incoming and synthesized UDP checksum regression
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsPacketHardeningTest
       - name: Unit tests DNS query EDNS response framing lifecycle and blocking benchmark
         run: gradle --no-daemon testDebugUnitTest
