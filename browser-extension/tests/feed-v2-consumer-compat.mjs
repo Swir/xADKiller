@@ -57,8 +57,8 @@ try {
   const serviceWorker = fs.readFileSync(path.join(common, "service-worker.js"), "utf8");
   assert.match(
     serviceWorker,
-    /importScripts\("feed-guard\.js",\s*"feed-v2-compat\.js"/,
-    "Feed Guard must run before the v2 compatibility adapter"
+    /importScripts\("feed-transport-guard\.js",\s*"feed-guard\.js",\s*"feed-v2-compat\.js"/,
+    "Feed transport guard must run before Feed Guard, and Feed Guard before the v2 compatibility adapter"
   );
   assert.ok(!/eval\s*\(|new\s+Function\s*\(/.test(fs.readFileSync(path.join(common, "feed-v2-compat.js"), "utf8")),
     "compatibility adapter must not execute remote code");
