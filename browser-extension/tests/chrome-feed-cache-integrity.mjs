@@ -61,6 +61,14 @@ assert.equal(sealedShield.liveFeedVersion, legacyShield.liveFeedVersion);
 assert.deepEqual(sealedShield.liveStandardDomains, legacyShield.liveStandardDomains);
 
 store.liveStandardDomains.push("tampered.example");
+await local.set({ liveFeedFetchedAt:999 });
+assert.equal(Object.hasOwn(store, "liveFeedVersion"), false, "partial writes must purge untrusted sibling fields before resealing");
+assert.equal(Object.hasOwn(store, "liveStandardDomains"), false, "tampered domains must not be laundered by a fresh digest");
+assert.equal(store.liveFeedFetchedAt, 999, "the caller's fresh field may survive after the stale bundle is scrubbed");
+assert.match(store.xadCacheDigestLiveShieldV1 || "", /^[a-f0-9]{64}$/);
+
+await local.set(legacyShield);
+store.liveStandardDomains.push("tampered.example");
 const tamperedShield = await local.get({ liveFeedVersion:"", liveStandardDomains:[] });
 assert.equal(tamperedShield.liveFeedVersion, "");
 assert.deepEqual(tamperedShield.liveStandardDomains, []);
@@ -97,4 +105,4 @@ await local.set({ unrelatedPreference:"ultra" });
 assert.equal((await local.get("unrelatedPreference")).unrelatedPreference, "ultra", "unrelated storage must pass through unchanged");
 assert.equal(Object.hasOwn(await local.get(null), "xadCacheDigestLiveMatrixV1"), false, "internal digest keys must not leak through get(null)");
 
-console.log("OK: protection-feed fallback cache SHA-256 integrity, fail-closed legacy purge, sealed refresh writes, tamper purge and storage isolation verified");
+console.log("OK: protection-feed fallback cache SHA-256 integrity, fail-closed legacy/tamper purge, partial-write anti-reseal and storage isolation verified");
