@@ -86,6 +86,11 @@ jobs:
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsPacketHardeningTest
       - name: DNS upstream cooldown suppression half-open and bounded emergency fallback regression
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsUpstreamPoolTest --tests com.swir.xadkiller.DnsEmergencyTimeoutTest
+      - name: DNS upstream connected-peer source pinning regression
+        run: |
+          grep -q 'socket.connect(target);' app/src/main/java/com/swir/xadkiller/AdBlockVpnServiceV121.java
+          grep -q 'target.equals(response.getSocketAddress())' app/src/main/java/com/swir/xadkiller/AdBlockVpnServiceV121.java
+          gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsUpstreamPeerPinningTest
       - name: DNS Wi-Fi mobile handover immediate bounded resolver revalidation regression
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsNetworkHandoverRecoveryTest
       - name: VPN boot package-update stale-heartbeat action allowlist and liveness cleanup lifecycle regression
