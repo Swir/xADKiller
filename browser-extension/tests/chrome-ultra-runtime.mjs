@@ -107,6 +107,19 @@ async function waitShield(worker, expected, timeoutMs = 25000) {
   throw new Error(`shield state timeout expected=${JSON.stringify(expected)} last=${JSON.stringify(last)}`);
 }
 
+async function waitForAlarms(worker, requiredNames, timeoutMs = 12000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastNames = [];
+  while (Date.now() < deadline) {
+    const alarms = await worker.evaluate(async () => await chrome.alarms.getAll());
+    lastNames = alarms.map((a) => a.name).sort();
+    if (requiredNames.every((name) => lastNames.includes(name))) return lastNames;
+    await delay(150);
+  }
+  const missing = requiredNames.filter((name) => !lastNames.includes(name));
+  throw new Error(`missing update alarms ${missing.join(",")}: ${lastNames.join(",")}`);
+}
+
 let browser = null;
 try {
   browser = await puppeteer.launch({
@@ -122,11 +135,8 @@ try {
   const manifest = await worker.evaluate(() => chrome.runtime.getManifest());
   log("TITAN worker ready", `${manifest.version} • chrome-extension://${extensionId}/service-worker.js`);
 
-  const alarms = await worker.evaluate(async () => await chrome.alarms.getAll());
-  const alarmNames = alarms.map((a)=>a.name).sort();
-  for (const required of ["xadkiller-live-matrix-refresh","xadkiller-titan-refresh","xadkiller-live-shield-refresh"]) {
-    if (!alarmNames.includes(required)) throw new Error(`missing update alarm ${required}: ${alarmNames.join(",")}`);
-  }
+  const requiredAlarms = ["xadkiller-live-matrix-refresh","xadkiller-titan-refresh","xadkiller-live-shield-refresh"];
+  const alarmNames = await waitForAlarms(worker, requiredAlarms);
   log("Update alarms OK", alarmNames.join(","));
 
   const standardSessionFloor = Math.min(2700, titanSessionPack.length);
