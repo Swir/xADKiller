@@ -89,7 +89,10 @@
   }
   function validateContentType(response) {
     const raw = String(response?.headers?.get?.("content-type") || "").trim().toLowerCase();
-    if (!raw) return "";
+    // Successful protection feeds must self-identify as one of the approved data
+    // media types. A missing MIME is ambiguous and must fail closed instead of
+    // allowing untyped bytes to enter Feed Guard/cache processing.
+    if (!raw) fail("content_type");
     const mediaType = raw.split(";", 1)[0].trim();
     if (!ALLOWED_SUCCESS_CONTENT_TYPES.has(mediaType)) fail("content_type");
     return mediaType;
