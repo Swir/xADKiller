@@ -6,6 +6,8 @@ import java.util.Arrays;
 final class DnsPacket {
     static final int DNS_PORT = 53;
     private static final int MAX_RESPONSE_RR_COUNT = 512;
+    private static final int EDNS_OPTION_CLIENT_SUBNET = 8;
+    private static final int EDNS_OPTION_COOKIE = 10;
 
     static final class Query {
         final byte[] dnsPayload;
@@ -81,9 +83,17 @@ final class DnsPacket {
         int qEnd = questionEnd(dns);
         if (qEnd < 0 || !hasWellFormedQueryTail(dns, qEnd, arCount)) return null;
 
+        // The local VPN may forward the query to a different public resolver than the
+        // application/OS originally targeted. Do not leak EDNS Client Subnet (option 8)
+        // or a resolver-specific EDNS COOKIE (option 10) across that privacy boundary.
+        // All other well-framed EDNS options, the advertised UDP size and DO flag are
+        // preserved for compatibility. The OPT record itself remains present even when
+        // every privacy-sensitive option is removed.
+        byte[] upstreamDns = sanitizeEdnsPrivacy(dns, qEnd, arCount);
+
         byte[] srcIp = Arrays.copyOfRange(packet, 12, 16);
         byte[] dstIp = Arrays.copyOfRange(packet, 16, 20);
-        return new Query(dns, host, srcPort, srcIp, dstIp);
+        return new Query(upstreamDns, host, srcPort, srcIp, dstIp);
     }
 
     static String extractQueryName(byte[] dns) {
@@ -180,6 +190,49 @@ final class DnsPacket {
             optionPos += optionLength;
         }
         return optionPos == optionEnd;
+    }
+
+    /**
+     * Remove EDNS options that disclose client network identity or carry state scoped to
+     * another resolver. Input has already passed hasWellFormedQueryTail(), so this method
+     * only rewrites the validated TLV list and its RDLEN. Unknown options are preserved.
+     */
+    private static byte[] sanitizeEdnsPrivacy(byte[] dns, int qEnd, int arCount) {
+        if (dns == null || arCount != 1) return dns;
+        int optionStart = qEnd + 11;
+        int optionEnd = optionStart + u16(dns, qEnd + 9);
+        int pos = optionStart;
+        int keptBytes = 0;
+        boolean changed = false;
+
+        while (pos < optionEnd) {
+            int code = u16(dns, pos);
+            int optionLength = u16(dns, pos + 2);
+            int totalLength = 4 + optionLength;
+            if (code == EDNS_OPTION_CLIENT_SUBNET || code == EDNS_OPTION_COOKIE) {
+                changed = true;
+            } else {
+                keptBytes += totalLength;
+            }
+            pos += totalLength;
+        }
+        if (!changed) return dns;
+
+        byte[] sanitized = Arrays.copyOf(dns, optionStart + keptBytes);
+        put16(sanitized, qEnd + 9, keptBytes);
+        int source = optionStart;
+        int dest = optionStart;
+        while (source < optionEnd) {
+            int code = u16(dns, source);
+            int optionLength = u16(dns, source + 2);
+            int totalLength = 4 + optionLength;
+            if (code != EDNS_OPTION_CLIENT_SUBNET && code != EDNS_OPTION_COOKIE) {
+                System.arraycopy(dns, source, sanitized, dest, totalLength);
+                dest += totalLength;
+            }
+            source += totalLength;
+        }
+        return sanitized;
     }
 
     /**
