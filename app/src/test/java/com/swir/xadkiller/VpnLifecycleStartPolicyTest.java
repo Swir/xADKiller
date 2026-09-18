@@ -13,13 +13,15 @@ public class VpnLifecycleStartPolicyTest {
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, false, true));
     }
 
-    @Test public void packageUpdateRestartsOnlyProtectionThatWasActuallyRunning() {
+    @Test public void packageUpdateResumesProtectionThatWasActuallyRunningEvenWhenBootAutostartIsOff() {
         assertTrue(VpnLifecycleStartPolicy.shouldStart(
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, true, true));
+        assertTrue(VpnLifecycleStartPolicy.shouldStart(
+                VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, false, true));
         assertFalse(VpnLifecycleStartPolicy.shouldStart(
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, true, false));
         assertFalse(VpnLifecycleStartPolicy.shouldStart(
-                VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, false, true));
+                VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, false, false));
     }
 
     @Test public void unrelatedBroadcastsNeverStartTheVpn() {
