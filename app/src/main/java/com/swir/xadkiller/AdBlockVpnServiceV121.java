@@ -326,13 +326,26 @@ public class AdBlockVpnServiceV121 extends VpnService {
                     UPSTREAM_POOL.recordFailure(server, System.currentTimeMillis());
                     continue;
                 }
+
+                // Pin the UDP socket to the selected resolver before sending. A connected
+                // DatagramSocket accepts datagrams only from that exact IP:port peer, so a
+                // same-LAN/off-path packet cannot win the race solely by guessing the DNS
+                // transaction/question tuple. DnsPacket validation remains a second layer.
+                InetSocketAddress target = new InetSocketAddress(InetAddress.getByName(server), DnsPacket.DNS_PORT);
+                socket.connect(target);
                 socket.setSoTimeout(UPSTREAM_POOL.timeoutMs(server));
-                DatagramPacket request = new DatagramPacket(
-                        query, query.length, InetAddress.getByName(server), 53);
+                DatagramPacket request = new DatagramPacket(query, query.length);
                 socket.send(request);
+
                 byte[] buf = new byte[8192];
                 DatagramPacket response = new DatagramPacket(buf, buf.length);
                 socket.receive(response);
+                if (!target.equals(response.getSocketAddress())) {
+                    lastError = "unexpected DNS peer for " + server;
+                    UPSTREAM_POOL.recordFailure(server, System.currentTimeMillis());
+                    SystemLogStore.warn(this, "UPSTREAM", "Odrzucono odpowiedź DNS z nieoczekiwanego peer • server=" + server);
+                    continue;
+                }
                 if (!DnsPacket.isValidUpstreamResponse(query, buf, response.getLength())) {
                     lastError = "mismatched response from " + server;
                     UPSTREAM_POOL.recordFailure(server, System.currentTimeMillis());
