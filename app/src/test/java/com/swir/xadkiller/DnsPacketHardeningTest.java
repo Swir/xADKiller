@@ -158,6 +158,22 @@ public class DnsPacketHardeningTest {
         assertNull(DnsPacket.parseIpv4UdpQuery(packet, packet.length));
     }
 
+    @Test public void acceptsValidNonZeroIncomingUdpChecksum() {
+        byte[] packet = packet(query(0x0100, 1), 53000, 0x4000);
+        applyUdpChecksum(packet);
+        assertTrue("test packet should carry a non-zero UDP checksum", DnsPacket.u16(packet, 26) != 0);
+        assertNotNull(DnsPacket.parseIpv4UdpQuery(packet, packet.length));
+    }
+
+    @Test public void rejectsCorruptedIncomingUdpDatagramWhenChecksumIsPresent() {
+        byte[] packet = packet(query(0x0100, 1), 53000, 0x4000);
+        applyUdpChecksum(packet);
+        // Corrupt only the DNS transaction id after calculating the checksum. Framing
+        // remains valid, so rejection specifically proves checksum validation happens.
+        packet[28] ^= 0x01;
+        assertNull(DnsPacket.parseIpv4UdpQuery(packet, packet.length));
+    }
+
     @Test public void synthesizedDnsReplyCarriesValidUdpChecksum() {
         byte[] request = packet(query(0x0100, 1), 53000, 0x4000);
         DnsPacket.Query parsed = DnsPacket.parseIpv4UdpQuery(request, request.length);
@@ -229,6 +245,13 @@ public class DnsPacketHardeningTest {
         DnsPacket.put16(packet, 24, 8 + dns.length);
         System.arraycopy(dns, 0, packet, 28, dns.length);
         return packet;
+    }
+
+    private static void applyUdpChecksum(byte[] packet) {
+        DnsPacket.put16(packet, 26, 0);
+        int checksum = (~udpPseudoHeaderSum(packet)) & 0xFFFF;
+        DnsPacket.put16(packet, 26, checksum == 0 ? 0xFFFF : checksum);
+        assertEquals("constructed request checksum must be valid", 0xFFFF, udpPseudoHeaderSum(packet));
     }
 
     private static int udpPseudoHeaderSum(byte[] packet) {
