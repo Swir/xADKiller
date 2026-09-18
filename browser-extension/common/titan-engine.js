@@ -18,7 +18,14 @@
   const MEMORY_PROMOTE_SEEN = 2;
 
   const RESOURCE_TYPES = ["script","image","stylesheet","xmlhttprequest","sub_frame","media","font","ping","websocket","other"];
-  const STRONG_HOST = /(doubleclick|googlesyndication|googleadservices|amazon-adsystem|adnxs|adsrvr|pubmatic|rubicon|criteo|taboola|outbrain|smartadserver|adform|prebid|hotjar|mouseflow|luckyorange|fullstory|logrocket|appsflyer|adjust|branch|kochava|unityads|samsungads|xiaomi|huawei|oppomobile)/i;
+  const STRONG_HOST_SUFFIXES = Object.freeze([
+    "doubleclick.net","googlesyndication.com","googleadservices.com","amazon-adsystem.com",
+    "adnxs.com","adsrvr.org","pubmatic.com","rubiconproject.com","criteo.com","criteo.net",
+    "taboola.com","outbrain.com","smartadserver.com","smartadserver.net","adform.com","adform.net",
+    "hotjar.com","hotjar.io","mouseflow.com","luckyorange.com","fullstory.com","logrocket.com",
+    "appsflyer.com","adjust.com","branch.io","kochava.com","unityads.unity3d.com","samsungads.com",
+    "ad.xiaomi.com","ads.huawei.com","adsfs.oppomobile.com","ads.oppomobile.com","ads.heytapmobi.com"
+  ]);
   const STRONG_PATH = /\/(?:ads?|adserver|adservice|adrequest|pagead|gampad|securepubads|prebid|vast|vmap|ima3|commercial|sponsor|sponsored|promoted)(?:[._\/-]|$)/i;
   const STRONG_QUERY = /(?:^|[?&])(?:ad_unit|adunit|ad_slot|adslot|gdfp_req|iu|campaign|impression)=/i;
 
@@ -55,6 +62,10 @@
   function validHost(value) {
     const host = normalizeHost(value);
     return !!host && host.length <= 253 && host.includes(".") && /^[a-z0-9.-]+$/.test(host) && !host.includes("..");
+  }
+  function strongProviderHost(value) {
+    const host = normalizeHost(value);
+    return !!host && STRONG_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith("." + suffix));
   }
   function sameSite(a, b) {
     a = normalizeHost(a); b = normalizeHost(b);
@@ -172,7 +183,10 @@
     for (const item of Array.isArray(raw) ? raw : []) {
       const host = normalizeHost(item?.host);
       const lastSeen = Number(item?.lastSeen || 0);
-      if (!validHost(host) || !lastSeen || now - lastSeen > MEMORY_TTL_MS) continue;
+      // Persistent memory is reserved for canonical known ad-tech providers.
+      // Older builds used substring matching; fail closed by purging any legacy
+      // entry that no longer satisfies the canonical suffix allowlist.
+      if (!validHost(host) || !strongProviderHost(host) || !lastSeen || now - lastSeen > MEMORY_TTL_MS) continue;
       const next = {
         host,
         seen:Math.max(1, Math.min(9999, Number(item?.seen || 1))),
@@ -195,7 +209,7 @@
 
   async function rememberHost(hostValue) {
     const host = normalizeHost(hostValue);
-    if (!validHost(host)) return null;
+    if (!strongProviderHost(host)) return null;
     const memory = await loadMemory(false);
     const now = Date.now();
     const existing = memory.find((item) => item.host === host);
@@ -248,7 +262,7 @@
     const own = sameSite(host, pageHost);
     const pathQuery = `${u.pathname}${u.search}`;
 
-    if (!own && STRONG_HOST.test(host)) {
+    if (!own && strongProviderHost(host)) {
       return {
         persistentHost:host,
         rule:{ priority:95, action:{type:"block"}, condition:{ requestDomains:[host], resourceTypes:RESOURCE_TYPES } }
