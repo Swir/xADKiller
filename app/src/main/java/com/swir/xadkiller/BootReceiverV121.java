@@ -6,10 +6,11 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.VpnService;
 import android.os.Build;
+import android.os.SystemClock;
 
 public class BootReceiverV121 extends BroadcastReceiver {
     private static final String KEY_LAST_RESTART_ACTION = "vpn_last_restart_action_v160";
-    private static final String KEY_LAST_RESTART_ATTEMPT_AT = "vpn_last_restart_attempt_at_v160";
+    private static final String KEY_LAST_RESTART_ELAPSED = "vpn_last_restart_elapsed_v160";
 
     @Override public void onReceive(Context context, Intent intent) {
         if (context == null || intent == null) return;
@@ -23,19 +24,21 @@ public class BootReceiverV121 extends BroadcastReceiver {
 
         SharedPreferences prefs = context.getSharedPreferences(BlocklistManager.PREFS, Context.MODE_PRIVATE);
         long now = System.currentTimeMillis();
+        long nowElapsed = SystemClock.elapsedRealtime();
         String lastRestartAction = prefs.getString(KEY_LAST_RESTART_ACTION, "");
-        long lastRestartAttemptAt = prefs.getLong(KEY_LAST_RESTART_ATTEMPT_AT, 0L);
+        long lastRestartElapsed = prefs.getLong(KEY_LAST_RESTART_ELAPSED, 0L);
 
-        // Some OEMs or update flows can redeliver the same lifecycle broadcast. Returning
-        // before touching liveness avoids clearing a freshly restarted VPN or launching a
-        // second foreground-service start for the same event burst.
-        if (VpnLifecycleStartPolicy.isDuplicateRestart(action, lastRestartAction, lastRestartAttemptAt, now)) {
+        // Duplicate suppression uses the monotonic elapsed-realtime clock rather than wall
+        // time. User/NTP clock corrections cannot accidentally widen the suppression window,
+        // while a real reboot resets elapsedRealtime and therefore cannot inherit an old
+        // restart marker from the previous boot session.
+        if (VpnLifecycleStartPolicy.isDuplicateRestart(action, lastRestartAction, lastRestartElapsed, nowElapsed)) {
             SystemLogStore.info(context, "BOOT", "Pomijam zduplikowany sygnał restartu VPN: " + action);
             return;
         }
         prefs.edit()
                 .putString(KEY_LAST_RESTART_ACTION, action)
-                .putLong(KEY_LAST_RESTART_ATTEMPT_AT, now)
+                .putLong(KEY_LAST_RESTART_ELAPSED, nowElapsed)
                 .apply();
 
         boolean auto = prefs.getBoolean(BlocklistManager.KEY_AUTOSTART, true);
