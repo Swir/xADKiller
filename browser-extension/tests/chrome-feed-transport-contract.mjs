@@ -6,10 +6,17 @@ const root = path.resolve(import.meta.dirname, "..");
 const source = fs.readFileSync(path.join(root, "common", "feed-transport-guard.js"), "utf8");
 const LIVE_MATRIX = "https://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json";
 const TITAN = "https://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-titan-feed.json";
+const MAX_FEED_BYTES = 2 * 1024 * 1024;
 
 function headers(values = {}) {
   const normalized = Object.fromEntries(Object.entries(values).map(([key, value]) => [key.toLowerCase(), String(value)]));
   return { get:(name) => normalized[String(name).toLowerCase()] ?? null };
+}
+
+function responseWithUrl(body, init, url = LIVE_MATRIX) {
+  const response = new Response(body, init);
+  Object.defineProperty(response, "url", { value:url, configurable:true });
+  return response;
 }
 
 let nativeCalls = 0;
@@ -26,6 +33,10 @@ const context = {
   URL,
   TypeError,
   AbortController,
+  Response,
+  Headers,
+  ReadableStream,
+  Uint8Array,
   setTimeout,
   clearTimeout,
   console,
@@ -93,7 +104,7 @@ responseFactory = () => ({
   status:200,
   url:LIVE_MATRIX,
   redirected:false,
-  headers:headers({ "content-length":String(2 * 1024 * 1024 + 1), "content-type":"application/json" })
+  headers:headers({ "content-length":String(MAX_FEED_BYTES + 1), "content-type":"application/json" })
 });
 let blockedOversize = false;
 try {
@@ -145,13 +156,44 @@ responseFactory = () => ({
 const rateLimited = await context.fetch(LIVE_MATRIX);
 if (rateLimited.status !== 429 || nativeCalls !== 7) throw new Error("HTTP error response was hidden by MIME validation");
 
+// Content-Length is only an advisory preflight. The streamed body itself must also be
+// bounded so missing/lying headers or transparent decompression cannot exceed 2 MiB.
+responseFactory = () => responseWithUrl(
+  new Uint8Array(MAX_FEED_BYTES + 1),
+  { status:200, headers:{ "content-type":"application/json" } }
+);
+let blockedStreamedOversize = false;
+try {
+  await context.fetch(LIVE_MATRIX);
+} catch (error) {
+  blockedStreamedOversize = String(error?.message || "").includes("xad_feed_guard_payload_size");
+}
+if (!blockedStreamedOversize || nativeCalls !== 8) throw new Error("oversized streamed feed body without Content-Length was accepted");
+
+const boundedPayload = new Uint8Array(4096);
+boundedPayload[0] = 0x7B;
+boundedPayload[boundedPayload.length - 1] = 0x7D;
+responseFactory = () => responseWithUrl(
+  boundedPayload,
+  { status:200, headers:{ "content-type":"application/octet-stream" } }
+);
+const bounded = await context.fetch(LIVE_MATRIX);
+const boundedBytes = new Uint8Array(await bounded.arrayBuffer());
+if (nativeCalls !== 9 || boundedBytes.length !== boundedPayload.length || bounded.url !== LIVE_MATRIX) {
+  throw new Error("bounded streamed feed body was not preserved after transport validation");
+}
+if (boundedBytes[0] !== 0x7B || boundedBytes[boundedBytes.length - 1] !== 0x7D) {
+  throw new Error("bounded feed payload bytes changed while buffering");
+}
+
 lastInit = null;
 responseFactory = () => ({ ok:true, status:200, url:"https://example.com/data.json", redirected:false, headers:headers() });
 await context.fetch("https://example.com/data.json", { credentials:"include" });
-if (nativeCalls !== 8 || lastInit?.credentials !== "include") throw new Error("non-feed fetch was unexpectedly modified");
+if (nativeCalls !== 10 || lastInit?.credentials !== "include") throw new Error("non-feed fetch was unexpectedly modified");
 
 const policy = context.XAD_FEED_TRANSPORT_GUARD;
 if (policy.FEED_FETCH_TIMEOUT_MS !== 15000) throw new Error(`unexpected feed timeout ${policy.FEED_FETCH_TIMEOUT_MS}`);
+if (policy.MAX_FEED_BYTES !== MAX_FEED_BYTES) throw new Error(`unexpected feed size ceiling ${policy.MAX_FEED_BYTES}`);
 if (policy.guardedKind(`${LIVE_MATRIX}?cache=1`) !== "live-matrix") throw new Error("approved query-string feed URL not recognized");
 if (policy.guardedKind("http://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json")) throw new Error("non-HTTPS feed URL accepted");
 if (policy.guardedKind("https://raw.githubusercontent.com.evil.example/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json")) throw new Error("lookalike raw GitHub host accepted");
@@ -170,4 +212,4 @@ await new Promise((resolve) => setTimeout(resolve, 20));
 if (!timeoutTimed.init.signal.aborted) throw new Error("bounded feed timeout did not abort stalled request signal");
 timeoutTimed.cleanup();
 
-console.log("[xADKiller FEED TRANSPORT CI] PASS • GET-only • redirect denied • credentials/referrer omitted • provenance pinned • Content-Length/MIME bounded • caller abort + 15s timeout • HTTP error classification preserved • non-feed fetch untouched");
+console.log("[xADKiller FEED TRANSPORT CI] PASS • GET-only • redirect denied • credentials/referrer omitted • provenance pinned • declared + streamed body size bounded • approved MIME • caller abort + full-transfer timeout • HTTP error classification preserved • non-feed fetch untouched");
