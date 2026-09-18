@@ -7,6 +7,8 @@
   const MAX_FEED_AGE_MS = 45 * 24 * 60 * 60 * 1000;
   const MAX_FUTURE_SKEW_MS = 24 * 60 * 60 * 1000;
   const MAX_V2_LIFETIME_MS = 60 * 24 * 60 * 60 * 1000;
+  const RETRY_BASE_MS = 15 * 1000;
+  const RETRY_MAX_MS = 15 * 60 * 1000;
   const HEALTH_KEY = "xadFeedGuardHealthV1";
   const LIVE_SHIELD_PATH = "/Swir/xADKiller/live-shield-feed/browser-intelligence/xadkiller-live-shield.json";
   const LIVE_MATRIX_PATH = "/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json";
@@ -48,6 +50,28 @@
     if (guard) return guard[1].slice(0, 120);
     const name = String(error?.name || "network_error").toLowerCase().replace(/[^a-z0-9_.:-]/g, "_");
     return name.slice(0, 120) || "network_error";
+  }
+  function isRetryableFailure(reason) {
+    const value = String(reason || "").toLowerCase();
+    return /^http_(429|5\d\d)$/.test(value)
+      || value === "aborterror"
+      || value === "typeerror"
+      || value === "network_error"
+      || value === "failed_to_fetch";
+  }
+  function backoffMs(consecutiveFailures) {
+    const failures = Math.max(0, Math.min(999, Math.floor(Number(consecutiveFailures || 0))));
+    if (!failures) return 0;
+    const shift = Math.min(6, failures - 1);
+    return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * (2 ** shift));
+  }
+  function retryWaitMs(feedHealth, now = Date.now()) {
+    const nextRetryAt = Math.max(0, Number(feedHealth?.nextRetryAt || 0));
+    return nextRetryAt > now ? nextRetryAt - now : 0;
+  }
+  async function enforceRetryWindow(kind, now = Date.now()) {
+    const health = await readHealth();
+    if (retryWaitMs(health?.feeds?.[kind], now) > 0) fail("backoff");
   }
   function validateFeedTimestamp(value, now = Date.now()) {
     const raw = String(value || "").trim();
@@ -95,10 +119,17 @@
         highestSchema = schema === 1 || schema === 2 ? schema : highestSchema;
       }
 
+      const consecutiveFailures = ok
+        ? 0
+        : Math.min(999, Math.max(0, Number(previous.consecutiveFailures || 0)) + 1);
+      const nextRetryAt = !ok && isRetryableFailure(error)
+        ? now + backoffMs(consecutiveFailures)
+        : 0;
+
       feeds[kind] = {
         successCount:Math.max(0, Number(previous.successCount || 0)) + (ok ? 1 : 0),
         failureCount:Math.max(0, Number(previous.failureCount || 0)) + (ok ? 0 : 1),
-        consecutiveFailures:ok ? 0 : Math.min(999, Math.max(0, Number(previous.consecutiveFailures || 0)) + 1),
+        consecutiveFailures,
         lastCheckedAt:now,
         lastSuccessAt:ok ? now : Math.max(0, Number(previous.lastSuccessAt || 0)),
         lastFailureAt:ok ? Math.max(0, Number(previous.lastFailureAt || 0)) : now,
@@ -110,6 +141,8 @@
         highestFeedUpdatedAt:highestAt,
         highestFeedVersion:highestVersion,
         highestFeedSchema:highestSchema,
+        nextRetryAt,
+        backoffLevel:nextRetryAt ? consecutiveFailures : 0,
         rollbackPreviousVersion:ok
           ? (schema === 2 ? String(meta.previousVersion || "").slice(0, 80) : "")
           : String(previous.rollbackPreviousVersion || "").slice(0, 80),
@@ -248,6 +281,13 @@
     const kind = guardedKind(urlValue);
     if (!kind) return nativeFetch(input, init);
 
+    // Do not hammer GitHub during an outage. Consumers already keep a known-good
+    // cache, so a bounded local backoff intentionally fails fast and lets them
+    // continue with validated cached data. Validation/schema failures never enter
+    // this network backoff path, so corrected protection data can be picked up on
+    // the very next scheduled/manual fetch.
+    await enforceRetryWindow(kind);
+
     const started = Date.now();
     try {
       const response = await nativeFetch(input, init);
@@ -287,6 +327,9 @@
     validateFeedTimestamp,
     validateV2Contract,
     validateTransition,
+    isRetryableFailure,
+    backoffMs,
+    retryWaitMs,
     readHealth
   });
 })();
