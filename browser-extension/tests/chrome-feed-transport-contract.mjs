@@ -209,6 +209,57 @@ responseFactory = () => ({ ok:true, status:200, url:"https://example.com/data.js
 await context.fetch("https://example.com/data.json", { credentials:"include" });
 if (nativeCalls !== 11 || lastInit?.credentials !== "include") throw new Error("non-feed fetch was unexpectedly modified");
 
+// A protected response without a concrete final URL cannot prove origin and must never
+// enter Feed Guard or become a known-good cache entry.
+responseFactory = () => ({
+  ok:true,
+  status:200,
+  url:"",
+  redirected:false,
+  headers:headers({ "content-length":"256", "content-type":"application/json" })
+});
+let blockedMissingFinalUrl = false;
+try {
+  await context.fetch(LIVE_MATRIX);
+} catch (error) {
+  blockedMissingFinalUrl = String(error?.message || "").includes("xad_feed_guard_transport_provenance");
+}
+if (!blockedMissingFinalUrl || nativeCalls !== 12) throw new Error("protected response without final URL was accepted");
+
+// Opaque/status-0 responses do not provide inspectable provenance/status semantics.
+responseFactory = () => ({
+  ok:false,
+  status:0,
+  type:"opaque",
+  url:LIVE_MATRIX,
+  redirected:false,
+  headers:headers({ "content-length":"256", "content-type":"application/json" })
+});
+let blockedOpaque = false;
+try {
+  await context.fetch(LIVE_MATRIX);
+} catch (error) {
+  blockedOpaque = String(error?.message || "").includes("xad_feed_guard_transport_opaque");
+}
+if (!blockedOpaque || nativeCalls !== 13) throw new Error("opaque/status-0 protected response was accepted");
+
+// The caller-side numeric cache buster is stripped before network I/O. If it appears on
+// the final response URL, provenance is no longer the exact canonical endpoint.
+responseFactory = () => ({
+  ok:true,
+  status:200,
+  url:`${LIVE_MATRIX}?v=1234567890123`,
+  redirected:false,
+  headers:headers({ "content-length":"256", "content-type":"application/json" })
+});
+let blockedFinalQuery = false;
+try {
+  await context.fetch(LIVE_MATRIX);
+} catch (error) {
+  blockedFinalQuery = String(error?.message || "").includes("xad_feed_guard_transport_provenance");
+}
+if (!blockedFinalQuery || nativeCalls !== 14) throw new Error("noncanonical final feed URL was accepted");
+
 if (policy.FEED_FETCH_TIMEOUT_MS !== 15000) throw new Error(`unexpected feed timeout ${policy.FEED_FETCH_TIMEOUT_MS}`);
 if (policy.MAX_FEED_BYTES !== MAX_FEED_BYTES) throw new Error(`unexpected feed size ceiling ${policy.MAX_FEED_BYTES}`);
 if (policy.guardedKind(`${LIVE_MATRIX}?cache=1`) !== "") throw new Error("noncanonical query-string feed URL treated as canonical");
@@ -230,4 +281,4 @@ await new Promise((resolve) => setTimeout(resolve, 20));
 if (!timeoutTimed.init.signal.aborted) throw new Error("bounded feed timeout did not abort stalled request signal");
 timeoutTimed.cleanup();
 
-console.log("[xADKiller FEED TRANSPORT CI] PASS • exact canonical URL • deterministic Accept • GET-only • redirect denied • credentials/referrer omitted • provenance pinned • declared + streamed body size bounded • mandatory approved MIME • caller abort + full-transfer timeout • HTTP error classification preserved • non-feed fetch untouched");
+console.log("[xADKiller FEED TRANSPORT CI] PASS • exact canonical final URL • opaque/status-0 denied • deterministic Accept • GET-only • redirect denied • credentials/referrer omitted • provenance pinned • declared + streamed body size bounded • mandatory approved MIME • caller abort + full-transfer timeout • HTTP error classification preserved • non-feed fetch untouched");
