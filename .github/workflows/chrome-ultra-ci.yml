@@ -83,6 +83,7 @@ jobs:
           node --check tests/feed-v2-consumer-compat.mjs
           node --check tests/rule-quality-ranking.mjs
           node --check tests/chrome-blocking-benchmark.mjs
+          node --check tests/chrome-screenshot-regression.mjs
           node --check tests/chrome-shadow-mutation-soak.mjs
           node --check tests/chrome-real-page-soak.mjs
           node --check tests/chrome-performance-budget.mjs
@@ -134,6 +135,8 @@ jobs:
         run: timeout --signal=TERM --kill-after=10s 180s npm run test:pause
       - name: Chromium blocking effectiveness benchmark
         run: timeout --signal=TERM --kill-after=10s 180s npm run test:benchmark
+      - name: Chromium screenshot-derived ads and trackers regression
+        run: timeout --signal=TERM --kill-after=10s 180s node tests/chrome-screenshot-regression.mjs
       - name: Package Chrome TITAN Adaptive Memory ZIP
         run: |
           mkdir -p packages

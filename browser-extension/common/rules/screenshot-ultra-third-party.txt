@@ -1,0 +1,21 @@
+# Aggressive/privacy-sensitive third-party misses from the same manual test.
+# ULTRA only: these can remove consent/support/social widgets, so they are not forced into STANDARD.
+tagmanager.google.com
+fingerprints.com
+widgets.pinterest.com
+graph.instagram.com
+i.instagram.com
+cdn.cookielaw.org
+geolocation.onetrust.com
+privacyportal.onetrust.com
+consent.cookiebot.com
+consentcdn.cookiebot.com
+cookiebot.com
+consent.trustarc.com
+sdk.privacy-center.org
+cdn.privacy-mgmt.com
+app.usercentrics.eu
+cmp.osano.com
+fundingchoicesmessages.google.com
+widget.intercom.io
+js.driftt.com

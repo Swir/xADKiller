@@ -129,6 +129,15 @@ function parseDomainLine(line0) {
   if (!validDomain(s)) return null;
   return { action: "block", priority: 1, condition: { urlFilter: `||${s}^`, resourceTypes: [...ALL_TYPES] } };
 }
+function parseThirdPartyDomainLine(line0) {
+  const parsed = parseDomainLine(line0);
+  if (!parsed) return null;
+  return {
+    ...parsed,
+    priority: 5,
+    condition: { ...parsed.condition, domainType: "thirdParty" }
+  };
+}
 function ruleKey(parsed) { return JSON.stringify(parsed); }
 function ruleScore(parsed) {
   if (!parsed) return -999;
@@ -224,6 +233,11 @@ const standardBatches = [];
 
 const localDomains = fs.readFileSync(path.join(common, "rules", "domains.txt"), "utf8").split(/\r?\n/);
 addRules(standard, standardSeen, localDomains.map(parseDomainLine), STANDARD_CAP);
+
+const screenshotStandardThirdParty = fs.readFileSync(path.join(common, "rules", "screenshot-standard-third-party.txt"), "utf8").split(/\r?\n/);
+const screenshotUltraThirdParty = fs.readFileSync(path.join(common, "rules", "screenshot-ultra-third-party.txt"), "utf8").split(/\r?\n/);
+addRules(standard, standardSeen, screenshotStandardThirdParty.map(parseThirdPartyDomainLine), STANDARD_CAP);
+addRules(ultra, ultraSeen, screenshotUltraThirdParty.map(parseThirdPartyDomainLine), ULTRA_CAP);
 
 for (const source of SOURCES) {
   try {
