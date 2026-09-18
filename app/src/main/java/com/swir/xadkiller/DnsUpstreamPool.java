@@ -21,6 +21,8 @@ import java.util.Map;
  * every DNS query. Exactly one expired resolver is exposed as a half-open probe.
  * If every resolver is still cooling, one earliest-recovery server is retained as
  * a bounded emergency path so DNS does not become deterministically unavailable.
+ * The emergency attempt uses the minimum resolver timeout while every provider is
+ * still cooling, preventing repeated multi-second stalls during provider-wide failure.
  *
  * Persistently slow but technically successful resolvers also receive a bounded
  * ranking penalty. They remain usable as fallbacks and are not marked failed,
@@ -143,7 +145,11 @@ final class DnsUpstreamPool {
         if (state == null) return 2200;
         int adaptive = (int)Math.round(900d + state.ewmaRttMs * 4.0d + state.failureStreak * 180d);
         adaptive = Math.max(MIN_TIMEOUT_MS, Math.min(MAX_TIMEOUT_MS, adaptive));
-        if (isHalfOpen(state, nowMs)) adaptive = Math.min(adaptive, HALF_OPEN_TIMEOUT_MAX_MS);
+        // If every provider is still inside its cooldown, order() exposes exactly one
+        // emergency attempt. Cap that attempt at the minimum timeout so a total resolver
+        // outage cannot turn every application DNS lookup into a repeated 3.2 s stall.
+        if (state.cooldownUntilMs > nowMs && allResolversCooling(nowMs)) adaptive = MIN_TIMEOUT_MS;
+        else if (isHalfOpen(state, nowMs)) adaptive = Math.min(adaptive, HALF_OPEN_TIMEOUT_MAX_MS);
         return adaptive;
     }
 
@@ -276,6 +282,14 @@ final class DnsUpstreamPool {
                     || (state.cooldownUntilMs == best.cooldownUntilMs && state.ordinal < best.ordinal)) best = state;
         }
         return best;
+    }
+
+    private boolean allResolversCooling(long nowMs) {
+        if (states.isEmpty()) return false;
+        for (State state : states) {
+            if (state.failureStreak == 0 || state.cooldownUntilMs <= nowMs) return false;
+        }
+        return true;
     }
 
     private boolean isHalfOpen(State state, long nowMs) {
