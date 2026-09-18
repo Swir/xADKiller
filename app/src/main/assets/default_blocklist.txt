@@ -86,6 +86,42 @@ segment.com
 mixpanel.com
 amplitude.com
 
+# High-confidence cross-platform misses observed during the 2026-09-18 manual
+# browser validation. Only clear ad, attribution, analytics, telemetry or
+# fingerprinting endpoints are included here; consent, playback, feature-flag
+# and checkout/fraud infrastructure remains excluded from the offline default.
+liftoff.io
+ironsource.mobi
+indexexchange.com
+udc.yahoo.com
+udcm.yahoo.com
+partnerads.ysm.yahoo.com
+log.fc.yahoo.com
+bat.bing.com
+ads.microsoft.com
+appmetrica.yandex.ru
+claritybt.freshmarketer.com
+fwtracks.freshmarketer.com
+quantcast.com
+cloudflareinsights.com
+posthog.com
+rudderstack.com
+rudderlabs.com
+prod.uidapi.com
+lr-ingest.com
+tr.facebook.com
+analytics.x.com
+ads.x.com
+pixel.quora.com
+qevents.quora.com
+px.srvcs.tumblr.com
+ads.vk.com
+log.byteoversea.com
+smartclip.com
+mads-eu.amazon.com
+fwmrm.net
+fingerprintjs.com
+
 # High-confidence malware/adware delivery infrastructure commonly present in
 # public DNS blocklists. Keep this starter list intentionally conservative.
 zedo.com

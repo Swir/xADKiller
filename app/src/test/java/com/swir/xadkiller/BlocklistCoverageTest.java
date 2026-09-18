@@ -41,7 +41,20 @@ public class BlocklistCoverageTest {
             "cdn.logrocket.com", "api.segment.io", "api.mixpanel.com", "api2.amplitude.com",
             "c1.zedo.com", "serve.popads.net", "go.propellerads.com", "main.exoclick.com",
             "ads.trafficjunky.com", "adserver.juicyads.com", "hilltopads.net", "adsterra.com",
-            "clickadu.com"
+            "clickadu.com",
+
+            // High-confidence misses collected during the user's 2026-09-18 manual Chrome test.
+            // They are useful cross-platform DNS fixtures too; deliberately risky consent,
+            // playback, feature-flag and checkout/fraud endpoints are not promoted here.
+            "api.liftoff.io", "ironsource.mobi", "cdn.indexexchange.com",
+            "udc.yahoo.com", "udcm.yahoo.com", "partnerads.ysm.yahoo.com", "log.fc.yahoo.com",
+            "bat.bing.com", "ads.microsoft.com", "appmetrica.yandex.ru",
+            "claritybt.freshmarketer.com", "fwtracks.freshmarketer.com", "quantcast.com",
+            "cloudflareinsights.com", "app.posthog.com", "cdn.rudderstack.com",
+            "cdn.rudderlabs.com", "prod.uidapi.com", "cdn.lr-ingest.com", "tr.facebook.com",
+            "analytics.x.com", "ads.x.com", "pixel.quora.com", "qevents.quora.com",
+            "px.srvcs.tumblr.com", "ads.vk.com", "log.byteoversea.com", "smartclip.com",
+            "mads-eu.amazon.com", "mssl.fwmrm.net", "api.fpjs.io"
     };
 
     private static final String[] BENIGN_FIXTURES = {
@@ -53,7 +66,7 @@ public class BlocklistCoverageTest {
 
     @Test public void offlineStarterListHasCompleteSyntheticCoverageAndNoControlHits() throws Exception {
         Set<String> domains = readStarterDomains();
-        assertTrue("starter list unexpectedly small: " + domains.size(), domains.size() >= 80);
+        assertTrue("starter list unexpectedly small: " + domains.size(), domains.size() >= 120);
 
         int hits = 0;
         for (String host : AD_FIXTURES) if (covered(host, domains)) hits++;
