@@ -80,12 +80,15 @@ jobs:
           node --check tests/chrome-performance-budget.mjs
           node --check tools/dedupe-rule-layers.mjs
           node --check tools/rule-quality.mjs
+          node --check tools/feed-v2-migration-preflight.mjs
           node --check tools/validate-feed-checksums.mjs
           node --check tools/validate-v150-safety.mjs
       - name: GitHub feed integrity regression test
         run: npm run test:feeds
       - name: Feed v2 consumer compatibility regression
         run: npm run test:feed-v2-consumers
+      - name: Feed v2 production migration parity preflight
+        run: npm run test:feed-v2-migration
       - name: Production GitHub feed checksum audit
         run: npm run test:feed-checksums
       - name: Install Chromium
