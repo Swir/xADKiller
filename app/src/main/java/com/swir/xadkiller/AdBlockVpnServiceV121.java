@@ -156,6 +156,11 @@ public class AdBlockVpnServiceV121 extends VpnService {
                 PrivateDnsHelper.Snapshot dns = PrivateDnsHelper.inspect(this);
                 if (dns.isStrict()) SystemLogStore.warn(this, "PRIVATE_DNS", "Start przy STRICT: " + dns.pretty());
 
+                long networkEpochAt = System.currentTimeMillis();
+                UPSTREAM_POOL.onNetworkChanged(networkEpochAt);
+                SystemLogStore.info(this, "UPSTREAM", "Nowa epoka sieci VPN • reset tylko RTT/slow state • " +
+                        UPSTREAM_POOL.snapshot(networkEpochAt));
+
                 SystemLogStore.info(this, "VPN", "Budowanie TUN • client=" + VPN_CLIENT + " • dns=" + VPN_DNS);
                 Builder b = new Builder()
                         .setSession("xADKiller")
