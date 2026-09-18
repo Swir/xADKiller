@@ -74,6 +74,7 @@ jobs:
           node --check tests/chrome-temporary-pause-runtime.mjs
           node --check tests/chrome-feed-guard-runtime.mjs
           node --check tests/chrome-feed-offline-fallback.mjs
+          node --check tests/chrome-feed-retry-contract.mjs
           node --check tests/feed-v2-consumer-compat.mjs
           node --check tests/rule-quality-ranking.mjs
           node --check tests/chrome-blocking-benchmark.mjs
@@ -88,6 +89,8 @@ jobs:
           node --check tools/validate-v150-safety.mjs
       - name: GitHub feed integrity anti-replay and downgrade regression test
         run: npm run test:feeds
+      - name: Feed transient retry contract 429 Abort recovery regression
+        run: node tests/chrome-feed-retry-contract.mjs
       - name: Feed v2 consumer compatibility regression
         run: npm run test:feed-v2-consumers
       - name: Feed v2 production migration parity preflight

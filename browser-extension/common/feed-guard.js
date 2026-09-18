@@ -65,6 +65,21 @@
     const shift = Math.min(6, failures - 1);
     return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * (2 ** shift));
   }
+  function parseRetryAfter(value, now = Date.now()) {
+    const raw = String(value || "").trim();
+    if (!raw) return 0;
+
+    let waitMs = 0;
+    if (/^\d+$/.test(raw)) {
+      waitMs = Number(raw) * 1000;
+    } else {
+      const retryAt = Date.parse(raw);
+      if (!Number.isFinite(retryAt)) return 0;
+      waitMs = retryAt - now;
+    }
+    if (!Number.isFinite(waitMs) || waitMs <= 0) return 0;
+    return Math.min(RETRY_MAX_MS, Math.max(RETRY_BASE_MS, Math.ceil(waitMs)));
+  }
   function retryWaitMs(feedHealth, now = Date.now()) {
     const nextRetryAt = Math.max(0, Number(feedHealth?.nextRetryAt || 0));
     return nextRetryAt > now ? nextRetryAt - now : 0;
@@ -122,8 +137,11 @@
       const consecutiveFailures = ok
         ? 0
         : Math.min(999, Math.max(0, Number(previous.consecutiveFailures || 0)) + 1);
+      const retryAfterMs = !ok && isRetryableFailure(error)
+        ? Math.min(RETRY_MAX_MS, Math.max(0, Number(meta.retryAfterMs || 0)))
+        : 0;
       const nextRetryAt = !ok && isRetryableFailure(error)
-        ? now + backoffMs(consecutiveFailures)
+        ? now + Math.max(backoffMs(consecutiveFailures), retryAfterMs)
         : 0;
 
       feeds[kind] = {
@@ -143,6 +161,7 @@
         highestFeedSchema:highestSchema,
         nextRetryAt,
         backoffLevel:nextRetryAt ? consecutiveFailures : 0,
+        lastRetryAfterMs:nextRetryAt ? retryAfterMs : 0,
         rollbackPreviousVersion:ok
           ? (schema === 2 ? String(meta.previousVersion || "").slice(0, 80) : "")
           : String(previous.rollbackPreviousVersion || "").slice(0, 80),
@@ -293,7 +312,11 @@
       const response = await nativeFetch(input, init);
       const latency = Date.now() - started;
       if (!response?.ok) {
-        await recordHealth(kind, false, "", `http_${Number(response?.status || 0)}`, latency);
+        const reason = `http_${Number(response?.status || 0)}`;
+        const retryAfterMs = isRetryableFailure(reason)
+          ? parseRetryAfter(response?.headers?.get?.("retry-after"), Date.now())
+          : 0;
+        await recordHealth(kind, false, "", reason, latency, 0, { retryAfterMs });
         return response;
       }
       const parsed = await validate(kind, response);
@@ -329,6 +352,7 @@
     validateTransition,
     isRetryableFailure,
     backoffMs,
+    parseRetryAfter,
     retryWaitMs,
     readHealth
   });
