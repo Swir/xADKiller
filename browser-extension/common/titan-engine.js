@@ -27,7 +27,11 @@
     "ad.xiaomi.com","ads.huawei.com","adsfs.oppomobile.com","ads.oppomobile.com","ads.heytapmobi.com"
   ]);
   const STRONG_PATH = /\/(?:ads?|adserver|adservice|adrequest|pagead|gampad|securepubads|prebid|vast|vmap|ima3|commercial|sponsor|sponsored|promoted)(?:[._\/-]|$)/i;
-  const STRONG_QUERY = /(?:^|[?&])(?:ad_unit|adunit|ad_slot|adslot|gdfp_req|iu|campaign|impression)=/i;
+  // Defense in depth: keep the worker aligned with Network Scout and only accept
+  // explicit ad-slot query keys. Generic campaign/impression parameters occur in
+  // legitimate analytics/navigation and must never create learned session rules,
+  // even if a future extension component sends titanLearnResource directly.
+  const STRONG_QUERY = /(?:^|[?&])(?:ad_unit|adunit|ad_slot|adslot|gdfp_req|iu)=/i;
 
   let packagedSessionPromise = null;
   let titanFeedPromise = null;
