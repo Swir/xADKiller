@@ -12,7 +12,7 @@
     "test:language": "node tests/chrome-language-runtime.mjs",
     "test:memory": "node tests/chrome-adaptive-memory-runtime.mjs",
     "test:pause": "node tests/chrome-temporary-pause-runtime.mjs",
-    "test:feeds": "node tests/chrome-feed-rollback-provenance.mjs && node tests/chrome-feed-guard-runtime.mjs && node tests/chrome-feed-offline-fallback.mjs",
+    "test:feeds": "node tests/chrome-feed-cache-integrity.mjs && node tests/chrome-feed-rollback-provenance.mjs && node tests/chrome-feed-guard-runtime.mjs && node tests/chrome-feed-offline-fallback.mjs",
     "test:feed-v2-consumers": "node tests/feed-v2-consumer-compat.mjs",
     "test:feed-v2-migration": "node tools/feed-v2-migration-preflight.mjs",
     "test:feed-v2-artifacts": "node tools/validate-feed-v2-candidate-artifacts.mjs",

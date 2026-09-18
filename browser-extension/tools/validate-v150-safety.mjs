@@ -12,6 +12,7 @@ for (const rel of [
   "feed-transport-guard.js",
   "feed-rollback-provenance.js",
   "feed-guard.js",
+  "feed-cache-integrity.js",
   "feed-health-ui.js",
   "service-worker.js",
   "popup.html",
@@ -28,6 +29,7 @@ const titan = read("titan-engine.js");
 const feedTransport = read("feed-transport-guard.js");
 const rollbackGuard = read("feed-rollback-provenance.js");
 const feedGuard = read("feed-guard.js");
+const cacheIntegrity = read("feed-cache-integrity.js");
 const feedUi = read("feed-health-ui.js");
 const popupHtml = read("popup.html");
 const popupJs = read("popup.js");
@@ -35,6 +37,7 @@ const popupJs = read("popup.js");
 if (!worker.includes('"feed-transport-guard.js"') || worker.indexOf('"feed-transport-guard.js"') > worker.indexOf('"feed-guard.js"')) fail("Feed transport guard must load before Feed Guard");
 if (!worker.includes('"feed-rollback-provenance.js"') || worker.indexOf('"feed-rollback-provenance.js"') > worker.indexOf('"feed-guard.js"')) fail("Rollback provenance guard must load before Feed Guard");
 if (!worker.includes('"feed-guard.js"') || worker.indexOf('"feed-guard.js"') > worker.indexOf('"background.js"')) fail("Feed Guard must load before network feed consumers");
+if (!worker.includes('"feed-cache-integrity.js"') || worker.indexOf('"feed-cache-integrity.js"') > worker.indexOf('"background.js"')) fail("Feed cache integrity guard must load before feed consumers");
 if (!worker.includes('"temporary-site-guard.js"')) fail("temporary Breakage Guard is not imported by service-worker.js");
 for (const token of ["redirect:\"error\"","credentials:\"omit\"","referrerPolicy:\"no-referrer\"","transport_provenance","content_length","payload_size"]) {
   if (!feedTransport.includes(token)) fail(`Feed transport hardening missing ${token}`);
@@ -50,6 +53,9 @@ if (!titan.includes("xadTitanHostMemoryV1") || !titan.includes("resetTitanMemory
 for (const token of ["xadFeedGuardHealthV1","getFeedGuardHealth","consecutiveFailures","lastVersion","lastError"]) {
   if (!feedGuard.includes(token)) fail(`Feed Guard health diagnostics missing ${token}`);
 }
+for (const token of ["SHA-256","xadCacheDigestLiveShieldV1","xadCacheDigestLiveMatrixV1","xadCacheDigestTitanV1","subtle.digest","callRemove(purge)"]) {
+  if (!cacheIntegrity.includes(token)) fail(`Feed cache integrity hardening missing ${token}`);
+}
 for (const token of ["getFeedGuardHealth","feedHealthBadge","DEGRADED","Cached protection remains active"]) {
   if (!feedUi.includes(token)) fail(`Feed Guard UI missing ${token}`);
 }
@@ -57,7 +63,7 @@ if (!popupHtml.includes('id="tempPauseBtn"') || !popupHtml.includes('id="pauseBa
 if (!popupHtml.includes('id="feedHealthBadge"') || !popupHtml.includes('src="feed-health-ui.js"')) fail("Feed Guard health card is not wired into popup");
 if (!popupJs.includes("setTemporarySitePause") || !popupJs.includes("getTemporarySitePause") || !popupJs.includes("resetTitanMemory")) fail("v1.5 popup wiring incomplete");
 
-for (const rel of ["temporary-site-guard.js","titan-engine.js","feed-transport-guard.js","feed-rollback-provenance.js","feed-guard.js","feed-health-ui.js","popup.js"]) {
+for (const rel of ["temporary-site-guard.js","titan-engine.js","feed-transport-guard.js","feed-rollback-provenance.js","feed-guard.js","feed-cache-integrity.js","feed-health-ui.js","popup.js"]) {
   const code = read(rel);
   if (/\beval\s*\(|\bnew\s+Function\s*\(/.test(code)) fail(`${rel}: dynamic code execution forbidden`);
   if (/importScripts\s*\(\s*["']https?:/i.test(code)) fail(`${rel}: remote hosted code forbidden`);
@@ -74,4 +80,4 @@ for (const lang of ["en","pl"]) {
   }
 }
 
-if (!process.exitCode) console.log("OK: v1.5 Adaptive Memory + Breakage Guard + Feed transport/rollback provenance/validation safety invariants validated");
+if (!process.exitCode) console.log("OK: v1.5 Adaptive Memory + Breakage Guard + Feed transport/rollback/cache integrity/validation safety invariants validated");
