@@ -32,8 +32,30 @@ public class DnsPacketHardeningTest {
         byte[] base = query(0x0100, 1);
         byte[] dns = withAdditional(base, 41, new byte[0]);
         int opt = base.length;
-        DnsPacket.put16(dns, opt + 7, 0x8000); // DO is the defined EDNS request flag.
+        DnsPacket.put16(dns, opt + 7, 0x8000);
         assertNotNull(DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length));
+    }
+
+    @Test public void clampsOversizedEdnsUdpPayloadForUpstreamStability() {
+        byte[] base = query(0x0100, 1);
+        byte[] dns = withAdditional(base, 41, new byte[0]);
+        int opt = base.length;
+        DnsPacket.put16(dns, opt + 3, 4096);
+        DnsPacket.Query parsed = DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length);
+        assertNotNull(parsed);
+        assertEquals(4096, DnsPacket.u16(dns, opt + 3));
+        assertEquals(1232, DnsPacket.u16(parsed.dnsPayload, opt + 3));
+    }
+
+    @Test public void preservesSmallerEdnsUdpPayload() {
+        byte[] base = query(0x0100, 1);
+        byte[] dns = withAdditional(base, 41, new byte[0]);
+        int opt = base.length;
+        DnsPacket.put16(dns, opt + 3, 512);
+        DnsPacket.Query parsed = DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length);
+        assertNotNull(parsed);
+        assertEquals(512, DnsPacket.u16(parsed.dnsPayload, opt + 3));
+        assertArrayEquals(dns, parsed.dnsPayload);
     }
 
     @Test public void stripsEcsAndCookieButPreservesOtherEdnsOptionsAndDoFlag() {
@@ -147,7 +169,6 @@ public class DnsPacketHardeningTest {
 
     @Test public void rejectsTruncatedEdnsRdata() {
         byte[] dns = withAdditional(query(0x0100, 1), 41, new byte[] { 1, 2 });
-        // RDLEN starts nine bytes after the OPT root-owner byte.
         int opt = query(0x0100, 1).length;
         DnsPacket.put16(dns, opt + 9, 8);
         assertNull(DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length));
@@ -179,9 +200,6 @@ public class DnsPacketHardeningTest {
         byte[] packet = packet(query(0x0100, 1), 53000, 0x4000);
         byte[] padded = Arrays.copyOf(packet, packet.length + 8);
         DnsPacket.put16(padded, 2, padded.length);
-        // Leave the UDP length at the original datagram size. A TUN IPv4 packet
-        // with extra unexplained IP payload is malformed/ambiguous and must not
-        // be partially parsed as DNS.
         assertNull(DnsPacket.parseIpv4UdpQuery(padded, padded.length));
     }
 
@@ -208,15 +226,13 @@ public class DnsPacketHardeningTest {
     @Test public void acceptsValidNonZeroIncomingUdpChecksum() {
         byte[] packet = packet(query(0x0100, 1), 53000, 0x4000);
         applyUdpChecksum(packet);
-        assertTrue("test packet should carry a non-zero UDP checksum", DnsPacket.u16(packet, 26) != 0);
+        assertTrue(DnsPacket.u16(packet, 26) != 0);
         assertNotNull(DnsPacket.parseIpv4UdpQuery(packet, packet.length));
     }
 
     @Test public void rejectsCorruptedIncomingUdpDatagramWhenChecksumIsPresent() {
         byte[] packet = packet(query(0x0100, 1), 53000, 0x4000);
         applyUdpChecksum(packet);
-        // Corrupt only the DNS transaction id after calculating the checksum. Framing
-        // remains valid, so rejection specifically proves checksum validation happens.
         packet[28] ^= 0x01;
         assertNull(DnsPacket.parseIpv4UdpQuery(packet, packet.length));
     }
@@ -231,12 +247,12 @@ public class DnsPacketHardeningTest {
         assertNotNull(reply);
 
         int wireChecksum = DnsPacket.u16(reply, 26);
-        assertTrue("synthesized UDP checksum must be present", wireChecksum != 0);
-        assertEquals("valid UDP checksum must fold to all ones", 0xFFFF, udpPseudoHeaderSum(reply));
+        assertTrue(wireChecksum != 0);
+        assertEquals(0xFFFF, udpPseudoHeaderSum(reply));
 
         byte[] corrupted = Arrays.copyOf(reply, reply.length);
         corrupted[corrupted.length - 1] ^= 0x01;
-        assertTrue("payload corruption must invalidate UDP checksum", udpPseudoHeaderSum(corrupted) != 0xFFFF);
+        assertTrue(udpPseudoHeaderSum(corrupted) != 0xFFFF);
     }
 
     private static byte[] query(int flags, int qdCount) {
@@ -251,8 +267,8 @@ public class DnsPacketHardeningTest {
         label(out, "example");
         label(out, "com");
         out.write(0);
-        write16(out, 1); // A
-        write16(out, 1); // IN
+        write16(out, 1);
+        write16(out, 1);
         return out.toByteArray();
     }
 
@@ -261,11 +277,11 @@ public class DnsPacketHardeningTest {
         byte[] base = Arrays.copyOf(query, query.length);
         DnsPacket.put16(base, 10, 1);
         out.write(base, 0, base.length);
-        out.write(0); // root owner required for OPT
+        out.write(0);
         write16(out, type);
-        write16(out, 1232); // advertised UDP payload size / CLASS for OPT
-        write16(out, 0); // extended rcode + version high half
-        write16(out, 0); // flags low half
+        write16(out, 1232);
+        write16(out, 0);
+        write16(out, 0);
         write16(out, rdata.length);
         out.write(rdata, 0, rdata.length);
         return out.toByteArray();
@@ -312,7 +328,7 @@ public class DnsPacketHardeningTest {
         DnsPacket.put16(packet, 26, 0);
         int checksum = (~udpPseudoHeaderSum(packet)) & 0xFFFF;
         DnsPacket.put16(packet, 26, checksum == 0 ? 0xFFFF : checksum);
-        assertEquals("constructed request checksum must be valid", 0xFFFF, udpPseudoHeaderSum(packet));
+        assertEquals(0xFFFF, udpPseudoHeaderSum(packet));
     }
 
     private static int udpPseudoHeaderSum(byte[] packet) {
@@ -321,7 +337,7 @@ public class DnsPacketHardeningTest {
             sum += ((packet[i] & 0xFF) << 8) | (packet[i + 1] & 0xFF);
         }
         int udpLength = DnsPacket.u16(packet, 24);
-        sum += 17; // zero byte + IPv4 protocol UDP
+        sum += 17;
         sum += udpLength;
         int end = 20 + udpLength;
         for (int i = 20; i + 1 < end; i += 2) {
