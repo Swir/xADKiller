@@ -36,6 +36,10 @@ import java.util.Map;
  * carrying an old RTT penalty forever would bias the new network with stale
  * information. Failure/circuit-breaker state is deliberately not forgotten by
  * this passive aging and still requires a bounded half-open recovery probe.
+ *
+ * A newly established VPN/network epoch can explicitly reset only latency-derived
+ * state. Lifetime success/failure counters and circuit-breaker failures remain
+ * intact, while RTT/slow penalties start from a neutral baseline for the new path.
  */
 final class DnsUpstreamPool {
     private static final int DEFAULT_RTT_MS = 180;
@@ -58,6 +62,7 @@ final class DnsUpstreamPool {
         double ewmaRttMs = DEFAULT_RTT_MS;
         int failureStreak;
         int slowStreak;
+        int latencySamples;
         long cooldownUntilMs;
         long successes;
         long failures;
@@ -114,19 +119,35 @@ final class DnsUpstreamPool {
         return adaptive;
     }
 
+    /**
+     * Starts a fresh latency epoch for a newly established network path.
+     * Failure/cooldown state is intentionally preserved: a previously failing
+     * resolver must still prove recovery through the bounded half-open probe.
+     */
+    synchronized void onNetworkChanged(long nowMs) {
+        for (State state : states) {
+            state.ewmaRttMs = DEFAULT_RTT_MS;
+            state.slowStreak = 0;
+            state.latencySamples = 0;
+            state.lastObservationAtMs = nowMs;
+            state.lastLatencyDecayAtMs = nowMs;
+        }
+    }
+
     synchronized void recordSuccess(String server, long rttMs, long nowMs) {
         State state = byServer.get(server);
         if (state == null) return;
         ageStateLatency(state, nowMs);
         double rawSample = Math.max(1d, Math.min(5000d, (double)rttMs));
         double sample = rawSample;
-        if (state.successes >= OUTLIER_BASELINE_SUCCESSES) {
+        if (state.latencySamples >= OUTLIER_BASELINE_SUCCESSES) {
             double ceiling = Math.max(OUTLIER_MIN_CEILING_MS, state.ewmaRttMs * OUTLIER_EWMA_MULTIPLIER);
             sample = Math.min(rawSample, ceiling);
         }
-        state.ewmaRttMs = state.successes == 0
+        state.ewmaRttMs = state.latencySamples == 0
                 ? sample
                 : (state.ewmaRttMs * 0.72d + sample * 0.28d);
+        state.latencySamples++;
         state.successes++;
         state.failureStreak = 0;
         state.cooldownUntilMs = 0L;
