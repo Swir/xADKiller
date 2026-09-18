@@ -28,7 +28,7 @@ xADKiller is a privacy-focused Chrome Manifest V3 blocker maintained by **SWIR**
 | Development branch | `chrome-v150-adaptive-memory` |
 | Stable store baseline | v1.4.0 TITAN on `main` |
 | Chrome requirement | Chrome 121+ |
-| Verified development progress | **76.9% — 20/26 roadmap items** |
+| Verified development progress | **80.8% — 21/26 roadmap items** |
 | Release readiness | **BLOCKED** — remaining hardening + manual browser validation |
 
 The roadmap percentage measures implemented development work. It is **not** ad-blocking effectiveness and it does not mean the release gate has passed.
@@ -41,12 +41,12 @@ The roadmap percentage measures implemented development work. It is **not** ad-b
 | Adaptive Memory | Learns only high-confidence tracker/ad hosts locally, with bounded storage, TTL cleanup and reset control. |
 | Breakage Guard | Provides temporary per-site recovery without immediately disabling the core protection stack. |
 | Cross-layer rule dedupe | Deterministically removes equivalent protection rules across STANDARD/ULTRA static layers, packaged dynamic intelligence and TITAN session rules, with a CI regression gate. |
-| Feed Guard | Validates approved GitHub protection feeds, schema, age, size and anti-shrink invariants before new data can replace a known-good cache. |
+| Feed Guard | Validates approved GitHub protection feeds, schema, age, size, anti-shrink and anti-replay/downgrade invariants before new data can replace a known-good cache. |
 | Data-only updates | Live Shield, Live Matrix and TITAN feeds contain rules/signatures only; executable logic stays inside the packaged extension. |
-| Offline fallback | A failed, malformed or unavailable live feed falls back to the last validated cached protection data. |
+| Offline fallback | A failed, malformed or unavailable live feed falls back to the last validated cached protection data; transient GitHub/network failures use bounded local retry backoff instead of repeated fetches. |
 | PL / EN UI | Maintained popup controls and diagnostics are available in Polish and English. |
 | No-COMPAT active line | The development build does not enable the legacy COMPAT allow-rules layer. |
-| Reproducible gates | CI exercises Chromium runtime, cross-layer dedupe, Shadow DOM, real-page soak, performance, feed integrity, breakage and blocking benchmarks. |
+| Reproducible gates | CI exercises Chromium runtime, cross-layer dedupe, Shadow DOM, real-page soak, performance, feed integrity/offline fallback, breakage and blocking benchmarks. |
 
 ## 🚀 Quick Start
 
@@ -110,7 +110,7 @@ The live feed path is intentionally separated from executable logic. Remote Java
 
 The authoritative Chrome roadmap is [`browser-extension/ROADMAP_CHROME.md`](browser-extension/ROADMAP_CHROME.md).
 
-Current verified scope: **20 / 26 = 76.9%**. Release readiness remains **BLOCKED** until all remaining functional/performance work and manual browser regression testing are satisfactory.
+Current verified scope: **21 / 26 = 80.8%**. Release readiness remains **BLOCKED** until all remaining functional/performance work and manual browser regression testing are satisfactory.
 
 ## 📦 Releases
 
@@ -124,6 +124,7 @@ No merge to `main` or store update is justified by a green build alone.
 - No remote executable code in the live protection-feed mechanism.
 - No telemetry backend is required for Adaptive Memory or Breakage Guard.
 - Feed corruption/network failure must not replace the last validated cache.
+- Transient feed transport failures use bounded local backoff, while schema/data validation failures remain immediately retryable so corrected protection data is not artificially delayed.
 - Cross-layer dedupe removes semantically equivalent generated rules but does not replace functional browsing/regression testing.
 - DNS/URL/content heuristics can produce false positives, so recovery controls and regression fixtures are part of the release gate.
 - Deterministic benchmark scores describe the repository's fixed fixtures, not every advertisement or website on the Internet.
