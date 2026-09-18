@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.VpnService;
 import android.os.Build;
 
 public class BootReceiverV121 extends BroadcastReceiver {
@@ -22,19 +23,33 @@ public class BootReceiverV121 extends BroadcastReceiver {
         boolean wasRunning = prefs.getBoolean("running", false);
         long heartbeatAt = prefs.getLong(AdBlockVpnServiceV121.KEY_HEARTBEAT, 0L);
         long now = System.currentTimeMillis();
-        boolean shouldStart = VpnLifecycleStartPolicy.shouldStart(action, auto, wasRunning, heartbeatAt, now);
+        boolean lifecycleAllowsStart = VpnLifecycleStartPolicy.shouldStart(action, auto, wasRunning, heartbeatAt, now);
 
         // BOOT_COMPLETED and MY_PACKAGE_REPLACED both imply the old process is gone.
         // Always clear pre-restart liveness before making a start decision, including the
-        // "autostart disabled" and stale-heartbeat paths. This prevents the UI from showing
-        // a dead pre-reboot/pre-update VPN as active when no replacement service is started.
+        // "autostart disabled", stale-heartbeat and missing-VPN-consent paths. This prevents
+        // the UI from showing a dead pre-reboot/pre-update VPN as active.
         prefs.edit()
                 .putBoolean("running", false)
                 .putLong(AdBlockVpnServiceV121.KEY_HEARTBEAT, 0)
                 .apply();
 
+        boolean vpnConsentGranted = false;
+        if (lifecycleAllowsStart) {
+            try {
+                vpnConsentGranted = VpnService.prepare(context) == null;
+            } catch (Exception error) {
+                SystemLogStore.error(context, "BOOT", "Nie można potwierdzić zgody VPN przed restartem", error);
+            }
+        }
+
+        boolean shouldStart = VpnLifecycleStartPolicy.shouldStartWithConsent(
+                action, auto, wasRunning, heartbeatAt, now, vpnConsentGranted);
+
         if (!shouldStart) {
-            if (VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED.equals(action) && wasRunning) {
+            if (lifecycleAllowsStart && !vpnConsentGranted) {
+                SystemLogStore.warn(context, "BOOT", "Pomijam autostart/restart: zgoda VPN nie jest już aktywna");
+            } else if (VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED.equals(action) && wasRunning) {
                 SystemLogStore.warn(context, "BOOT", "Pomijam wznowienie po aktualizacji: brak świeżego heartbeat aktywnego VPN");
             }
             return;

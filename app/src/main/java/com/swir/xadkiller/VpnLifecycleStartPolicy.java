@@ -30,6 +30,11 @@ final class VpnLifecycleStartPolicy {
         return false;
     }
 
+    static boolean shouldStartWithConsent(String action, boolean autoStartEnabled, boolean wasRunningBeforeRestart,
+                                          long heartbeatAtMs, long nowMs, boolean vpnConsentGranted) {
+        return vpnConsentGranted && shouldStart(action, autoStartEnabled, wasRunningBeforeRestart, heartbeatAtMs, nowMs);
+    }
+
     static boolean isRecentHeartbeat(long heartbeatAtMs, long nowMs) {
         if (heartbeatAtMs <= 0L || nowMs <= 0L) return false;
         long ageMs = nowMs - heartbeatAtMs;

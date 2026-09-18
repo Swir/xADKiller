@@ -39,6 +39,18 @@ public class VpnLifecycleStartPolicyTest {
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, true, true, NOW + 30_000L, NOW));
     }
 
+    @Test public void restartAlsoRequiresExistingVpnConsent() {
+        long freshHeartbeat = NOW - 5_000L;
+        assertTrue(VpnLifecycleStartPolicy.shouldStartWithConsent(
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, true, false, 0L, NOW, true));
+        assertFalse(VpnLifecycleStartPolicy.shouldStartWithConsent(
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, true, false, 0L, NOW, false));
+        assertTrue(VpnLifecycleStartPolicy.shouldStartWithConsent(
+                VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, false, true, freshHeartbeat, NOW, true));
+        assertFalse(VpnLifecycleStartPolicy.shouldStartWithConsent(
+                VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, false, true, freshHeartbeat, NOW, false));
+    }
+
     @Test public void restartActionsAreExplicitlyClassifiedForStaleStateCleanup() {
         assertTrue(VpnLifecycleStartPolicy.isManagedRestartAction(VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED));
         assertTrue(VpnLifecycleStartPolicy.isManagedRestartAction(VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED));
@@ -57,7 +69,9 @@ public class VpnLifecycleStartPolicyTest {
         for (String action : rejected) {
             assertFalse(VpnLifecycleStartPolicy.isManagedRestartAction(action));
             assertFalse(VpnLifecycleStartPolicy.shouldStart(action, true, true, NOW - 1_000L, NOW));
+            assertFalse(VpnLifecycleStartPolicy.shouldStartWithConsent(action, true, true, NOW - 1_000L, NOW, true));
         }
         assertFalse(VpnLifecycleStartPolicy.shouldStart(null, true, true, NOW - 1_000L, NOW));
+        assertFalse(VpnLifecycleStartPolicy.shouldStartWithConsent(null, true, true, NOW - 1_000L, NOW, true));
     }
 }
