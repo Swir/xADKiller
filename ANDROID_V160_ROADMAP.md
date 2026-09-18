@@ -8,13 +8,14 @@ This branch develops the Android APK independently from the current stable 1.5.1
 **Release readiness:** **BLOCKED** — manual physical-device VPN lifecycle and stability evidence is still required.
 
 ## Current validation snapshot — 2026-09-18
-- Development APK CI is **GREEN** after the DNS packet-integrity hardening batch: SWIR progress SVG consistency, privacy/network manifest gate, lint, DNS framing/EDNS0/incoming + synthesized UDP-checksum regression, full unit tests + deterministic benchmark, APK build/package validation, ZIP integrity and SHA-256 all passed on the functional head.
+- Development APK CI is **GREEN** after the DNS privacy/integrity hardening batch: SWIR progress SVG consistency, privacy/network manifest gate, lint, DNS framing/EDNS0 privacy scrub/incoming + synthesized UDP-checksum regression, full unit tests + deterministic benchmark, APK build/package validation, ZIP integrity and SHA-256 all passed on the functional head.
 - Deterministic offline DNS ad fixture coverage: **100.0% (96/96)**.
 - Benign DNS control false positives: **0/20**.
 - Bundled offline starter list: **95 high-confidence domains**, with larger maintained lists loaded at runtime.
 - DNS parser hardening requires the IPv4 payload to contain exactly one complete UDP datagram and rejects IPv4 fragments, inconsistent IP/UDP lengths, response packets, non-standard opcodes, ambiguous multi-question DNS messages and invalid source port 0. This prevents unexplained trailing IPv4 payload from being silently ignored by the DNS parser.
-- Incoming IPv4 DNS datagrams now verify every **non-zero UDP checksum** before parsing or forwarding; the legal IPv4 zero-checksum form remains accepted as “checksum not supplied” for compatibility. Dedicated regressions prove a valid non-zero checksum is accepted and a one-byte DNS corruption is rejected while framing remains otherwise valid.
+- Incoming IPv4 DNS datagrams verify every **non-zero UDP checksum** before parsing or forwarding; the legal IPv4 zero-checksum form remains accepted as “checksum not supplied” for compatibility. Dedicated regressions prove a valid non-zero checksum is accepted and a one-byte DNS corruption is rejected while framing remains otherwise valid.
 - Synthesized DNS replies carry a real IPv4 UDP checksum over the pseudo-header plus complete UDP payload instead of relying on the legal-but-weaker IPv4 zero-checksum convention. A dedicated regression verifies the wire checksum and proves a one-byte payload corruption invalidates it.
+- EDNS(0) forwarding now strips **Client Subnet (option 8)** and **COOKIE (option 10)** from validated intercepted queries before they are sent to xADKiller's public upstream resolver pool. This prevents client-network disclosure and resolver-scoped cookie state from crossing to a different upstream while preserving the OPT record, advertised UDP size, DNSSEC OK flag and other structurally valid EDNS options for compatibility.
 - Upstream DNS response validation rejects mismatched question/name/type/class, malformed receive lengths and DNS responses carrying the TC (truncated) flag so the resolver pool can fail over instead of forwarding an incomplete UDP answer.
 - Upstream DNS response framing validates every declared answer/authority/additional resource record with a bounded record count, backwards-only compressed owner pointers, exact RDATA bounds and no undeclared trailing bytes. Claimed-but-missing or partially truncated records are rejected before they can enter the VPN tunnel.
 - Upstream DNS health scoring is GREEN: failure cooldown/half-open recovery remains bounded, persistently slow but successful resolvers are demoted without being marked failed, and stale latency-only penalties decay after long idle periods so old RTT history cannot bias a later network path indefinitely.
@@ -55,6 +56,7 @@ No Release until all relevant build, lint, regression, stability, privacy, DNS/V
 - VPN start/stop/restart/boot lifecycle regression coverage where possible; physical-device validation remains required for the heartbeat and OS lifecycle transitions.
 - Parser/blocklist regression fixtures, including duplicate-inflated update rejection.
 - DNS packet malformed/fragmented/query-shape/exact IPv4↔UDP length regression fixtures.
+- EDNS(0) privacy scrub regression: Client Subnet and COOKIE must be removed before upstream forwarding, while the OPT record, DO flag and unrelated well-framed options remain intact.
 - Incoming DNS UDP checksum regression: accept the legal zero-checksum IPv4 form, verify a valid non-zero checksum and reject corrupted datagrams when a checksum is present.
 - Synthesized DNS response UDP checksum regression, including pseudo-header verification and corruption detection.
 - DNS upstream response regression fixtures including TC=1 truncated UDP rejection, declared RR framing, truncated RDATA, invalid forward owner-name compression pointers and undeclared trailing-byte rejection.
