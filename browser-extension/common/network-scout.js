@@ -6,6 +6,7 @@
   const STRONG_HOST = /(doubleclick|googlesyndication|googleadservices|amazon-adsystem|adnxs|adsrvr|pubmatic|rubicon|criteo|taboola|outbrain|smartadserver|adform|prebid|hotjar|mouseflow|luckyorange|fullstory|logrocket|appsflyer|adjust|branch|kochava|unityads|samsungads|xiaomi|huawei|oppomobile)/i;
   const STRONG_PATH = /\/(?:ads?|adserver|adservice|adrequest|pagead|gampad|securepubads|prebid|vast|vmap|ima3|commercial|sponsor|sponsored|promoted)(?:[._\/-]|$)/i;
   const STRONG_QUERY = /(?:^|[?&])(?:ad_unit|adunit|ad_slot|adslot|gdfp_req|iu|campaign|impression)=/i;
+  const LOCAL_SUFFIXES = [".local", ".localhost", ".lan", ".home", ".home.arpa", ".internal", ".localdomain"];
   const seen = new Set();
   let enabled = true;
   let mode = "standard";
@@ -14,6 +15,15 @@
   let sent = 0;
 
   function normalizeHost(v) { return String(v || "").trim().toLowerCase().replace(/^\.+|\.+$/g, ""); }
+  function isIpv4Literal(host) {
+    const parts = String(host || "").split(".");
+    return parts.length === 4 && parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) >= 0 && Number(part) <= 255);
+  }
+  function learningHostAllowed(value) {
+    const host = normalizeHost(value);
+    if (!host || isIpv4Literal(host) || host.includes(":") || host.startsWith("[") || host.endsWith("]")) return false;
+    return !LOCAL_SUFFIXES.some((suffix) => host.endsWith(suffix));
+  }
   function allowed() {
     const host = normalizeHost(location.hostname);
     return allowSites.some((entry) => {
@@ -30,7 +40,9 @@
       return d && Number.isFinite(until) && until > now && (host === d || host.endsWith("." + d));
     });
   }
-  function active() { return enabled && mode === "ultra" && !allowed() && !recovered(); }
+  function active() {
+    return enabled && mode === "ultra" && learningHostAllowed(location.hostname) && !allowed() && !recovered();
+  }
   function sameSite(a, b) {
     a = normalizeHost(a); b = normalizeHost(b);
     return !!a && !!b && (a === b || a.endsWith("." + b) || b.endsWith("." + a));
@@ -39,6 +51,7 @@
     let u;
     try { u = new URL(String(raw || ""), location.href); } catch (_) { return false; }
     if (!/^https?:$/.test(u.protocol)) return false;
+    if (!learningHostAllowed(location.hostname) || !learningHostAllowed(u.hostname)) return false;
     const own = sameSite(u.hostname, location.hostname);
     const pathQuery = `${u.pathname}${u.search}`;
     return (!own && STRONG_HOST.test(u.hostname)) || (own && STRONG_PATH.test(pathQuery)) || STRONG_QUERY.test(pathQuery);

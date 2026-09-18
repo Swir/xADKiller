@@ -1,6 +1,7 @@
 import puppeteer from "puppeteer-core";
 import { chromium } from "playwright";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
@@ -63,7 +64,32 @@ async function waitStats(popup, predicate, timeout = 12000) {
   throw new Error(`Adaptive Memory state timeout: ${JSON.stringify(last)}`);
 }
 
+async function startLocalFixture() {
+  return await new Promise((resolve, reject) => {
+    const server = http.createServer((req, res) => {
+      if (req.url === "/" || req.url?.startsWith("/?")) {
+        res.writeHead(200, { "content-type":"text/html; charset=utf-8" });
+        res.end(`<!doctype html><html><body><img src="/ads/banner.png"><script src="/adserver/runtime.js"></script></body></html>`);
+        return;
+      }
+      if (req.url === "/ads/banner.png") {
+        res.writeHead(204, { "content-type":"image/png" });
+        res.end();
+        return;
+      }
+      res.writeHead(200, { "content-type":"application/javascript; charset=utf-8" });
+      res.end("globalThis.__xadLocalFixtureLoaded=true;");
+    });
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      resolve({ server, port:typeof address === "object" && address ? address.port : 0 });
+    });
+  });
+}
+
 let browser = null;
+let localFixture = null;
 try {
   browser = await launch();
   let found = await findWorker(browser);
@@ -77,6 +103,25 @@ try {
   const mode = await send(popup, { type:"setMode", mode:"ultra" });
   if (!mode?.ok || mode.mode !== "ultra") throw new Error(`could not enter ULTRA: ${JSON.stringify(mode)}`);
   await delay(500);
+
+  // Network Scout must never learn private/local browsing context. A first-party
+  // /ads/ or /adserver/ path on a loopback/LAN/private hostname is not evidence of
+  // public ad-tech and persisting it could break routers, NAS/admin panels or local apps.
+  const beforeLocal = await send(popup, { type:"getTitanStats" });
+  if (!beforeLocal?.ok) throw new Error(`could not read memory before local fixture: ${JSON.stringify(beforeLocal)}`);
+  localFixture = await startLocalFixture();
+  if (!localFixture.port) throw new Error("local fixture did not bind a port");
+  const localPage = await browser.newPage();
+  await localPage.goto(`http://127.0.0.1:${localFixture.port}/`, { waitUntil:"networkidle0", timeout:12000 });
+  await delay(1200);
+  await localPage.close();
+  await new Promise((resolve) => localFixture.server.close(resolve));
+  localFixture = null;
+  const afterLocal = await send(popup, { type:"getTitanStats" });
+  if (!afterLocal?.ok || afterLocal.memory !== beforeLocal.memory || afterLocal.learned !== beforeLocal.learned) {
+    throw new Error(`local/private resource leaked into Adaptive Memory: before=${JSON.stringify(beforeLocal)} after=${JSON.stringify(afterLocal)}`);
+  }
+  log("Local/private learning guard", `memory=${afterLocal.memory} learned=${afterLocal.learned}`);
 
   const sample = { type:"titanLearnResource", url:"https://cdn-adnxs.example.net/runtime/ad.js", pageHost:"example.org" };
   const first = await send(popup, sample);
@@ -117,8 +162,9 @@ try {
   const finalStore = await found.worker.evaluate(async () => await chrome.storage.local.get({ xadTitanHostMemoryV1:[] }));
   if (finalStore.xadTitanHostMemoryV1?.length) throw new Error(`memory storage not cleared: ${JSON.stringify(finalStore)}`);
 
-  log("PASS", "persistent host-only memory, restart restore and user reset all verified");
+  log("PASS", "persistent host-only memory, local/private exclusion, restart restore and user reset all verified");
 } finally {
+  if (localFixture?.server) { try { await new Promise((resolve) => localFixture.server.close(resolve)); } catch (_) {} }
   if (browser) { try { await browser.close(); } catch (_) {} }
   try { fs.rmSync(profile, { recursive:true, force:true }); } catch (_) {}
 }
