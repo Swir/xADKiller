@@ -140,20 +140,24 @@
     for (const spec of specs) {
       if (!hasBundleData(safe, spec)) continue;
       const expected = String(safe[spec.digestKey] || "");
-      const actual = await digestBundle(safe, spec);
+      const purge = [...spec.keys, spec.digestKey];
+
       if (!expected) {
-        // Upgrade an existing validated cache in place. Its first offline read remains
-        // available, then every later fallback is bound to a deterministic SHA-256 seal.
-        writeChain = writeChain.then(() => callSet({ [spec.digestKey]:actual })).catch(() => {});
-        safe[spec.digestKey] = actual;
+        // A legacy/unsealed fallback has no integrity evidence. Do not return it even once:
+        // purge only this feed bundle and fall back to packaged/static protection until the
+        // next validated network refresh repopulates a newly sealed cache. This prevents a
+        // corrupted pre-upgrade cache from becoming trusted merely because it was first.
+        for (const key of purge) delete safe[key];
+        writeChain = writeChain.then(() => callRemove(purge)).catch(() => {});
         continue;
       }
+
+      const actual = await digestBundle(safe, spec);
       if (expected === actual) continue;
 
       // Corrupted/tampered fallback is never returned to feed consumers. Purge only this
       // feed bundle; packaged/static protection remains active and the next network fetch
       // can repopulate it through the normal Feed Guard path.
-      const purge = [...spec.keys, spec.digestKey];
       for (const key of purge) delete safe[key];
       writeChain = writeChain.then(() => callRemove(purge)).catch(() => {});
     }
