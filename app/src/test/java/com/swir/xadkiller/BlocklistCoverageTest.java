@@ -54,7 +54,7 @@ public class BlocklistCoverageTest {
             "cdn.rudderlabs.com", "prod.uidapi.com", "cdn.lr-ingest.com", "tr.facebook.com",
             "analytics.x.com", "ads.x.com", "pixel.quora.com", "qevents.quora.com",
             "px.srvcs.tumblr.com", "ads.vk.com", "log.byteoversea.com", "smartclip.com",
-            "mads-eu.amazon.com", "mssl.fwmrm.net", "api.fpjs.io"
+            "mads-eu.amazon.com", "mssl.fwmrm.net", "api.fingerprintjs.com"
     };
 
     private static final String[] BENIGN_FIXTURES = {
