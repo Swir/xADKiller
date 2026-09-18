@@ -51,6 +51,26 @@ public class VpnLifecycleStartPolicyTest {
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, false, true, freshHeartbeat, NOW, false));
     }
 
+    @Test public void duplicateManagedRestartBurstIsSuppressedWithoutCrossActionSuppression() {
+        long inside = NOW - VpnLifecycleStartPolicy.DUPLICATE_RESTART_WINDOW_MS + 1L;
+        long outside = NOW - VpnLifecycleStartPolicy.DUPLICATE_RESTART_WINDOW_MS - 1L;
+        assertTrue(VpnLifecycleStartPolicy.isDuplicateRestart(
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, inside, NOW));
+        assertTrue(VpnLifecycleStartPolicy.isDuplicateRestart(
+                VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED,
+                VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, inside, NOW));
+        assertFalse(VpnLifecycleStartPolicy.isDuplicateRestart(
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
+                VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, inside, NOW));
+        assertFalse(VpnLifecycleStartPolicy.isDuplicateRestart(
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, outside, NOW));
+        assertFalse(VpnLifecycleStartPolicy.isDuplicateRestart(
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, NOW + 1L, NOW));
+    }
+
     @Test public void restartActionsAreExplicitlyClassifiedForStaleStateCleanup() {
         assertTrue(VpnLifecycleStartPolicy.isManagedRestartAction(VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED));
         assertTrue(VpnLifecycleStartPolicy.isManagedRestartAction(VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED));
@@ -70,8 +90,10 @@ public class VpnLifecycleStartPolicyTest {
             assertFalse(VpnLifecycleStartPolicy.isManagedRestartAction(action));
             assertFalse(VpnLifecycleStartPolicy.shouldStart(action, true, true, NOW - 1_000L, NOW));
             assertFalse(VpnLifecycleStartPolicy.shouldStartWithConsent(action, true, true, NOW - 1_000L, NOW, true));
+            assertFalse(VpnLifecycleStartPolicy.isDuplicateRestart(action, action, NOW - 1_000L, NOW));
         }
         assertFalse(VpnLifecycleStartPolicy.shouldStart(null, true, true, NOW - 1_000L, NOW));
         assertFalse(VpnLifecycleStartPolicy.shouldStartWithConsent(null, true, true, NOW - 1_000L, NOW, true));
+        assertFalse(VpnLifecycleStartPolicy.isDuplicateRestart(null, null, NOW - 1_000L, NOW));
     }
 }

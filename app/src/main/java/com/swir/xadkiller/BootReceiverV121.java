@@ -8,6 +8,9 @@ import android.net.VpnService;
 import android.os.Build;
 
 public class BootReceiverV121 extends BroadcastReceiver {
+    private static final String KEY_LAST_RESTART_ACTION = "vpn_last_restart_action_v160";
+    private static final String KEY_LAST_RESTART_ATTEMPT_AT = "vpn_last_restart_attempt_at_v160";
+
     @Override public void onReceive(Context context, Intent intent) {
         if (context == null || intent == null) return;
 
@@ -19,10 +22,25 @@ public class BootReceiverV121 extends BroadcastReceiver {
         if (!managedRestart) return;
 
         SharedPreferences prefs = context.getSharedPreferences(BlocklistManager.PREFS, Context.MODE_PRIVATE);
+        long now = System.currentTimeMillis();
+        String lastRestartAction = prefs.getString(KEY_LAST_RESTART_ACTION, "");
+        long lastRestartAttemptAt = prefs.getLong(KEY_LAST_RESTART_ATTEMPT_AT, 0L);
+
+        // Some OEMs or update flows can redeliver the same lifecycle broadcast. Returning
+        // before touching liveness avoids clearing a freshly restarted VPN or launching a
+        // second foreground-service start for the same event burst.
+        if (VpnLifecycleStartPolicy.isDuplicateRestart(action, lastRestartAction, lastRestartAttemptAt, now)) {
+            SystemLogStore.info(context, "BOOT", "Pomijam zduplikowany sygnał restartu VPN: " + action);
+            return;
+        }
+        prefs.edit()
+                .putString(KEY_LAST_RESTART_ACTION, action)
+                .putLong(KEY_LAST_RESTART_ATTEMPT_AT, now)
+                .apply();
+
         boolean auto = prefs.getBoolean(BlocklistManager.KEY_AUTOSTART, true);
         boolean wasRunning = prefs.getBoolean("running", false);
         long heartbeatAt = prefs.getLong(AdBlockVpnServiceV121.KEY_HEARTBEAT, 0L);
-        long now = System.currentTimeMillis();
         boolean lifecycleAllowsStart = VpnLifecycleStartPolicy.shouldStart(action, auto, wasRunning, heartbeatAt, now);
 
         // BOOT_COMPLETED and MY_PACKAGE_REPLACED both imply the old process is gone.
