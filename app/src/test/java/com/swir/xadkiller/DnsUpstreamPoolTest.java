@@ -192,6 +192,21 @@ public class DnsUpstreamPoolTest {
         assertEquals(1800, pool.timeoutMs("1.1.1.1", 70_000L));
     }
 
+    @Test public void backwardClockCorrectionPreservesRemainingCooldown() {
+        DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
+        pool.recordFailure("1.1.1.1", 10_000L); // cooldown until 11_500
+        assertTrue(!"1.1.1.1".equals(pool.order(10_500L)[0]));
+
+        // Simulate a 5.5 second wall-clock correction backwards. Remaining
+        // cooldown should stay 1 second instead of stretching by the rollback.
+        assertTrue(!"1.1.1.1".equals(pool.order(5_000L)[0]));
+        assertTrue(!"1.1.1.1".equals(pool.order(5_999L)[0]));
+        assertEquals("1.1.1.1", pool.order(6_000L)[0]);
+        assertEquals(1, pool.failureStreak("1.1.1.1"));
+        assertEquals(1L, pool.failures("1.1.1.1"));
+        assertTrue(pool.snapshot(6_000L).contains("probe"));
+    }
+
     @Test public void diagnosticsContainOnlyResolverHealthAggregates() {
         DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
         pool.recordSuccess("1.1.1.1", 42L, 1_000L);
