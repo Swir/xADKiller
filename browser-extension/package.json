@@ -4,8 +4,8 @@
   "version": "1.4.0",
   "type": "module",
   "scripts": {
-    "build": "node --import ./tools/fetch-node-http.mjs tools/build-chrome-ultra.mjs && node --import ./tools/fetch-node-http.mjs tools/build-dynamic-intel.mjs && node --import ./tools/fetch-node-http.mjs tools/build-titan-session.mjs && node --import ./tools/fetch-node-http.mjs tools/build-titan-boost.mjs && node tools/stamp-build-meta.mjs && node tools/optimize-chrome-runtime.mjs",
-    "validate": "node tools/validate-chrome-ultra.mjs && node tools/validate-titan-boost.mjs",
+    "build": "node --import ./tools/fetch-node-http.mjs tools/build-chrome-ultra.mjs && node --import ./tools/fetch-node-http.mjs tools/build-dynamic-intel.mjs && node --import ./tools/fetch-node-http.mjs tools/build-titan-session.mjs && node --import ./tools/fetch-node-http.mjs tools/build-titan-boost.mjs && node tools/dedupe-rule-layers.mjs && node tools/stamp-build-meta.mjs && node tools/optimize-chrome-runtime.mjs",
+    "validate": "node tools/validate-chrome-ultra.mjs && node tools/validate-titan-boost.mjs && node tools/dedupe-rule-layers.mjs --check",
     "test:chrome": "node tests/chrome-ultra-runtime.mjs",
     "test:boost": "node tests/chrome-static-boost-runtime.mjs",
     "test:compat": "node tests/chrome-compat-runtime.mjs",
@@ -15,6 +15,7 @@
     "test:feeds": "node tests/chrome-feed-guard-runtime.mjs",
     "test:feed-v2-consumers": "node tests/feed-v2-consumer-compat.mjs",
     "test:feed-checksums": "node tools/validate-feed-checksums.mjs",
+    "test:layer-dedupe": "node tools/dedupe-rule-layers.mjs --check",
     "test:benchmark": "node tests/chrome-blocking-benchmark.mjs",
     "test:shadow-soak": "node tests/chrome-shadow-mutation-soak.mjs",
     "test:real-page": "node tests/chrome-real-page-soak.mjs",
