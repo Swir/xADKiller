@@ -19,6 +19,50 @@ public class DnsPacketHardeningTest {
         assertEquals(53000, parsed.sourcePort);
     }
 
+    @Test public void acceptsSingleWellFormedEdnsOptRecord() {
+        byte[] dns = withAdditional(query(0x0100, 1), 41, new byte[] { 0, 10, 0, 2, 1, 2 });
+        DnsPacket.Query parsed = DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length);
+        assertNotNull(parsed);
+        assertEquals("ads.example.com", parsed.host);
+    }
+
+    @Test public void rejectsUndeclaredTrailingDnsBytes() {
+        byte[] dns = Arrays.copyOf(query(0x0100, 1), query(0x0100, 1).length + 3);
+        dns[dns.length - 1] = 7;
+        assertNull(DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length));
+    }
+
+    @Test public void rejectsAnswerRecordsInsideQueryPacket() {
+        byte[] dns = query(0x0100, 1);
+        DnsPacket.put16(dns, 6, 1);
+        assertNull(DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length));
+    }
+
+    @Test public void rejectsAuthorityRecordsInsideQueryPacket() {
+        byte[] dns = query(0x0100, 1);
+        DnsPacket.put16(dns, 8, 1);
+        assertNull(DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length));
+    }
+
+    @Test public void rejectsMultipleAdditionalRecords() {
+        byte[] dns = withAdditional(query(0x0100, 1), 41, new byte[0]);
+        DnsPacket.put16(dns, 10, 2);
+        assertNull(DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length));
+    }
+
+    @Test public void rejectsNonOptAdditionalRecord() {
+        byte[] dns = withAdditional(query(0x0100, 1), 1, new byte[] { 1, 2, 3, 4 });
+        assertNull(DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length));
+    }
+
+    @Test public void rejectsTruncatedEdnsRdata() {
+        byte[] dns = withAdditional(query(0x0100, 1), 41, new byte[] { 1, 2 });
+        // RDLEN starts nine bytes after the OPT root-owner byte.
+        int opt = query(0x0100, 1).length;
+        DnsPacket.put16(dns, opt + 9, 8);
+        assertNull(DnsPacket.parseIpv4UdpQuery(packet(dns, 53000, 0x4000), 20 + 8 + dns.length));
+    }
+
     @Test public void rejectsFirstFragmentWithMoreFragmentsFlag() {
         byte[] packet = packet(query(0x0100, 1), 53000, 0x2000);
         assertNull(DnsPacket.parseIpv4UdpQuery(packet, packet.length));
@@ -85,6 +129,21 @@ public class DnsPacketHardeningTest {
         out.write(0);
         write16(out, 1); // A
         write16(out, 1); // IN
+        return out.toByteArray();
+    }
+
+    private static byte[] withAdditional(byte[] query, int type, byte[] rdata) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] base = Arrays.copyOf(query, query.length);
+        DnsPacket.put16(base, 10, 1);
+        out.write(base, 0, base.length);
+        out.write(0); // root owner required for OPT
+        write16(out, type);
+        write16(out, 1232); // advertised UDP payload size / CLASS for OPT
+        write16(out, 0); // extended rcode + version high half
+        write16(out, 0); // flags low half
+        write16(out, rdata.length);
+        out.write(rdata, 0, rdata.length);
         return out.toByteArray();
     }
 

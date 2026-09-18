@@ -59,13 +59,20 @@ final class DnsPacket {
         byte[] dns = Arrays.copyOfRange(packet, ihl + 8, ihl + 8 + dnsLen);
         int flags = u16(dns, 2);
         int qdCount = u16(dns, 4);
-        // Only standard single-question queries are supported. Reject response packets,
-        // exotic opcodes and multi-question packets so the blocking decision is never
-        // based on a different question than the one actually forwarded.
-        if ((flags & 0x8000) != 0 || (flags & 0x7800) != 0 || qdCount != 1) return null;
+        int anCount = u16(dns, 6);
+        int nsCount = u16(dns, 8);
+        int arCount = u16(dns, 10);
+        // Only standard single-question queries are supported. Query packets must not
+        // smuggle answer/authority records, and at most one additional record is allowed:
+        // a well-formed EDNS(0) OPT pseudo-record. This keeps the local blocking decision
+        // tied to one exact question while remaining compatible with modern Android DNS.
+        if ((flags & 0x8000) != 0 || (flags & 0x7800) != 0 || qdCount != 1
+                || anCount != 0 || nsCount != 0 || arCount > 1) return null;
 
         String host = extractQueryName(dns);
         if (host == null || host.isEmpty() || host.length() > 253) return null;
+        int qEnd = questionEnd(dns);
+        if (qEnd < 0 || !hasWellFormedQueryTail(dns, qEnd, arCount)) return null;
 
         byte[] srcIp = Arrays.copyOfRange(packet, 12, 16);
         byte[] dstIp = Arrays.copyOfRange(packet, 16, 20);
@@ -124,6 +131,25 @@ final class DnsPacket {
             pos += 1 + len;
         }
         return null;
+    }
+
+    /**
+     * Validate bytes after the single DNS question. Plain queries must end exactly at the
+     * question. Modern EDNS queries may carry one OPT pseudo-record (TYPE 41) with a root
+     * owner name and bounded RDATA. Any undeclared trailing bytes or other additional RR
+     * types are rejected rather than forwarded ambiguously through the VPN.
+     */
+    private static boolean hasWellFormedQueryTail(byte[] dns, int qEnd, int arCount) {
+        if (dns == null || qEnd < 12 || qEnd > dns.length) return false;
+        if (arCount == 0) return qEnd == dns.length;
+        if (arCount != 1) return false;
+
+        // OPT owner name MUST be the root label. Fixed fields after it are:
+        // TYPE(2), UDP payload size/class(2), extended RCODE+version+flags/TTL(4), RDLEN(2).
+        if (qEnd + 11 > dns.length || dns[qEnd] != 0) return false;
+        if (u16(dns, qEnd + 1) != 41) return false;
+        int rdLength = u16(dns, qEnd + 9);
+        return qEnd + 11 + rdLength == dns.length;
     }
 
     /**
