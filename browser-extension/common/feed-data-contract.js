@@ -154,6 +154,63 @@
     }
   }
 
+  function readQuantifier(source, index) {
+    const ch = source[index];
+    if (ch === "*" || ch === "+") return { end:index + 1, unbounded:true };
+    if (ch === "?") return { end:index + 1, unbounded:false };
+    if (ch !== "{") return null;
+    const close = source.indexOf("}", index + 1);
+    if (close < 0 || close - index > 16) return null;
+    const body = source.slice(index + 1, close);
+    if (!/^\d+(?:,\d*)?$/.test(body)) return null;
+    const comma = body.indexOf(",");
+    const unbounded = comma >= 0 && comma === body.length - 1;
+    return { end:close + 1, unbounded };
+  }
+
+  function hasUnsafeRegexStructure(source) {
+    if (/\\(?:[1-9]|k<)/.test(source)) return true;
+    const stack = [];
+    let escaped = false;
+    let inClass = false;
+    let lastClosedGroup = null;
+
+    for (let i = 0; i < source.length; i++) {
+      const ch = source[i];
+      if (escaped) { escaped = false; lastClosedGroup = null; continue; }
+      if (ch === "\\") { escaped = true; lastClosedGroup = null; continue; }
+      if (inClass) {
+        if (ch === "]") inClass = false;
+        continue;
+      }
+      if (ch === "[") { inClass = true; lastClosedGroup = null; continue; }
+      if (ch === "(") { stack.push({ hasUnbounded:false }); lastClosedGroup = null; continue; }
+      if (ch === ")") {
+        lastClosedGroup = stack.pop() || { hasUnbounded:false };
+        continue;
+      }
+
+      const quantifier = readQuantifier(source, i);
+      if (quantifier) {
+        if (lastClosedGroup?.hasUnbounded && quantifier.unbounded) return true;
+        if (quantifier.unbounded) {
+          for (const group of stack) group.hasUnbounded = true;
+        }
+        i = quantifier.end - 1;
+        lastClosedGroup = null;
+        continue;
+      }
+      if (!/\s/.test(ch)) lastClosedGroup = null;
+    }
+    return false;
+  }
+
+  function validRegexPattern(value) {
+    if (!isSafeText(value, 768)) return false;
+    try { new RegExp(value); } catch (_) { return false; }
+    return !hasUnsafeRegexStructure(value);
+  }
+
   function validateRegexList(value, field) {
     if (!validateArray(value, field, true, MAX_REGEX_PER_LIST)) return;
     const seen = new Set();
@@ -161,6 +218,7 @@
       if (!item || typeof item !== "object" || Array.isArray(item)) fail(`${field}_object`);
       if (!isSafeText(item.regex, 768)) fail(`${field}_regex`);
       try { new RegExp(item.regex); } catch (_) { fail(`${field}_regex`); }
+      if (hasUnsafeRegexStructure(item.regex)) fail(`${field}_regex_unsafe`);
       if (!validTypes(item.types)) fail(`${field}_types`);
       if (item.third_party !== undefined && typeof item.third_party !== "boolean") fail(`${field}_third_party`);
       for (const key of Object.keys(item)) {
@@ -234,6 +292,7 @@
     validDomain,
     validTypes,
     validCosmeticSelector,
+    validRegexPattern,
     validatePayload
   });
 })();
