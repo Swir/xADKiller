@@ -34,6 +34,30 @@ public class BlocklistTransportSecurityTest {
         assertFalse(BlocklistManager.isAllowedRemoteUrl("not a url"));
     }
 
+    @Test public void acceptsPlainTextFeedMimeAndRejectsExecutableOrErrorDocuments() {
+        assertTrue(BlocklistManager.isAllowedRemoteContentType("text/plain"));
+        assertTrue(BlocklistManager.isAllowedRemoteContentType("Text/Plain; charset=utf-8"));
+        assertTrue(BlocklistManager.isAllowedRemoteContentType("application/octet-stream"));
+        // Preserve compatibility with trusted raw/CDN endpoints that omit the header.
+        assertTrue(BlocklistManager.isAllowedRemoteContentType(null));
+        assertTrue(BlocklistManager.isAllowedRemoteContentType("   "));
+
+        assertFalse(BlocklistManager.isAllowedRemoteContentType("text/html"));
+        assertFalse(BlocklistManager.isAllowedRemoteContentType("application/json"));
+        assertFalse(BlocklistManager.isAllowedRemoteContentType("application/javascript"));
+        assertFalse(BlocklistManager.isAllowedRemoteContentType("text/css"));
+    }
+
+    @Test public void acceptsIdentityTransferAndRejectsUnexpectedCompression() {
+        assertTrue(BlocklistManager.isAllowedRemoteContentEncoding(null));
+        assertTrue(BlocklistManager.isAllowedRemoteContentEncoding(""));
+        assertTrue(BlocklistManager.isAllowedRemoteContentEncoding("identity"));
+        assertTrue(BlocklistManager.isAllowedRemoteContentEncoding(" IDENTITY "));
+        assertFalse(BlocklistManager.isAllowedRemoteContentEncoding("gzip"));
+        assertFalse(BlocklistManager.isAllowedRemoteContentEncoding("br"));
+        assertFalse(BlocklistManager.isAllowedRemoteContentEncoding("deflate"));
+    }
+
     @Test public void boundedRemoteInputAllowsPayloadAtExactLimit() throws Exception {
         byte[] payload = "abcd".getBytes(StandardCharsets.UTF_8);
         try (InputStream input = BlocklistManager.boundedRemoteInput(
