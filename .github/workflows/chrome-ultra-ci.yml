@@ -40,6 +40,8 @@ jobs:
         run: npm run build
       - name: Validate Chrome TITAN package
         run: npm run validate
+      - name: Cross-layer static dynamic session dedupe regression
+        run: npm run test:layer-dedupe
       - name: Validate v1.5 safety invariants
         run: node tools/validate-v150-safety.mjs
       - name: JavaScript syntax
@@ -73,6 +75,7 @@ jobs:
           node --check tests/chrome-shadow-mutation-soak.mjs
           node --check tests/chrome-real-page-soak.mjs
           node --check tests/chrome-performance-budget.mjs
+          node --check tools/dedupe-rule-layers.mjs
           node --check tools/validate-feed-checksums.mjs
           node --check tools/validate-v150-safety.mjs
       - name: GitHub feed integrity regression test
