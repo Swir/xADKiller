@@ -96,6 +96,13 @@
     return [...digest].map((value) => value.toString(16).padStart(2, "0")).join("");
   }
 
+  async function hasTrustedBundle(store, spec) {
+    if (!hasBundleData(store, spec)) return true;
+    const expected = String(store[spec.digestKey] || "");
+    if (!expected) return false;
+    return expected === await digestBundle(store, spec);
+  }
+
   function requestKeys(keys) {
     if (keys == null) return null;
     if (typeof keys === "string") return new Set([keys]);
@@ -184,6 +191,17 @@
 
     writeChain = writeChain.then(async () => {
       const current = await callGet(null);
+
+      // Never let a legitimate partial cache write "launder" stale legacy or tampered
+      // sibling fields by calculating a fresh digest over them. Scrub an untrusted bundle
+      // first, then seal only the trusted surviving state plus the caller's new values.
+      for (const spec of touched) {
+        if (await hasTrustedBundle(current, spec)) continue;
+        const purge = [...spec.keys, spec.digestKey];
+        await callRemove(purge);
+        for (const key of purge) delete current[key];
+      }
+
       const merged = { ...current, ...cleanValues };
       const sealed = { ...cleanValues };
       for (const spec of touched) sealed[spec.digestKey] = await digestBundle(merged, spec);
