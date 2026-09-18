@@ -46,8 +46,18 @@ public class VpnLifecycleStartPolicyTest {
         assertFalse(VpnLifecycleStartPolicy.isManagedRestartAction(null));
     }
 
-    @Test public void unrelatedBroadcastsNeverStartTheVpn() {
-        assertFalse(VpnLifecycleStartPolicy.shouldStart("android.intent.action.TIME_SET", true, true, NOW - 1_000L, NOW));
+    @Test public void unrelatedOrLookalikeBroadcastsNeverStartTheVpn() {
+        String[] rejected = {
+                "android.intent.action.TIME_SET",
+                "android.intent.action.PACKAGE_REPLACED",
+                "android.intent.action.LOCKED_BOOT_COMPLETED",
+                "com.swir.xadkiller.v121.START",
+                "android.intent.action.MY_PACKAGE_REPLACED.fake"
+        };
+        for (String action : rejected) {
+            assertFalse(VpnLifecycleStartPolicy.isManagedRestartAction(action));
+            assertFalse(VpnLifecycleStartPolicy.shouldStart(action, true, true, NOW - 1_000L, NOW));
+        }
         assertFalse(VpnLifecycleStartPolicy.shouldStart(null, true, true, NOW - 1_000L, NOW));
     }
 }
