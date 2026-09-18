@@ -145,6 +145,23 @@ try {
 }
 if (!blockedMime || nativeCalls !== 6) throw new Error("successful HTML response was accepted as protection feed data");
 
+// A successful protected response without Content-Type is just as ambiguous as an
+// explicitly wrong MIME. Fail closed before Feed Guard or the verified cache sees it.
+responseFactory = () => ({
+  ok:true,
+  status:200,
+  url:LIVE_MATRIX,
+  redirected:false,
+  headers:headers({ "content-length":"256" })
+});
+let blockedMissingMime = false;
+try {
+  await context.fetch(LIVE_MATRIX);
+} catch (error) {
+  blockedMissingMime = String(error?.message || "").includes("xad_feed_guard_content_type");
+}
+if (!blockedMissingMime || nativeCalls !== 7) throw new Error("successful feed without Content-Type was accepted");
+
 // HTTP errors must remain visible to Feed Guard so it can classify 429/5xx and honor
 // Retry-After. Their error-page MIME is therefore intentionally not treated as feed data.
 responseFactory = () => ({
@@ -155,7 +172,7 @@ responseFactory = () => ({
   headers:headers({ "content-length":"256", "content-type":"text/html", "retry-after":"120" })
 });
 const rateLimited = await context.fetch(LIVE_MATRIX);
-if (rateLimited.status !== 429 || nativeCalls !== 7) throw new Error("HTTP error response was hidden by MIME validation");
+if (rateLimited.status !== 429 || nativeCalls !== 8) throw new Error("HTTP error response was hidden by MIME validation");
 
 // Content-Length is only an advisory preflight. The streamed body itself must also be
 // bounded so missing/lying headers or transparent decompression cannot exceed 2 MiB.
@@ -169,7 +186,7 @@ try {
 } catch (error) {
   blockedStreamedOversize = String(error?.message || "").includes("xad_feed_guard_payload_size");
 }
-if (!blockedStreamedOversize || nativeCalls !== 8) throw new Error("oversized streamed feed body without Content-Length was accepted");
+if (!blockedStreamedOversize || nativeCalls !== 9) throw new Error("oversized streamed feed body without Content-Length was accepted");
 
 const boundedPayload = new Uint8Array(4096);
 boundedPayload[0] = 0x7B;
@@ -180,7 +197,7 @@ responseFactory = () => responseWithUrl(
 );
 const bounded = await context.fetch(LIVE_MATRIX);
 const boundedBytes = new Uint8Array(await bounded.arrayBuffer());
-if (nativeCalls !== 9 || boundedBytes.length !== boundedPayload.length || bounded.url !== LIVE_MATRIX) {
+if (nativeCalls !== 10 || boundedBytes.length !== boundedPayload.length || bounded.url !== LIVE_MATRIX) {
   throw new Error("bounded streamed feed body was not preserved after transport validation");
 }
 if (boundedBytes[0] !== 0x7B || boundedBytes[boundedBytes.length - 1] !== 0x7D) {
@@ -190,7 +207,7 @@ if (boundedBytes[0] !== 0x7B || boundedBytes[boundedBytes.length - 1] !== 0x7D) 
 lastInit = null;
 responseFactory = () => ({ ok:true, status:200, url:"https://example.com/data.json", redirected:false, headers:headers() });
 await context.fetch("https://example.com/data.json", { credentials:"include" });
-if (nativeCalls !== 10 || lastInit?.credentials !== "include") throw new Error("non-feed fetch was unexpectedly modified");
+if (nativeCalls !== 11 || lastInit?.credentials !== "include") throw new Error("non-feed fetch was unexpectedly modified");
 
 if (policy.FEED_FETCH_TIMEOUT_MS !== 15000) throw new Error(`unexpected feed timeout ${policy.FEED_FETCH_TIMEOUT_MS}`);
 if (policy.MAX_FEED_BYTES !== MAX_FEED_BYTES) throw new Error(`unexpected feed size ceiling ${policy.MAX_FEED_BYTES}`);
@@ -213,4 +230,4 @@ await new Promise((resolve) => setTimeout(resolve, 20));
 if (!timeoutTimed.init.signal.aborted) throw new Error("bounded feed timeout did not abort stalled request signal");
 timeoutTimed.cleanup();
 
-console.log("[xADKiller FEED TRANSPORT CI] PASS • exact canonical URL • deterministic Accept • GET-only • redirect denied • credentials/referrer omitted • provenance pinned • declared + streamed body size bounded • approved MIME • caller abort + full-transfer timeout • HTTP error classification preserved • non-feed fetch untouched");
+console.log("[xADKiller FEED TRANSPORT CI] PASS • exact canonical URL • deterministic Accept • GET-only • redirect denied • credentials/referrer omitted • provenance pinned • declared + streamed body size bounded • mandatory approved MIME • caller abort + full-transfer timeout • HTTP error classification preserved • non-feed fetch untouched");
