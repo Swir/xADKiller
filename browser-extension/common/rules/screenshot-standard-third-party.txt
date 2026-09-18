@@ -6,7 +6,11 @@ fls-na.amazon.com
 ironsource.mobi
 indexexchange.com
 partnerads.ysm.yahoo.com
+udc.yahoo.com
+udcm.yahoo.com
+log.fc.yahoo.com
 bat.bing.com
+ads.microsoft.com
 appmetrica.yandex.ru
 claritybt.freshmarketer.com
 fwtracks.freshmarketer.com
@@ -53,6 +57,7 @@ cdn.onesignal.com
 api.onesignal.com
 static.klaviyo.com
 a.klaviyo.com
+customer.io
 dai.google.com
 fwmrm.net
 xp.apple.com

@@ -1,95 +1,54 @@
+import fs from "node:fs";
 import puppeteer from "puppeteer-core";
 import { chromium } from "playwright";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
 const extensionPath = path.join(root, "dist", "chrome");
+const rulesPath = path.join(root, "common", "rules");
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const STANDARD_HOSTS = [
-  "liftoff.io",
-  "advertising-api-eu.amazon.com",
-  "fls-na.amazon.com",
-  "ironsource.mobi",
-  "indexexchange.com",
-  "partnerads.ysm.yahoo.com",
-  "bat.bing.com",
-  "appmetrica.yandex.ru",
-  "claritybt.freshmarketer.com",
-  "fwtracks.freshmarketer.com",
-  "quantcast.com",
-  "cloudflareinsights.com",
-  "posthog.com",
-  "rudderstack.com",
-  "rudderlabs.com",
-  "prod.uidapi.com",
-  "lr-ingest.com",
-  "tr.facebook.com",
-  "analytics.x.com",
-  "ads.x.com",
-  "pixel.quora.com",
-  "qevents.quora.com",
-  "px.srvcs.tumblr.com",
-  "ads.vk.com",
-  "log.byteoversea.com",
-  "advertising.apple.com",
-  "metrics2.data.hicloud.com",
-  "logservice1.hicloud.com",
-  "logbak.hicloud.com",
-  "smartclip.com",
-  "tracking.rus.miui.com",
-  "settings-win.data.microsoft.com",
-  "vortex.data.microsoft.com",
-  "vortex-win.data.microsoft.com",
-  "browser.events.data.msn.com",
-  "mads-eu.amazon.com",
-  "anrdoezrs.net",
-  "dpbolvw.net",
-  "tkqlhce.com",
-  "shareasale.com",
-  "awin1.com",
-  "zenaps.com",
-  "linksynergy.com",
-  "redirectingat.com",
-  "viglink.com",
-  "refersion.com",
-  "munchkin.marketo.net",
-  "click.mailchimp.com",
-  "sdk.iad-01.braze.com",
-  "cdn.onesignal.com",
-  "api.onesignal.com",
-  "static.klaviyo.com",
-  "a.klaviyo.com",
-  "dai.google.com",
-  "fwmrm.net",
-  "xp.apple.com"
-];
-const ULTRA_ONLY_HOSTS = [
-  "tagmanager.google.com",
-  "fingerprints.com",
-  "widgets.pinterest.com",
-  "graph.instagram.com",
-  "i.instagram.com",
-  "cdn.cookielaw.org",
-  "geolocation.onetrust.com",
-  "privacyportal.onetrust.com",
-  "consent.cookiebot.com",
-  "consentcdn.cookiebot.com",
-  "cookiebot.com",
-  "consent.trustarc.com",
-  "sdk.privacy-center.org",
-  "cdn.privacy-mgmt.com",
-  "app.usercentrics.eu",
-  "cmp.osano.com",
-  "fundingchoicesmessages.google.com",
-  "widget.intercom.io",
-  "js.driftt.com"
-];
+function loadHosts(fileName) {
+  const file = path.join(rulesPath, fileName);
+  const hosts = fs.readFileSync(file, "utf8")
+    .split(/\r?\n/)
+    .map((line) => line.trim().toLowerCase())
+    .filter((line) => line && !line.startsWith("#"));
+  const unique = [...new Set(hosts)];
+  if (unique.length !== hosts.length) throw new Error(`${fileName} contains duplicate hosts`);
+  for (const host of unique) {
+    if (!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,63}$/.test(host)) {
+      throw new Error(`${fileName} contains invalid host: ${host}`);
+    }
+  }
+  return unique;
+}
 
-// Deliberately NOT forced by this fixture: s.youtube.com, redirector.googlevideo.com,
-// g.jwpsrv.com, ssl.p.jwpcdn.com, grs.hicloud.com, c.bing.com, LaunchDarkly
-// and fraud/checkout infrastructure such as Sift. Chasing those benchmark rows with
-// blanket domain blocks can break playback, routing, feature flags or payments.
+const STANDARD_HOSTS = loadHosts("screenshot-standard-third-party.txt");
+const ULTRA_ONLY_HOSTS = loadHosts("screenshot-ultra-third-party.txt");
+
+// These rows were visible as misses in the same manual report but are deliberately
+// not promoted to blanket host blocks because doing so can break media playback,
+// checkout/fraud prevention, feature flags, cloud service routing or first-party apps.
+const RISKY_EXCLUSIONS = new Set([
+  "s.youtube.com",
+  "redirector.googlevideo.com",
+  "g.jwpsrv.com",
+  "ssl.p.jwpcdn.com",
+  "grs.hicloud.com",
+  "c.bing.com",
+  "siftscience.com",
+  "cdn.siftscience.com",
+  "events.launchdarkly.com",
+  "clientstream.launchdarkly.com",
+  "vk.com"
+]);
+
+if (STANDARD_HOSTS.length < 61) throw new Error(`STANDARD screenshot fixture unexpectedly shrank: ${STANDARD_HOSTS.length}`);
+if (ULTRA_ONLY_HOSTS.length < 23) throw new Error(`ULTRA screenshot fixture unexpectedly shrank: ${ULTRA_ONLY_HOSTS.length}`);
+for (const host of [...STANDARD_HOSTS, ...ULTRA_ONLY_HOSTS]) {
+  if (RISKY_EXCLUSIONS.has(host)) throw new Error(`risky manual miss must not be blanket-blocked: ${host}`);
+}
 
 function casesFor(hosts) {
   return hosts.map((host) => [`https://${host}/xadkiller-screen-regression/pixel?ad=1`, "xmlhttprequest"]);
@@ -170,7 +129,7 @@ try {
   const ultraCore = assertComplete("ULTRA manual-screenshot core", await match(worker, casesFor(STANDARD_HOSTS)));
   const ultraExtra = assertComplete("ULTRA manual-screenshot aggressive", await match(worker, casesFor(ULTRA_ONLY_HOSTS)));
 
-  console.log(`[xADKiller SCREEN] PASS • STANDARD=${standard.hits}/${standard.total} • ULTRA-core=${ultraCore.hits}/${ultraCore.total} • ULTRA-extra=${ultraExtra.hits}/${ultraExtra.total}`);
+  console.log(`[xADKiller SCREEN] PASS • STANDARD=${standard.hits}/${standard.total} • ULTRA-core=${ultraCore.hits}/${ultraCore.total} • ULTRA-extra=${ultraExtra.hits}/${ultraExtra.total} • risky blanket blocks=0/${RISKY_EXCLUSIONS.size}`);
 } finally {
   if (browser) {
     try { await browser.close(); } catch (_) {}

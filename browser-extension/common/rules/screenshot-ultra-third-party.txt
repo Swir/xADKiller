@@ -1,7 +1,8 @@
 # Aggressive/privacy-sensitive third-party misses from the same manual test.
-# ULTRA only: these can remove consent/support/social widgets, so they are not forced into STANDARD.
+# ULTRA only: these can remove consent/support/social widgets, fingerprinting, attribution or experimentation layers.
 tagmanager.google.com
 fingerprints.com
+fingerprintjs.com
 widgets.pinterest.com
 graph.instagram.com
 i.instagram.com
@@ -19,3 +20,6 @@ cmp.osano.com
 fundingchoicesmessages.google.com
 widget.intercom.io
 js.driftt.com
+bnc.lt
+dynamicyield.com
+ngfts.lge.com
