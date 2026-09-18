@@ -86,6 +86,39 @@ const titan = {
 }
 
 {
+  const guard = makeGuard({ [LIVE_SHIELD]:{ ...shield, script:"alert(1)" } });
+  await expectReject(guard.fetch(LIVE_SHIELD), "payload_field");
+}
+
+{
+  const guard = makeGuard({ [LIVE_SHIELD]:{ ...shield, expires_at:new Date(Date.now() + 86400000).toISOString() } });
+  await expectReject(guard.fetch(LIVE_SHIELD), "v1_metadata");
+}
+
+{
+  const v2 = { ...shield, schema:2, expires_at:new Date(Date.now() + 86400000).toISOString() };
+  const guard = makeGuard({ [LIVE_SHIELD]:v2 });
+  await expectReject(guard.fetch(LIVE_SHIELD), "v2_metadata");
+}
+
+{
+  const v2 = {
+    ...shield,
+    schema:2,
+    expires_at:new Date(Date.now() + 86400000).toISOString(),
+    rollback:{ previous_version:"old", previous_ref:"main/browser-intelligence/xadkiller-live-shield.json", code:"alert(1)" }
+  };
+  const guard = makeGuard({ [LIVE_SHIELD]:v2 });
+  await expectReject(guard.fetch(LIVE_SHIELD), "rollback_field");
+}
+
+{
+  const tooMany = Array.from({ length:30_001 }, (_, i) => `ads${i}.example.com`);
+  const guard = makeGuard({ [LIVE_SHIELD]:{ ...shield, standard_domains:tooMany } });
+  await expectReject(guard.fetch(LIVE_SHIELD), "standard_domains_limit");
+}
+
+{
   const guard = makeGuard({ [LIVE_MATRIX]:{ ...matrix, standard_signatures:[{ filter:"/ads/", types:["script","not_a_chrome_type"] }] } });
   await expectReject(guard.fetch(LIVE_MATRIX), "standard_signatures_types");
 }
@@ -93,6 +126,15 @@ const titan = {
 {
   const guard = makeGuard({ [LIVE_MATRIX]:{ ...matrix, standard_signatures:[{ filter:"/ads/", types:["script"], code:"alert(1)" }] } });
   await expectReject(guard.fetch(LIVE_MATRIX), "standard_signatures_field");
+}
+
+{
+  const duplicate = [
+    { filter:"/ads/", types:["script","xmlhttprequest"] },
+    { filter:"/ads/", types:["xmlhttprequest","script"], third_party:false }
+  ];
+  const guard = makeGuard({ [LIVE_MATRIX]:{ ...matrix, standard_signatures:duplicate } });
+  await expectReject(guard.fetch(LIVE_MATRIX), "standard_signatures_duplicate");
 }
 
 {
@@ -111,6 +153,15 @@ const titan = {
 }
 
 {
+  const duplicate = [
+    { regex:"(?:ads?|prebid)", types:["script","xmlhttprequest"] },
+    { regex:"(?:ads?|prebid)", types:["xmlhttprequest","script"], third_party:false }
+  ];
+  const guard = makeGuard({ [TITAN]:{ ...titan, regex_signatures:duplicate } });
+  await expectReject(guard.fetch(TITAN), "regex_signatures_duplicate");
+}
+
+{
   const guard = makeGuard({ [TITAN]:{ ...titan, strong_tokens:["doubleclick", "javascript:alert"] } });
   await expectReject(guard.fetch(TITAN), "strong_tokens_value");
 }
@@ -122,4 +173,4 @@ const titan = {
   if (!contract.validCosmeticSelector("iframe[src*='doubleclick.net']")) throw new Error("valid selector rejected");
 }
 
-console.log("[xADKiller FEED DATA CONTRACT CI] PASS • canonical domains + DNR signature schema + safe cosmetic selectors + compiled TITAN regex + opaque data-only fields verified");
+console.log("[xADKiller FEED DATA CONTRACT CI] PASS • strict top-level schema + bounded collections + semantic duplicate rejection + canonical domains + DNR signature schema + safe cosmetic selectors + compiled TITAN regex verified");
