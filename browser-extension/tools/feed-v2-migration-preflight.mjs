@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -35,6 +35,10 @@ function gitBlobSha1(text) {
     .update(Buffer.from(`blob ${body.length}\0`, "utf8"))
     .update(body)
     .digest("hex");
+}
+
+function sha256(text) {
+  return createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
 }
 
 function assertDataOnly(value, path = "$") {
@@ -103,6 +107,12 @@ async function main() {
   if (planById.size !== checksums.feeds.length) fail("migration plan must cover every pinned production feed exactly once");
   const now = Date.now();
   const results = [];
+  const manifestFeeds = [];
+
+  if (shouldWrite) {
+    await rm(outputDir, { recursive: true, force: true });
+    await mkdir(outputDir, { recursive: true });
+  }
 
   for (const pinned of checksums.feeds) {
     const production = await fetchPinnedProduction(pinned);
@@ -125,23 +135,57 @@ async function main() {
     };
 
     assertDataOnly(candidate);
-    if (JSON.stringify(payloadOnly(candidate)) !== JSON.stringify(payloadOnly(production))) {
+    const productionPayload = JSON.stringify(payloadOnly(production));
+    const candidatePayload = JSON.stringify(payloadOnly(candidate));
+    if (candidatePayload !== productionPayload) {
       fail(`${pinned.id}: v2 conversion changed protection data`);
     }
     if (candidate.rollback.previous_version !== production.feed_version) fail(`${pinned.id}: rollback version mismatch`);
     if (candidate.rollback.previous_ref !== previousRef) fail(`${pinned.id}: rollback ref mismatch`);
 
+    const candidateFile = `${pinned.id}.json`;
+    const candidateText = `${JSON.stringify(candidate, null, 2)}\n`;
+    const candidateSha256 = sha256(candidateText);
+    const payloadSha256 = sha256(candidatePayload);
+
     if (shouldWrite) {
-      await mkdir(outputDir, { recursive: true });
-      await writeFile(resolve(outputDir, `${pinned.id}.json`), `${JSON.stringify(candidate, null, 2)}\n`, "utf8");
+      await writeFile(resolve(outputDir, candidateFile), candidateText, "utf8");
     }
-    results.push(`${pinned.id}:${production.feed_version}->${candidate.feed_version}`);
+
+    manifestFeeds.push({
+      id: pinned.id,
+      candidate_file: candidateFile,
+      source_ref: pinned.source_ref,
+      source_path: pinned.path,
+      source_git_blob_sha1: pinned.git_blob_sha1,
+      source_version: production.feed_version,
+      candidate_version: candidate.feed_version,
+      candidate_updated_at: candidate.updated_at,
+      candidate_expires_at: candidate.expires_at,
+      rollback_previous_version: candidate.rollback.previous_version,
+      rollback_previous_ref: candidate.rollback.previous_ref,
+      candidate_sha256: candidateSha256,
+      protection_payload_sha256: payloadSha256
+    });
+    results.push(`${pinned.id}:${production.feed_version}->${candidate.feed_version}@${candidateSha256.slice(0, 12)}`);
   }
 
   const extraPlanIds = [...planById.keys()].filter((id) => !checksums.feeds.some((feed) => feed.id === id));
   if (extraPlanIds.length) fail(`unknown migration plan feed ids: ${extraPlanIds.join(",")}`);
 
-  console.log(`Feed v2 migration preflight OK (${results.join(", ")})${shouldWrite ? `; candidates written to ${outputDir}` : ""}`);
+  if (shouldWrite) {
+    const manifest = {
+      schema: 1,
+      purpose: "Development-only deterministic manifest for schema-v2 migration candidates. It does not authorize publication or runtime code execution.",
+      source_checksums: "browser-intelligence/feed-checksums.json",
+      migration_plan: "browser-intelligence/feed-v2-migration-plan.json",
+      algorithm: "sha256",
+      feeds: manifestFeeds
+    };
+    await writeFile(resolve(outputDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  }
+
+  console.log(`Feed v2 migration preflight OK (${results.join(", ")})${shouldWrite ? `; candidates + deterministic manifest written to ${outputDir}` : ""}`);
 }
 
 main().catch((error) => {
