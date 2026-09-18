@@ -41,6 +41,7 @@ const fixtureHtml = `<!doctype html><html><head><meta charset="utf-8"></head><bo
     const closedHost=document.getElementById('closed-shadow-host');
     const closedRoot=closedHost.attachShadow({mode:'closed'});
     const closedAd=document.createElement('div'); closedAd.className='adsbygoogle'; closedAd.textContent='closed shadow ad'; closedRoot.appendChild(closedAd);
+    window.__xadClosedShadowAdRef=closedAd;
     setTimeout(()=>{ const d=document.createElement('div'); d.id='dynamic-ad'; d.className='adsbygoogle'; d.textContent='dynamic ad'; document.body.appendChild(d); },250);
   </script>
 </body></html>`;
@@ -159,15 +160,22 @@ try {
   const page = await browser.newPage();
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil:"domcontentloaded", timeout:12000 });
   await delay(1500);
-  const dom = await page.evaluate(() => ({
-    normalVisible:!!document.getElementById("normal-content"),
-    cosmeticVisible:!!document.querySelector(".adsbygoogle"),
-    smartVisible:!!document.querySelector("[data-ad-unit]"),
-    shadowVisible:!!document.getElementById("open-shadow-host")?.shadowRoot?.querySelector(".adsbygoogle"),
-    closedShadowVisible:document.getElementById("closed-shadow-host")?.innerText?.includes("closed shadow ad") || false,
-    dynamicTextVisible:document.body.innerText.includes("dynamic ad"),
-    skipClicks:window.skipClicks
-  }));
+  const dom = await page.evaluate(() => {
+    const isVisible = (element) => {
+      if (!element) return false;
+      const style = getComputedStyle(element);
+      return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+    };
+    return {
+      normalVisible:isVisible(document.getElementById("normal-content")),
+      cosmeticVisible:isVisible(document.querySelector(".adsbygoogle")),
+      smartVisible:isVisible(document.querySelector("[data-ad-unit]")),
+      shadowVisible:isVisible(document.getElementById("open-shadow-host")?.shadowRoot?.querySelector(".adsbygoogle")),
+      closedShadowVisible:isVisible(window.__xadClosedShadowAdRef),
+      dynamicTextVisible:isVisible(document.getElementById("dynamic-ad")),
+      skipClicks:window.skipClicks
+    };
+  });
   if (!dom.normalVisible || dom.cosmeticVisible || dom.smartVisible || dom.shadowVisible || dom.closedShadowVisible || dom.dynamicTextVisible || dom.skipClicks < 1) {
     throw new Error(`DOM protection assertions failed: ${JSON.stringify(dom)}`);
   }

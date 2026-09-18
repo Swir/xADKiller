@@ -75,6 +75,11 @@ async function startLocalFixture() {
         res.end(`<!doctype html><html><body><img src="/ads/banner.png"><script src="/adserver/runtime.js"></script></body></html>`);
         return;
       }
+      if (req.url?.startsWith("/first-party-generic-query")) {
+        res.writeHead(200, { "content-type":"text/html; charset=utf-8" });
+        res.end(`<!doctype html><html><body><img src="/pixel.gif?campaign=spring-sale"></body></html>`);
+        return;
+      }
       if (req.url?.startsWith("/cross-site-query")) {
         const address = server.address();
         const port = typeof address === "object" && address ? address.port : 0;
@@ -131,6 +136,17 @@ try {
     throw new Error(`local/private resource leaked into Adaptive Memory: before=${JSON.stringify(beforeLocal)} after=${JSON.stringify(afterLocal)}`);
   }
   log("Local/private learning guard", `memory=${afterLocal.memory} learned=${afterLocal.learned}`);
+
+  const beforeFirstPartyGeneric = await send(popup, { type:"getTitanStats" });
+  const firstPartyGenericPage = await browser.newPage();
+  await firstPartyGenericPage.goto(`http://publisher.example.org:${localFixture.port}/first-party-generic-query`, { waitUntil:"networkidle0", timeout:12000 });
+  await delay(1000);
+  await firstPartyGenericPage.close();
+  const afterFirstPartyGeneric = await send(popup, { type:"getTitanStats" });
+  if (!afterFirstPartyGeneric?.ok || afterFirstPartyGeneric.memory !== beforeFirstPartyGeneric.memory || afterFirstPartyGeneric.learned !== beforeFirstPartyGeneric.learned) {
+    throw new Error(`generic first-party campaign query created learned rule: before=${JSON.stringify(beforeFirstPartyGeneric)} after=${JSON.stringify(afterFirstPartyGeneric)}`);
+  }
+  log("First-party generic campaign guard", `memory=${afterFirstPartyGeneric.memory} learned=${afterFirstPartyGeneric.learned}`);
 
   const beforeGeneric = await send(popup, { type:"getTitanStats" });
   const publicPage = await browser.newPage();
@@ -226,7 +242,7 @@ try {
   const finalStore = await found.worker.evaluate(async () => await chrome.storage.local.get({ xadTitanHostMemoryV1:[] }));
   if (finalStore.xadTitanHostMemoryV1?.length) throw new Error(`memory storage not cleared: ${JSON.stringify(finalStore)}`);
 
-  log("PASS", "persistent host-only memory, local/private exclusion, canonical provider defense-in-depth, legacy poison cleanup, restart restore and user reset all verified");
+  log("PASS", "persistent host-only memory, local/private exclusion, generic first-party query exclusion, canonical provider defense-in-depth, legacy poison cleanup, restart restore and user reset all verified");
 } finally {
   if (localFixture?.server) { try { await new Promise((resolve) => localFixture.server.close(resolve)); } catch (_) {} }
   if (browser) { try { await browser.close(); } catch (_) {} }

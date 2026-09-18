@@ -12,7 +12,10 @@
     "ad.xiaomi.com","ads.huawei.com","adsfs.oppomobile.com","ads.oppomobile.com","ads.heytapmobi.com"
   ]);
   const STRONG_PATH = /\/(?:ads?|adserver|adservice|adrequest|pagead|gampad|securepubads|prebid|vast|vmap|ima3|commercial|sponsor|sponsored|promoted)(?:[._\/-]|$)/i;
-  const STRONG_QUERY = /(?:^|[?&])(?:ad_unit|adunit|ad_slot|adslot|gdfp_req|iu|campaign|impression)=/i;
+  // Keep learning on high-confidence ad-slot parameters only. Generic campaign/impression
+  // parameters are common in legitimate first-party analytics and navigation URLs and can
+  // create unnecessary learned session rules even though they are not durable host memory.
+  const STRONG_QUERY = /(?:^|[?&])(?:ad_unit|adunit|ad_slot|adslot|gdfp_req|iu)=/i;
   const LOCAL_SUFFIXES = [".local", ".localhost", ".lan", ".home", ".home.arpa", ".internal", ".localdomain"];
   const RESERVED_SUFFIXES = [".test", ".example", ".invalid"];
   const LOCAL_NAMES = new Set(["localhost", "localhost.localdomain"]);
