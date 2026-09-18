@@ -39,6 +39,7 @@ Status: **in development / hardening** on `chrome-v150-adaptive-memory`.
 - [x] Deduplicate equivalent domain/path rules across static, dynamic and session layers. The build now performs a deterministic semantic cross-layer pass: ULTRA drops STANDARD-equivalent rules, dynamic intelligence drops domains already covered by static layers, and TITAN session rules drop static-equivalent conditions. CI fails if those overlaps return.
 - [x] Add a rule-budget dashboard for STANDARD/ULTRA/TITAN Boost.
 - [x] Measure startup cost, memory use and DOM scan time in CI as a reproducible performance budget.
+- [x] Convert the 2026-09-18 manual browser-test misses into a risk-tiered regression fixture instead of benchmark-only overfitting. High-confidence ad/tracker hosts are third-party-only in STANDARD, privacy-sensitive consent/support/attribution/experimentation hosts are ULTRA-only, and playback, cloud-routing, feature-flag and checkout/fraud infrastructure remains explicitly excluded from blanket host blocking. The final Chromium gate covers **61/61 STANDARD-core**, **61/61 ULTRA-core**, **23/23 ULTRA-aggressive** hosts and verifies **0/11 risky blanket promotions** without changing the 21/26 development counter.
 
 ### Phase 4 — Live Shield hardening
 
@@ -50,7 +51,7 @@ Status: **in development / hardening** on `chrome-v150-adaptive-memory`.
 ### Phase 5 — Store beta
 
 - [x] Produce a tested beta ZIP from green CI.
-- [ ] Local benchmark and real browsing test.
+- [ ] Local benchmark and real browsing test. The first user-run domain dashboard exposed misses and is now preserved as the risk-tiered Chromium regression above; this item stays open until the refreshed development package is re-tested in normal browsing and the manual result is satisfactory.
 - [x] Add and stabilize a broader real-page mutation/performance soak without weakening tests.
 - [ ] Merge to `main` only after user approval.
 - [ ] Publish v1.5.0 update to Chrome Web Store.
