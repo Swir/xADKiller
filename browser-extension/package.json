@@ -16,6 +16,7 @@
     "test:feed-v2-consumers": "node tests/feed-v2-consumer-compat.mjs",
     "test:feed-checksums": "node tools/validate-feed-checksums.mjs",
     "test:layer-dedupe": "node tools/dedupe-rule-layers.mjs --check",
+    "test:rule-ranking": "node tests/rule-quality-ranking.mjs",
     "test:benchmark": "node tests/chrome-blocking-benchmark.mjs",
     "test:shadow-soak": "node tests/chrome-shadow-mutation-soak.mjs",
     "test:real-page": "node tests/chrome-real-page-soak.mjs",
