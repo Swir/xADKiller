@@ -3,6 +3,7 @@ package com.swir.xadkiller;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -157,6 +158,24 @@ public class DnsPacketHardeningTest {
         assertNull(DnsPacket.parseIpv4UdpQuery(packet, packet.length));
     }
 
+    @Test public void synthesizedDnsReplyCarriesValidUdpChecksum() {
+        byte[] request = packet(query(0x0100, 1), 53000, 0x4000);
+        DnsPacket.Query parsed = DnsPacket.parseIpv4UdpQuery(request, request.length);
+        assertNotNull(parsed);
+        byte[] dnsResponse = DnsPacket.nxdomain(parsed.dnsPayload);
+        assertNotNull(dnsResponse);
+        byte[] reply = DnsPacket.buildIpv4UdpResponse(parsed, dnsResponse);
+        assertNotNull(reply);
+
+        int wireChecksum = DnsPacket.u16(reply, 26);
+        assertTrue("synthesized UDP checksum must be present", wireChecksum != 0);
+        assertEquals("valid UDP checksum must fold to all ones", 0xFFFF, udpPseudoHeaderSum(reply));
+
+        byte[] corrupted = Arrays.copyOf(reply, reply.length);
+        corrupted[corrupted.length - 1] ^= 0x01;
+        assertTrue("payload corruption must invalidate UDP checksum", udpPseudoHeaderSum(corrupted) != 0xFFFF);
+    }
+
     private static byte[] query(int flags, int qdCount) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         write16(out, 0x1234);
@@ -210,6 +229,23 @@ public class DnsPacketHardeningTest {
         DnsPacket.put16(packet, 24, 8 + dns.length);
         System.arraycopy(dns, 0, packet, 28, dns.length);
         return packet;
+    }
+
+    private static int udpPseudoHeaderSum(byte[] packet) {
+        long sum = 0;
+        for (int i = 12; i < 20; i += 2) {
+            sum += ((packet[i] & 0xFF) << 8) | (packet[i + 1] & 0xFF);
+        }
+        int udpLength = DnsPacket.u16(packet, 24);
+        sum += 17; // zero byte + IPv4 protocol UDP
+        sum += udpLength;
+        int end = 20 + udpLength;
+        for (int i = 20; i + 1 < end; i += 2) {
+            sum += ((packet[i] & 0xFF) << 8) | (packet[i + 1] & 0xFF);
+        }
+        if ((udpLength & 1) != 0) sum += (packet[end - 1] & 0xFF) << 8;
+        while ((sum >> 16) != 0) sum = (sum & 0xFFFF) + (sum >> 16);
+        return (int)sum & 0xFFFF;
     }
 
     private static void label(ByteArrayOutputStream out, String label) {
