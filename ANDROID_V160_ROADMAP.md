@@ -8,10 +8,10 @@ This branch develops the Android APK independently from the current stable 1.5.1
 **Release readiness:** **BLOCKED** — manual physical-device VPN lifecycle and stability evidence is still required.
 
 ## Current validation snapshot — 2026-09-18
-- Development APK CI is **GREEN** after the DNS privacy/integrity hardening batch: SWIR progress SVG consistency, privacy/network manifest gate, lint, DNS framing/EDNS0 privacy scrub/EDNS UDP-size clamp/incoming + synthesized UDP-checksum regression, full unit tests + deterministic benchmark, APK build/package validation, ZIP integrity and SHA-256 are required gates on this branch.
-- Deterministic offline DNS ad fixture coverage: **100.0% (96/96)**.
+- Development APK CI is **GREEN** after the DNS privacy/integrity and conservative offline-blocking hardening batch: SWIR progress SVG consistency, privacy/network manifest gate, lint, DNS framing/EDNS0 privacy scrub/EDNS UDP-size clamp/incoming + synthesized UDP-checksum regression, dedicated offline starter-list coverage, full unit tests + deterministic benchmark, APK build/package validation, ZIP integrity and SHA-256 are required gates on this branch.
+- Deterministic offline DNS ad fixture coverage: **100.0% (127/127)**.
 - Benign DNS control false positives: **0/20**.
-- Bundled offline starter list: **95 high-confidence domains**, with larger maintained lists loaded at runtime.
+- Bundled offline starter list: **126 high-confidence domains**, with larger maintained lists loaded at runtime. The 2026-09-18 expansion reuses only high-confidence cross-platform ad/tracker misses from manual Chrome validation; consent, playback, feature-flag and checkout/fraud infrastructure remains deliberately excluded from the offline starter list.
 - DNS parser hardening requires the IPv4 payload to contain exactly one complete UDP datagram and rejects IPv4 fragments, inconsistent IP/UDP lengths, response packets, non-standard opcodes, ambiguous multi-question DNS messages and invalid source port 0. This prevents unexplained trailing IPv4 payload from being silently ignored by the DNS parser.
 - Incoming IPv4 DNS datagrams verify every **non-zero UDP checksum** before parsing or forwarding; the legal IPv4 zero-checksum form remains accepted as “checksum not supplied” for compatibility. Dedicated regressions prove a valid non-zero checksum is accepted and a one-byte DNS corruption is rejected while framing remains otherwise valid.
 - Synthesized DNS replies carry a real IPv4 UDP checksum over the pseudo-header plus complete UDP payload instead of relying on the legal-but-weaker IPv4 zero-checksum convention. A dedicated regression verifies the wire checksum and proves a one-byte payload corruption invalidates it.
@@ -57,7 +57,7 @@ No Release until all relevant build, lint, regression, stability, privacy, DNS/V
 - APK integrity/checksum checks.
 - Deterministic SWIR Progress SVG math/XML/staleness check.
 - VPN start/stop/restart/boot lifecycle regression coverage where possible; package-update regression must preserve a previously-running VPN independently of the boot-autostart preference, while physical-device validation remains required for the heartbeat and OS lifecycle transitions.
-- Parser/blocklist regression fixtures, including duplicate-inflated update rejection.
+- Parser/blocklist regression fixtures, including duplicate-inflated update rejection and the conservative screenshot-derived cross-platform starter-list coverage gate.
 - DNS packet malformed/fragmented/query-shape/exact IPv4↔UDP length regression fixtures.
 - EDNS(0) privacy/stability regression: Client Subnet and COOKIE must be removed before upstream forwarding, advertised UDP payloads above 1232 must be clamped to 1232, smaller values must remain unchanged, and the OPT record, DO flag and unrelated well-framed options must remain intact.
 - Incoming DNS UDP checksum regression: accept the legal zero-checksum IPv4 form, verify a valid non-zero checksum and reject corrupted datagrams when a checksum is present.
