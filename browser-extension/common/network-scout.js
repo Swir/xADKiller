@@ -3,7 +3,14 @@
   globalThis.__xadNetworkScoutV1 = true;
 
   const RECOVERY_KEY = "xadHeuristicRecoverySitesV1";
-  const STRONG_HOST = /(doubleclick|googlesyndication|googleadservices|amazon-adsystem|adnxs|adsrvr|pubmatic|rubicon|criteo|taboola|outbrain|smartadserver|adform|prebid|hotjar|mouseflow|luckyorange|fullstory|logrocket|appsflyer|adjust|branch|kochava|unityads|samsungads|xiaomi|huawei|oppomobile)/i;
+  const STRONG_HOST_SUFFIXES = Object.freeze([
+    "doubleclick.net","googlesyndication.com","googleadservices.com","amazon-adsystem.com",
+    "adnxs.com","adsrvr.org","pubmatic.com","rubiconproject.com","criteo.com","criteo.net",
+    "taboola.com","outbrain.com","smartadserver.com","smartadserver.net","adform.com","adform.net",
+    "hotjar.com","hotjar.io","mouseflow.com","luckyorange.com","fullstory.com","logrocket.com",
+    "appsflyer.com","adjust.com","branch.io","kochava.com","unityads.unity3d.com","samsungads.com",
+    "ad.xiaomi.com","ads.huawei.com","adsfs.oppomobile.com","ads.oppomobile.com","ads.heytapmobi.com"
+  ]);
   const STRONG_PATH = /\/(?:ads?|adserver|adservice|adrequest|pagead|gampad|securepubads|prebid|vast|vmap|ima3|commercial|sponsor|sponsored|promoted)(?:[._\/-]|$)/i;
   const STRONG_QUERY = /(?:^|[?&])(?:ad_unit|adunit|ad_slot|adslot|gdfp_req|iu|campaign|impression)=/i;
   const LOCAL_SUFFIXES = [".local", ".localhost", ".lan", ".home", ".home.arpa", ".internal", ".localdomain"];
@@ -27,6 +34,10 @@
     if (isIpv4Literal(host) || host.includes(":") || host.startsWith("[") || host.endsWith("]") || LOCAL_NAMES.has(host)) return false;
     return !LOCAL_SUFFIXES.some((suffix) => host.endsWith(suffix))
       && !RESERVED_SUFFIXES.some((suffix) => host.endsWith(suffix));
+  }
+  function strongProviderHost(value) {
+    const host = normalizeHost(value);
+    return !!host && STRONG_HOST_SUFFIXES.some((suffix) => host === suffix || host.endsWith("." + suffix));
   }
   function allowed() {
     const host = normalizeHost(location.hostname);
@@ -58,11 +69,11 @@
     if (!learningHostAllowed(location.hostname) || !learningHostAllowed(u.hostname)) return false;
     const own = sameSite(u.hostname, location.hostname);
     const pathQuery = `${u.pathname}${u.search}`;
-    // Cross-site persistence is deliberately limited to known strong ad-tech hosts.
-    // Generic query markers such as campaign/impression are only evidence when the
-    // resource is first-party; otherwise ordinary affiliate/commerce links can look
-    // like ads and poison Adaptive Memory.
-    return (!own && STRONG_HOST.test(u.hostname))
+    // Cross-site persistence is deliberately limited to canonical ad-tech provider
+    // suffixes. Substring matching (for example "branch" or "adjust" inside an
+    // unrelated hostname) can poison Adaptive Memory and create hard-to-recover
+    // false positives. Generic path/query heuristics remain first-party only.
+    return (!own && strongProviderHost(u.hostname))
       || (own && (STRONG_PATH.test(pathQuery) || STRONG_QUERY.test(pathQuery)));
   }
   function learn(raw) {
