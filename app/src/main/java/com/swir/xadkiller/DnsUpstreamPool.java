@@ -166,9 +166,7 @@ final class DnsUpstreamPool {
             double ceiling = Math.max(OUTLIER_MIN_CEILING_MS, state.ewmaRttMs * OUTLIER_EWMA_MULTIPLIER);
             sample = Math.min(rawSample, ceiling);
         }
-        state.ewmaRttMs = state.latencySamples == 0
-                ? sample
-                : (state.ewmaRttMs * 0.72d + sample * 0.28d);
+        state.ewmaRttMs = state.latencySamples == 0 ? sample : (state.ewmaRttMs * 0.72d + sample * 0.28d);
         state.latencySamples++;
         state.successes++;
         state.failureStreak = 0;
@@ -195,21 +193,21 @@ final class DnsUpstreamPool {
     }
 
     synchronized String snapshot(long nowMs) {
-        nowMs = stableNow(nowMs);
-        ageStaleLatency(nowMs);
+        final long stableNowMs = stableNow(nowMs);
+        ageStaleLatency(stableNowMs);
         StringBuilder out = new StringBuilder();
-        State probe = recoveryProbeCandidate(nowMs);
+        final State probe = recoveryProbeCandidate(stableNowMs);
         List<State> ordered = new ArrayList<>(states);
         ordered.sort(Comparator
-                .comparingInt((State s) -> orderClass(s, probe, nowMs))
+                .comparingInt((State s) -> orderClass(s, probe, stableNowMs))
                 .thenComparingDouble(this::score)
                 .thenComparingLong(s -> s.cooldownUntilMs)
                 .thenComparingInt(s -> s.ordinal));
         for (State state : ordered) {
             if (out.length() > 0) out.append(" • ");
             out.append(state.server).append(' ').append(Math.round(state.ewmaRttMs)).append("ms");
-            if (state.cooldownUntilMs > nowMs) {
-                out.append(" cool=").append(Math.max(1L, (state.cooldownUntilMs - nowMs + 999L) / 1000L)).append('s');
+            if (state.cooldownUntilMs > stableNowMs) {
+                out.append(" cool=").append(Math.max(1L, (state.cooldownUntilMs - stableNowMs + 999L) / 1000L)).append('s');
             } else if (state == probe) out.append(" probe");
             else if (state.failureStreak > 0) out.append(" recover=").append(state.failureStreak);
             else if (state.slowStreak > 0) out.append(" slow=").append(state.slowStreak);
