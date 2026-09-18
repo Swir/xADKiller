@@ -26,10 +26,6 @@ public class DnsUpstreamPoolTest {
         pool.recordSuccess("1.1.1.1", 35L, 1_000L);
         pool.recordSuccess("1.1.1.1", 40L, 1_100L);
         int before = pool.timeoutMs("1.1.1.1", 1_101L);
-
-        // A valid 5s response may be caused by a one-off radio/scheduler stall.
-        // It must still count as slow, but it must not poison the EWMA enough to
-        // force the maximum timeout for many later DNS queries.
         pool.recordSuccess("1.1.1.1", 5_000L, 1_200L);
 
         assertEquals(1, pool.slowStreak("1.1.1.1"));
@@ -59,8 +55,6 @@ public class DnsUpstreamPoolTest {
         pool.recordSuccess("1.1.1.1", 1700L, 1_100L);
         assertEquals(2, pool.slowStreak("1.1.1.1"));
 
-        // A slow-streak should clear quickly, while the EWMA intentionally needs
-        // several fast samples before the resolver outranks untouched defaults.
         for (int i = 0; i < 8; i++) {
             pool.recordSuccess("1.1.1.1", 20L, 1_200L + i * 100L);
         }
@@ -95,6 +89,49 @@ public class DnsUpstreamPoolTest {
         assertTrue(pool.snapshot(afterTwoHours).contains("probe"));
     }
 
+    @Test public void networkChangeImmediatelyClearsLatencyOnlyPenalty() {
+        DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
+        pool.recordSuccess("1.1.1.1", 1900L, 1_000L);
+        pool.recordSuccess("1.1.1.1", 1800L, 1_100L);
+        pool.recordSuccess("9.9.9.9", 40L, 1_200L);
+        assertEquals("9.9.9.9", pool.order(1_201L)[0]);
+        assertEquals(2, pool.slowStreak("1.1.1.1"));
+
+        pool.onNetworkChanged(2_000L);
+
+        assertEquals(0, pool.slowStreak("1.1.1.1"));
+        assertArrayEquals(SERVERS, pool.order(2_001L));
+        assertEquals(1620, pool.timeoutMs("1.1.1.1", 2_001L));
+        assertEquals(2L, pool.successes("1.1.1.1"));
+    }
+
+    @Test public void networkChangePreservesCircuitBreakerAndLifetimeCounters() {
+        DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
+        pool.recordSuccess("1.1.1.1", 1700L, 1_000L);
+        pool.recordFailure("1.1.1.1", 1_100L);
+        assertEquals(1, pool.failureStreak("1.1.1.1"));
+
+        pool.onNetworkChanged(1_200L);
+
+        assertEquals(1, pool.failureStreak("1.1.1.1"));
+        assertEquals(1L, pool.failures("1.1.1.1"));
+        assertEquals(1L, pool.successes("1.1.1.1"));
+        assertTrue(!"1.1.1.1".equals(pool.order(1_201L)[0]));
+        assertTrue(pool.snapshot(1_201L).contains("cool="));
+    }
+
+    @Test public void firstSampleAfterNetworkChangeStartsFreshLatencyBaseline() {
+        DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
+        pool.recordSuccess("1.1.1.1", 30L, 1_000L);
+        pool.recordSuccess("1.1.1.1", 35L, 1_100L);
+        pool.onNetworkChanged(2_000L);
+        pool.recordSuccess("1.1.1.1", 1600L, 2_100L);
+
+        assertEquals(1, pool.slowStreak("1.1.1.1"));
+        assertEquals(3L, pool.successes("1.1.1.1"));
+        assertEquals(3200, pool.timeoutMs("1.1.1.1", 2_101L));
+    }
+
     @Test public void coolingResolverIsMovedBehindHealthyResolvers() {
         DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
         pool.recordSuccess("1.1.1.1", 20L, 1_000L);
@@ -106,9 +143,8 @@ public class DnsUpstreamPoolTest {
 
     @Test public void expiredCooldownGetsSingleHalfOpenProbe() {
         DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
-        pool.recordFailure("1.1.1.1", 1_000L); // cooldown until 2500
-        pool.recordFailure("9.9.9.9", 1_100L); // cooldown until 2600
-
+        pool.recordFailure("1.1.1.1", 1_000L);
+        pool.recordFailure("9.9.9.9", 1_100L);
         assertEquals("8.8.8.8", pool.order(2_000L)[0]);
 
         String[] firstRecovery = pool.order(2_700L);
