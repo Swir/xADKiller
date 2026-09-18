@@ -28,7 +28,7 @@ xADKiller is a privacy-focused Chrome Manifest V3 blocker maintained by **SWIR**
 | Development branch | `chrome-v150-adaptive-memory` |
 | Stable store baseline | v1.4.0 TITAN on `main` |
 | Chrome requirement | Chrome 121+ |
-| Verified development progress | **73.1% — 19/26 roadmap items** |
+| Verified development progress | **76.9% — 20/26 roadmap items** |
 | Release readiness | **BLOCKED** — remaining hardening + manual browser validation |
 
 The roadmap percentage measures implemented development work. It is **not** ad-blocking effectiveness and it does not mean the release gate has passed.
@@ -40,12 +40,13 @@ The roadmap percentage measures implemented development work. It is **not** ad-b
 | Declarative blocking | Uses Manifest V3 DNR rule sets for fast STANDARD, ULTRA and TITAN protection layers. |
 | Adaptive Memory | Learns only high-confidence tracker/ad hosts locally, with bounded storage, TTL cleanup and reset control. |
 | Breakage Guard | Provides temporary per-site recovery without immediately disabling the core protection stack. |
+| Cross-layer rule dedupe | Deterministically removes equivalent protection rules across STANDARD/ULTRA static layers, packaged dynamic intelligence and TITAN session rules, with a CI regression gate. |
 | Feed Guard | Validates approved GitHub protection feeds, schema, age, size and anti-shrink invariants before new data can replace a known-good cache. |
 | Data-only updates | Live Shield, Live Matrix and TITAN feeds contain rules/signatures only; executable logic stays inside the packaged extension. |
 | Offline fallback | A failed, malformed or unavailable live feed falls back to the last validated cached protection data. |
 | PL / EN UI | Maintained popup controls and diagnostics are available in Polish and English. |
 | No-COMPAT active line | The development build does not enable the legacy COMPAT allow-rules layer. |
-| Reproducible gates | CI exercises Chromium runtime, Shadow DOM, real-page soak, performance, feed integrity, breakage and blocking benchmarks. |
+| Reproducible gates | CI exercises Chromium runtime, cross-layer dedupe, Shadow DOM, real-page soak, performance, feed integrity, breakage and blocking benchmarks. |
 
 ## 🚀 Quick Start
 
@@ -75,6 +76,7 @@ Useful local gates:
 ```bash
 cd browser-extension
 npm run validate
+npm run test:layer-dedupe
 npm run test:feeds
 npm run test:feed-v2-consumers
 npm run test:feed-checksums
@@ -88,6 +90,7 @@ The GitHub workflow additionally installs Chromium and runs the full runtime, Sh
 ```text
 Packaged extension code
 ├── DNR static rules: STANDARD / ULTRA / TITAN Boost
+├── deterministic static ↔ dynamic ↔ session dedupe
 ├── session + dynamic protection
 ├── Adaptive Memory
 ├── Breakage Guard
@@ -107,7 +110,7 @@ The live feed path is intentionally separated from executable logic. Remote Java
 
 The authoritative Chrome roadmap is [`browser-extension/ROADMAP_CHROME.md`](browser-extension/ROADMAP_CHROME.md).
 
-Current verified scope: **19 / 26 = 73.1%**. Release readiness remains **BLOCKED** until all remaining functional/performance work and manual browser regression testing are satisfactory.
+Current verified scope: **20 / 26 = 76.9%**. Release readiness remains **BLOCKED** until all remaining functional/performance work and manual browser regression testing are satisfactory.
 
 ## 📦 Releases
 
@@ -121,6 +124,7 @@ No merge to `main` or store update is justified by a green build alone.
 - No remote executable code in the live protection-feed mechanism.
 - No telemetry backend is required for Adaptive Memory or Breakage Guard.
 - Feed corruption/network failure must not replace the last validated cache.
+- Cross-layer dedupe removes semantically equivalent generated rules but does not replace functional browsing/regression testing.
 - DNS/URL/content heuristics can produce false positives, so recovery controls and regression fixtures are part of the release gate.
 - Deterministic benchmark scores describe the repository's fixed fixtures, not every advertisement or website on the Internet.
 - Chrome platform limits and site behavior can change; support claims are kept to behavior verified by the current tests and manifest.
