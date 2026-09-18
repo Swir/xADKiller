@@ -27,7 +27,6 @@ public class DnsUpstreamPoolTest {
         pool.recordSuccess("1.1.1.1", 40L, 1_100L);
         int before = pool.timeoutMs("1.1.1.1", 1_101L);
         pool.recordSuccess("1.1.1.1", 5_000L, 1_200L);
-
         assertEquals(1, pool.slowStreak("1.1.1.1"));
         assertEquals(0, pool.failureStreak("1.1.1.1"));
         assertEquals(3L, pool.successes("1.1.1.1"));
@@ -41,7 +40,6 @@ public class DnsUpstreamPoolTest {
         pool.recordSuccess("1.1.1.1", 1600L, 1_000L);
         pool.recordSuccess("1.1.1.1", 1700L, 1_100L);
         pool.recordSuccess("9.9.9.9", 45L, 1_200L);
-
         assertEquals("9.9.9.9", pool.order(1_201L)[0]);
         assertEquals(2, pool.slowStreak("1.1.1.1"));
         assertEquals(0, pool.failureStreak("1.1.1.1"));
@@ -54,10 +52,7 @@ public class DnsUpstreamPoolTest {
         pool.recordSuccess("1.1.1.1", 1800L, 1_000L);
         pool.recordSuccess("1.1.1.1", 1700L, 1_100L);
         assertEquals(2, pool.slowStreak("1.1.1.1"));
-
-        for (int i = 0; i < 8; i++) {
-            pool.recordSuccess("1.1.1.1", 20L, 1_200L + i * 100L);
-        }
+        for (int i = 0; i < 8; i++) pool.recordSuccess("1.1.1.1", 20L, 1_200L + i * 100L);
         assertEquals(0, pool.slowStreak("1.1.1.1"));
         assertEquals("1.1.1.1", pool.order(2_001L)[0]);
     }
@@ -69,7 +64,6 @@ public class DnsUpstreamPoolTest {
         pool.recordSuccess("1.1.1.1", 1900L, 1_200L);
         assertEquals(3, pool.slowStreak("1.1.1.1"));
         assertEquals(3200, pool.timeoutMs("1.1.1.1", 1_201L));
-
         long afterFortyMinutes = 1_200L + 40L * 60L * 1000L;
         pool.order(afterFortyMinutes);
         assertEquals(0, pool.slowStreak("1.1.1.1"));
@@ -82,7 +76,6 @@ public class DnsUpstreamPoolTest {
         pool.recordSuccess("1.1.1.1", 1900L, 1_000L);
         pool.recordFailure("1.1.1.1", 1_100L);
         assertEquals(1, pool.failureStreak("1.1.1.1"));
-
         long afterTwoHours = 1_100L + 2L * 60L * 60L * 1000L;
         assertEquals("1.1.1.1", pool.order(afterTwoHours)[0]);
         assertEquals(1, pool.failureStreak("1.1.1.1"));
@@ -96,9 +89,7 @@ public class DnsUpstreamPoolTest {
         pool.recordSuccess("9.9.9.9", 40L, 1_200L);
         assertEquals("9.9.9.9", pool.order(1_201L)[0]);
         assertEquals(2, pool.slowStreak("1.1.1.1"));
-
         pool.onNetworkChanged(2_000L);
-
         assertEquals(0, pool.slowStreak("1.1.1.1"));
         assertArrayEquals(SERVERS, pool.order(2_001L));
         assertEquals(1620, pool.timeoutMs("1.1.1.1", 2_001L));
@@ -110,9 +101,7 @@ public class DnsUpstreamPoolTest {
         pool.recordSuccess("1.1.1.1", 1700L, 1_000L);
         pool.recordFailure("1.1.1.1", 1_100L);
         assertEquals(1, pool.failureStreak("1.1.1.1"));
-
         pool.onNetworkChanged(1_200L);
-
         assertEquals(1, pool.failureStreak("1.1.1.1"));
         assertEquals(1L, pool.failures("1.1.1.1"));
         assertEquals(1L, pool.successes("1.1.1.1"));
@@ -126,19 +115,30 @@ public class DnsUpstreamPoolTest {
         pool.recordSuccess("1.1.1.1", 35L, 1_100L);
         pool.onNetworkChanged(2_000L);
         pool.recordSuccess("1.1.1.1", 1600L, 2_100L);
-
         assertEquals(1, pool.slowStreak("1.1.1.1"));
         assertEquals(3L, pool.successes("1.1.1.1"));
         assertEquals(3200, pool.timeoutMs("1.1.1.1", 2_101L));
     }
 
-    @Test public void coolingResolverIsMovedBehindHealthyResolvers() {
+    @Test public void coolingResolverIsOmittedWhileHealthyCapacityExists() {
         DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
         pool.recordSuccess("1.1.1.1", 20L, 1_000L);
         pool.recordFailure("1.1.1.1", 2_000L);
         String[] duringCooldown = pool.order(2_100L);
-        assertTrue(!"1.1.1.1".equals(duringCooldown[0]));
+        assertArrayEquals(new String[]{"9.9.9.9", "8.8.8.8"}, duringCooldown);
         assertEquals(1L, pool.failures("1.1.1.1"));
+        assertTrue(pool.snapshot(2_100L).contains("1.1.1.1 20ms cool="));
+    }
+
+    @Test public void allCoolingResolversExposeOnlyOneEmergencyAttempt() {
+        DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
+        pool.recordFailure("1.1.1.1", 1_000L);
+        pool.recordFailure("9.9.9.9", 1_001L);
+        pool.recordFailure("8.8.8.8", 1_002L);
+        String[] attempts = pool.order(1_100L);
+        assertEquals(1, attempts.length);
+        assertEquals("1.1.1.1", attempts[0]);
+        assertTrue(pool.snapshot(1_100L).contains("9.9.9.9 180ms cool="));
     }
 
     @Test public void expiredCooldownGetsSingleHalfOpenProbe() {
@@ -146,12 +146,10 @@ public class DnsUpstreamPoolTest {
         pool.recordFailure("1.1.1.1", 1_000L);
         pool.recordFailure("9.9.9.9", 1_100L);
         assertEquals("8.8.8.8", pool.order(2_000L)[0]);
-
         String[] firstRecovery = pool.order(2_700L);
-        assertEquals("1.1.1.1", firstRecovery[0]);
-        assertEquals("8.8.8.8", firstRecovery[1]);
-        assertEquals("9.9.9.9", firstRecovery[2]);
+        assertArrayEquals(new String[]{"1.1.1.1", "8.8.8.8"}, firstRecovery);
         assertTrue(pool.snapshot(2_700L).contains("1.1.1.1 180ms probe"));
+        assertTrue(pool.snapshot(2_700L).contains("9.9.9.9 180ms recover=1"));
     }
 
     @Test public void failedHalfOpenProbeReturnsToCooldownAndLetsNextRecover() {
@@ -159,7 +157,6 @@ public class DnsUpstreamPoolTest {
         pool.recordFailure("1.1.1.1", 1_000L);
         pool.recordFailure("9.9.9.9", 1_100L);
         assertEquals("1.1.1.1", pool.order(2_700L)[0]);
-
         pool.recordFailure("1.1.1.1", 2_701L);
         assertEquals("9.9.9.9", pool.order(2_702L)[0]);
         assertEquals(2, pool.failureStreak("1.1.1.1"));
@@ -194,11 +191,8 @@ public class DnsUpstreamPoolTest {
 
     @Test public void backwardClockCorrectionPreservesRemainingCooldown() {
         DnsUpstreamPool pool = new DnsUpstreamPool(SERVERS);
-        pool.recordFailure("1.1.1.1", 10_000L); // cooldown until 11_500
+        pool.recordFailure("1.1.1.1", 10_000L);
         assertTrue(!"1.1.1.1".equals(pool.order(10_500L)[0]));
-
-        // Simulate a 5.5 second wall-clock correction backwards. Remaining
-        // cooldown should stay 1 second instead of stretching by the rollback.
         assertTrue(!"1.1.1.1".equals(pool.order(5_000L)[0]));
         assertTrue(!"1.1.1.1".equals(pool.order(5_999L)[0]));
         assertEquals("1.1.1.1", pool.order(6_000L)[0]);
