@@ -19,22 +19,28 @@
     let url;
     try { url = new URL(String(urlValue || "")); } catch (_) { return ""; }
     if (url.protocol !== "https:" || url.hostname !== RAW_HOST || url.port || url.username || url.password) return "";
+    // Approved feeds are exact immutable request targets. Query strings can carry tokens,
+    // cache-busters or accidental caller secrets to GitHub even when the pathname itself
+    // is approved, while fragments create a second spelling of the same protected URL.
+    // Reject both so provenance and request privacy are tied to one canonical URL.
+    if (url.search || url.hash) return "";
     return APPROVED_PATHS[url.pathname] || "";
   }
   function requestMethod(input, init) {
     return String(init?.method || input?.method || "GET").trim().toUpperCase();
   }
-  function publicDataHeaders(sourceHeaders) {
-    const source = new Headers(sourceHeaders || undefined);
-    const accept = String(source.get("accept") || "").trim();
-    return Object.freeze({ accept: accept || FEED_ACCEPT });
+  function publicDataHeaders(_sourceHeaders) {
+    // Never preserve caller-controlled header values for public protection feeds. Even an
+    // otherwise-safe header such as Accept can be abused as a covert carrier for tokens.
+    // A single deterministic Accept value is sufficient for every approved data endpoint.
+    return Object.freeze({ accept:FEED_ACCEPT });
   }
   function hardenedInit(init) {
     return {
       ...(init || {}),
-      // Public protection data never needs caller secrets. Keep only Accept negotiation,
-      // strip Authorization/Cookie/API-key style headers, bypass HTTP cache, and rely on
-      // xADKiller's separately validated known-good cache for offline fallback.
+      // Public protection data never needs caller secrets. Keep only deterministic Accept
+      // negotiation, strip Authorization/Cookie/API-key style headers, bypass HTTP cache,
+      // and rely on xADKiller's separately validated known-good cache for offline fallback.
       headers:publicDataHeaders(init?.headers),
       cache:"no-store",
       redirect:"error",
