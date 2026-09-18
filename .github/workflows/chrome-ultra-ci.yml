@@ -93,7 +93,7 @@ jobs:
           node --check tools/validate-v150-safety.mjs
       - name: Protection feed transport privacy provenance and size regression
         run: node tests/chrome-feed-transport-contract.mjs
-      - name: Protection feed canonical data-only payload contract regression
+      - name: Protection feed strict schema bounds dedupe and data-only contract regression
         run: node tests/chrome-feed-data-contract.mjs
       - name: GitHub feed integrity anti-replay and downgrade regression test
         run: npm run test:feeds
