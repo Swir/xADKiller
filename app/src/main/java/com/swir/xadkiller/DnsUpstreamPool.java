@@ -40,6 +40,11 @@ import java.util.Map;
  * A newly established VPN/network epoch can explicitly reset only latency-derived
  * state. Lifetime success/failure counters and circuit-breaker failures remain
  * intact, while RTT/slow penalties start from a neutral baseline for the new path.
+ *
+ * Runtime timestamps are also rebased if the supplied clock moves backwards
+ * (for example after a manual/NTP wall-clock correction). Remaining cooldown and
+ * latency-aging durations are preserved instead of becoming artificially long or
+ * negative. This is defensive even when callers later migrate to a monotonic clock.
  */
 final class DnsUpstreamPool {
     private static final int DEFAULT_RTT_MS = 180;
@@ -77,6 +82,7 @@ final class DnsUpstreamPool {
 
     private final List<State> states = new ArrayList<>();
     private final Map<String, State> byServer = new HashMap<>();
+    private long lastNowMs = Long.MIN_VALUE;
 
     DnsUpstreamPool(String[] servers) {
         if (servers == null || servers.length == 0) throw new IllegalArgumentException("servers");
@@ -92,6 +98,7 @@ final class DnsUpstreamPool {
     }
 
     synchronized String[] order(long nowMs) {
+        nowMs = stableNow(nowMs);
         ageStaleLatency(nowMs);
         List<State> ordered = new ArrayList<>(states);
         final State probe = recoveryProbeCandidate(nowMs);
@@ -110,6 +117,7 @@ final class DnsUpstreamPool {
     }
 
     synchronized int timeoutMs(String server, long nowMs) {
+        nowMs = stableNow(nowMs);
         ageStaleLatency(nowMs);
         State state = byServer.get(server);
         if (state == null) return 2200;
@@ -125,6 +133,7 @@ final class DnsUpstreamPool {
      * resolver must still prove recovery through the bounded half-open probe.
      */
     synchronized void onNetworkChanged(long nowMs) {
+        nowMs = stableNow(nowMs);
         for (State state : states) {
             state.ewmaRttMs = DEFAULT_RTT_MS;
             state.slowStreak = 0;
@@ -135,6 +144,7 @@ final class DnsUpstreamPool {
     }
 
     synchronized void recordSuccess(String server, long rttMs, long nowMs) {
+        nowMs = stableNow(nowMs);
         State state = byServer.get(server);
         if (state == null) return;
         ageStateLatency(state, nowMs);
@@ -161,6 +171,7 @@ final class DnsUpstreamPool {
     }
 
     synchronized void recordFailure(String server, long nowMs) {
+        nowMs = stableNow(nowMs);
         State state = byServer.get(server);
         if (state == null) return;
         ageStateLatency(state, nowMs);
@@ -175,6 +186,7 @@ final class DnsUpstreamPool {
     }
 
     synchronized String snapshot(long nowMs) {
+        nowMs = stableNow(nowMs);
         ageStaleLatency(nowMs);
         StringBuilder out = new StringBuilder();
         State probe = recoveryProbeCandidate(nowMs);
@@ -222,6 +234,31 @@ final class DnsUpstreamPool {
     synchronized int slowStreak(String server) {
         State state = byServer.get(server);
         return state == null ? 0 : state.slowStreak;
+    }
+
+    private long stableNow(long nowMs) {
+        if (lastNowMs == Long.MIN_VALUE) {
+            lastNowMs = nowMs;
+            return nowMs;
+        }
+        if (nowMs >= lastNowMs) {
+            lastNowMs = nowMs;
+            return nowMs;
+        }
+
+        long delta = lastNowMs - nowMs;
+        for (State state : states) {
+            state.cooldownUntilMs = rebaseTimestamp(state.cooldownUntilMs, delta);
+            state.lastObservationAtMs = rebaseTimestamp(state.lastObservationAtMs, delta);
+            state.lastLatencyDecayAtMs = rebaseTimestamp(state.lastLatencyDecayAtMs, delta);
+        }
+        lastNowMs = nowMs;
+        return nowMs;
+    }
+
+    private long rebaseTimestamp(long value, long delta) {
+        if (value <= 0L || delta <= 0L) return value;
+        return value > delta ? value - delta : 1L;
     }
 
     private void ageStaleLatency(long nowMs) {
