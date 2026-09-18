@@ -57,11 +57,13 @@ try {
   const serviceWorker = fs.readFileSync(path.join(common, "service-worker.js"), "utf8");
   assert.match(
     serviceWorker,
-    /importScripts\("feed-transport-guard\.js",\s*"feed-guard\.js",\s*"feed-v2-compat\.js"/,
-    "Feed transport guard must run before Feed Guard, and Feed Guard before the v2 compatibility adapter"
+    /importScripts\("feed-transport-guard\.js",\s*"feed-data-contract\.js",\s*"feed-guard\.js",\s*"feed-v2-compat\.js"/,
+    "Feed transport and data-contract guards must run before Feed Guard, and Feed Guard before the v2 compatibility adapter"
   );
   assert.ok(!/eval\s*\(|new\s+Function\s*\(/.test(fs.readFileSync(path.join(common, "feed-v2-compat.js"), "utf8")),
     "compatibility adapter must not execute remote code");
+  assert.ok(!/eval\s*\(|new\s+Function\s*\(/.test(fs.readFileSync(path.join(common, "feed-data-contract.js"), "utf8")),
+    "feed data contract must validate opaque data without executable remote code");
 
   console.log("Feed v2 consumer compatibility: PASS");
 } finally {
