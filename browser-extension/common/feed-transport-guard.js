@@ -100,8 +100,16 @@
   function validateResponse(kind, response) {
     if (!response || typeof response !== "object") fail("transport_response");
     if (response.redirected === true) fail("transport_redirect");
+    const responseType = String(response.type || "").trim().toLowerCase();
+    if (responseType === "opaque" || Number(response.status) === 0) fail("transport_opaque");
     const finalUrl = String(response.url || "").trim();
-    if (finalUrl && guardedKind(finalUrl) !== kind) fail("transport_provenance");
+    const finalParsed = parseApprovedUrl(finalUrl);
+    // Protected data must come back from the exact canonical endpoint we requested.
+    // A missing URL, a different approved feed, or any final query/hash is rejected:
+    // the caller-side ?v= cache buster is stripped before I/O and must never reappear.
+    if (!finalParsed || finalParsed.kind !== kind || finalParsed.url.search || finalParsed.url.hash) {
+      fail("transport_provenance");
+    }
     validateContentLength(response);
     if (response.ok) validateContentType(response);
     return response;
