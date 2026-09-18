@@ -18,9 +18,7 @@
     "application/octet-stream"
   ]);
 
-  function fail(reason) {
-    throw new TypeError(`xad_feed_guard_${reason}`);
-  }
+  function fail(reason) { throw new TypeError(`xad_feed_guard_${reason}`); }
 
   function guardedKind(urlValue) {
     let url;
@@ -33,20 +31,22 @@
     return String(init?.method || input?.method || "GET").trim().toUpperCase();
   }
 
-  function publicDataHeaders() {
+  function publicDataHeaders(sourceHeaders) {
+    const source = new Headers(sourceHeaders || undefined);
     const headers = new Headers();
-    headers.set("accept", FEED_ACCEPT);
+    const accept = String(source.get("accept") || "").trim();
+    headers.set("accept", accept || FEED_ACCEPT);
     return headers;
   }
 
   function hardenedInit(init) {
     return {
       ...(init || {}),
-      // Protection feeds are public immutable-style data. Do not inherit arbitrary
-      // caller headers (Authorization, Cookie, API keys, etc.) and do not let the
-      // browser HTTP cache become a second, unvalidated fallback layer. xADKiller's
-      // own validated known-good cache remains the only offline fallback.
-      headers:publicDataHeaders(),
+      // Protection feeds are public data. Strip every caller header except content
+      // negotiation so Authorization/Cookie/API-key style secrets can never hitchhike
+      // to GitHub. Disable the browser HTTP cache as a second unvalidated fallback;
+      // xADKiller's validated known-good cache remains the only offline fallback.
+      headers:publicDataHeaders(init?.headers),
       cache:"no-store",
       redirect:"error",
       credentials:"omit",
@@ -59,29 +59,18 @@
     const controller = new AbortController();
     const callerSignal = init?.signal || input?.signal || null;
     let detach = () => {};
-
     if (callerSignal) {
-      if (callerSignal.aborted) {
-        controller.abort();
-      } else if (typeof callerSignal.addEventListener === "function") {
+      if (callerSignal.aborted) controller.abort();
+      else if (typeof callerSignal.addEventListener === "function") {
         const onAbort = () => controller.abort();
         callerSignal.addEventListener("abort", onAbort, { once:true });
-        detach = () => {
-          try { callerSignal.removeEventListener?.("abort", onAbort); } catch (_) {}
-        };
+        detach = () => { try { callerSignal.removeEventListener?.("abort", onAbort); } catch (_) {} };
       }
     }
-
     const boundedTimeout = Math.max(1, Math.min(FEED_FETCH_TIMEOUT_MS, Math.floor(Number(timeoutMs) || FEED_FETCH_TIMEOUT_MS)));
     const timer = setTimeout(() => controller.abort(), boundedTimeout);
     next.signal = controller.signal;
-    return {
-      init:next,
-      cleanup:() => {
-        clearTimeout(timer);
-        detach();
-      }
-    };
+    return { init:next, cleanup:() => { clearTimeout(timer); detach(); } };
   }
 
   function validateContentLength(response) {
@@ -105,7 +94,6 @@
   function validateResponse(kind, response) {
     if (!response || typeof response !== "object") fail("transport_response");
     if (response.redirected === true) fail("transport_redirect");
-
     const finalUrl = String(response.url || "").trim();
     if (finalUrl && guardedKind(finalUrl) !== kind) fail("transport_provenance");
     validateContentLength(response);
@@ -114,10 +102,7 @@
   }
 
   async function bufferBoundedBody(response) {
-    if (!response?.body || typeof response.body.getReader !== "function" || typeof Response !== "function") {
-      return response;
-    }
-
+    if (!response?.body || typeof response.body.getReader !== "function" || typeof Response !== "function") return response;
     const reader = response.body.getReader();
     const chunks = [];
     let total = 0;
@@ -133,22 +118,12 @@
         }
         chunks.push(chunk);
       }
-    } finally {
-      try { reader.releaseLock?.(); } catch (_) {}
-    }
+    } finally { try { reader.releaseLock?.(); } catch (_) {} }
 
     const payload = new Uint8Array(total);
     let offset = 0;
-    for (const chunk of chunks) {
-      payload.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-
-    const buffered = new Response(payload, {
-      status:response.status,
-      statusText:response.statusText,
-      headers:response.headers
-    });
+    for (const chunk of chunks) { payload.set(chunk, offset); offset += chunk.byteLength; }
+    const buffered = new Response(payload, { status:response.status, statusText:response.statusText, headers:response.headers });
     try { Object.defineProperty(buffered, "url", { value:String(response.url || ""), configurable:true }); } catch (_) {}
     try { Object.defineProperty(buffered, "redirected", { value:Boolean(response.redirected), configurable:true }); } catch (_) {}
     return buffered;
@@ -159,29 +134,17 @@
     const kind = guardedKind(urlValue);
     if (!kind) return nativeFetch(input, init);
     if (requestMethod(input, init) !== "GET") fail("transport_method");
-
     const timed = timedInit(input, init);
     try {
       const response = await nativeFetch(input, timed.init);
       validateResponse(kind, response);
       return await bufferBoundedBody(response);
-    } finally {
-      timed.cleanup();
-    }
+    } finally { timed.cleanup(); }
   };
 
   globalThis.XAD_FEED_TRANSPORT_GUARD = Object.freeze({
-    MAX_FEED_BYTES,
-    FEED_FETCH_TIMEOUT_MS,
-    FEED_ACCEPT,
-    guardedKind,
-    requestMethod,
-    publicDataHeaders,
-    hardenedInit,
-    timedInit,
-    validateContentLength,
-    validateContentType,
-    validateResponse,
-    bufferBoundedBody
+    MAX_FEED_BYTES, FEED_FETCH_TIMEOUT_MS, FEED_ACCEPT, guardedKind, requestMethod,
+    publicDataHeaders, hardenedInit, timedInit, validateContentLength,
+    validateContentType, validateResponse, bufferBoundedBody
   });
 })();
