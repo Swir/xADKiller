@@ -120,6 +120,10 @@ async function waitForAlarms(worker, requiredNames, timeoutMs = 12000) {
   throw new Error(`missing update alarms ${missing.join(",")}: ${lastNames.join(",")}`);
 }
 
+async function sendFromPage(page, message) {
+  return await page.evaluate(async (payload) => await chrome.runtime.sendMessage(payload), message);
+}
+
 let browser = null;
 try {
   browser = await puppeteer.launch({
@@ -139,12 +143,16 @@ try {
   const alarmNames = await waitForAlarms(worker, requiredAlarms);
   log("Update alarms OK", alarmNames.join(","));
 
+  const popup = await browser.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil:"domcontentloaded", timeout:12000 });
+  await popup.waitForSelector("#mode", { timeout:12000 });
+
   const standardSessionFloor = Math.min(2700, titanSessionPack.length);
   const ultraSessionFloor = Math.min(2850, titanSessionPack.length);
   const standardShield = await waitShield(worker, { intel:15000, live:60, core:15, matrix:15, regex:2, session:standardSessionFloor }, 50000);
   log("STANDARD TITAN Shield", JSON.stringify(standardShield));
 
-  const titanStats = await worker.evaluate(async () => await chrome.runtime.sendMessage({type:"getTitanStats"}));
+  const titanStats = await sendFromPage(popup, { type:"getTitanStats" });
   if (!titanStats?.ok || titanStats.regex < 2) throw new Error(`TITAN feed stats invalid: ${JSON.stringify(titanStats)}`);
   log("TITAN feed", `${titanStats.version} • regex=${titanStats.regex}`);
 
@@ -165,8 +173,6 @@ try {
   }
   log("DOM assertions", JSON.stringify(dom));
 
-  const popup = await browser.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil:"domcontentloaded", timeout:12000 });
   await popup.select("#mode", "ultra");
   const ultraShield = await waitShield(worker, { intel:23000, live:100, core:25, matrix:35, regex:3, session:ultraSessionFloor }, 50000);
   log("ULTRA TITAN Shield", JSON.stringify(ultraShield));
@@ -186,9 +192,7 @@ try {
   if (!mainGuards.workerBlocked || !mainGuards.popupBlocked || !mainGuards.markupBlocked) throw new Error(`TITAN MAIN-world guard incomplete: ${JSON.stringify(mainGuards)}`);
   log("TITAN MAIN-world guards", JSON.stringify(mainGuards));
 
-  // Use an actual canonical provider host. The learner intentionally rejects
-  // provider-name lookalikes such as cdn-adnxs.example.net after v1.5 hardening.
-  const learnResult = await popup.evaluate(async () => await chrome.runtime.sendMessage({ type:"titanLearnResource", url:"https://ib.adnxs.com/runtime/ad.js", pageHost:"example.org" }));
+  const learnResult = await sendFromPage(popup, { type:"titanLearnResource", url:"https://ib.adnxs.com/runtime/ad.js", pageHost:"example.org" });
   if (!learnResult?.ok) throw new Error(`adaptive learner rejected strong signal: ${JSON.stringify(learnResult)}`);
   const learnedShield = await waitShield(worker, { learned:1, session:ultraSessionFloor }, 8000);
   log("Adaptive session learner", JSON.stringify({ learned:learnedShield.learned }));
