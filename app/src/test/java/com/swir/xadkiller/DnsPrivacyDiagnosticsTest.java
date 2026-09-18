@@ -16,6 +16,7 @@ public class DnsPrivacyDiagnosticsTest {
         assertTrue(a.localDnsConflict);
         assertTrue(a.encryptedSystemDnsActive);
         assertFalse(a.applicationDohDetectable);
+        assertFalse(a.strictResolverMismatch);
     }
 
     @Test
@@ -26,8 +27,30 @@ public class DnsPrivacyDiagnosticsTest {
         assertEquals("strict_private_dns_pending", a.code);
         assertTrue(a.localDnsConflict);
         assertFalse(a.encryptedSystemDnsActive);
+        assertFalse(a.strictResolverMismatch);
         assertTrue(a.summary(false).contains("configured but inactive"));
         assertTrue(a.summary(true).contains("skonfigurowany, ale nieaktywny"));
+    }
+
+    @Test
+    public void strictActiveResolverMismatchIsSurfacedInsteadOfLookingHealthy() {
+        DnsPrivacyDiagnostics.Assessment a = DnsPrivacyDiagnostics.assess(
+                true, "hostname", "dns.expected.example", true, "dns.actual.example", 2);
+        assertEquals(DnsPrivacyDiagnostics.Severity.WARNING, a.severity);
+        assertEquals("strict_private_dns_mismatch", a.code);
+        assertTrue(a.localDnsConflict);
+        assertTrue(a.encryptedSystemDnsActive);
+        assertTrue(a.strictResolverMismatch);
+        assertTrue(a.summary(false).contains("differs from configured hostname"));
+        assertTrue(a.summary(true).contains("nie zgadza się z konfiguracją"));
+    }
+
+    @Test
+    public void strictHostnameComparisonIgnoresCaseAndTrailingDot() {
+        DnsPrivacyDiagnostics.Assessment a = DnsPrivacyDiagnostics.assess(
+                true, "hostname", "DNS.Example.", true, "dns.example", 2);
+        assertEquals("strict_private_dns", a.code);
+        assertFalse(a.strictResolverMismatch);
     }
 
     @Test
@@ -55,6 +78,7 @@ public class DnsPrivacyDiagnosticsTest {
         assertEquals("encrypted_system_dns", a.code);
         assertFalse(a.localDnsConflict);
         assertTrue(a.encryptedSystemDnsActive);
+        assertFalse(a.strictResolverMismatch);
     }
 
     @Test
