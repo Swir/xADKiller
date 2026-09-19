@@ -51,7 +51,7 @@ public class VpnLifecycleStartPolicyTest {
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, false, true, freshHeartbeat, NOW, false));
     }
 
-    @Test public void duplicateManagedRestartBurstSuppressesSameAndCrossActionSignals() {
+    @Test public void duplicateManagedRestartBurstSuppressesOnlySameActionRepeats() {
         long inside = NOW - VpnLifecycleStartPolicy.DUPLICATE_RESTART_WINDOW_MS + 1L;
         long outside = NOW - VpnLifecycleStartPolicy.DUPLICATE_RESTART_WINDOW_MS - 1L;
         assertTrue(VpnLifecycleStartPolicy.isDuplicateRestart(
@@ -60,12 +60,16 @@ public class VpnLifecycleStartPolicyTest {
         assertTrue(VpnLifecycleStartPolicy.isDuplicateRestart(
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED,
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, inside, NOW));
-        assertTrue(VpnLifecycleStartPolicy.isDuplicateRestart(
+
+        // A different lifecycle action can represent a real second process kill. It must not
+        // be swallowed by the dedupe window or protection may stay down after a boot/update race.
+        assertFalse(VpnLifecycleStartPolicy.isDuplicateRestart(
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, inside, NOW));
-        assertTrue(VpnLifecycleStartPolicy.isDuplicateRestart(
+        assertFalse(VpnLifecycleStartPolicy.isDuplicateRestart(
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED,
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, inside, NOW));
+
         assertTrue(VpnLifecycleStartPolicy.isDuplicateRestart(
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
@@ -75,7 +79,7 @@ public class VpnLifecycleStartPolicyTest {
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, outside, NOW));
     }
 
-    @Test public void rejectedLifecycleSignalDoesNotPoisonDuplicateWindowForLaterLegitimateStart() {
+    @Test public void rejectedLifecycleSignalAndCrossActionEventDoNotPoisonLaterLegitimateStart() {
         long inside = NOW - 1_000L;
         assertFalse(VpnLifecycleStartPolicy.shouldSuppressStartAttempt(
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, false,
@@ -83,21 +87,27 @@ public class VpnLifecycleStartPolicyTest {
         assertFalse(VpnLifecycleStartPolicy.shouldSuppressStartAttempt(
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, false,
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, inside, NOW));
-        assertTrue(VpnLifecycleStartPolicy.shouldSuppressStartAttempt(
+        assertFalse(VpnLifecycleStartPolicy.shouldSuppressStartAttempt(
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, true,
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, inside, NOW));
-        assertTrue(VpnLifecycleStartPolicy.shouldSuppressStartAttempt(
+        assertFalse(VpnLifecycleStartPolicy.shouldSuppressStartAttempt(
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, true,
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, inside, NOW));
+        assertTrue(VpnLifecycleStartPolicy.shouldSuppressStartAttempt(
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, true,
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, inside, NOW));
+        assertTrue(VpnLifecycleStartPolicy.shouldSuppressStartAttempt(
+                VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, true,
+                VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, inside, NOW));
     }
 
     @Test public void elapsedRealtimeResetOrRollbackDoesNotSuppressFirstRestartAfterReboot() {
         assertFalse(VpnLifecycleStartPolicy.isDuplicateRestart(
                 VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED,
-                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, NOW + 1L, NOW));
+                VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, NOW + 1L, NOW));
         assertFalse(VpnLifecycleStartPolicy.isDuplicateRestart(
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
-                VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED, NOW, 0L));
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, NOW, 0L));
     }
 
     @Test public void restartActionsAreExplicitlyClassifiedForStaleStateCleanup() {
