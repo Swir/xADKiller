@@ -47,7 +47,8 @@ public class BlocklistLargeListQualificationTest {
     }
 
     @Test public void fullCacheLoadsRemainOffAndroidMainThreadByConstruction() throws Exception {
-        String source = Files.readString(findServiceSource().toPath(), StandardCharsets.UTF_8);
+        String source = new String(
+                Files.readAllBytes(findServiceSource().toPath()), StandardCharsets.UTF_8);
 
         int reloadAction = source.indexOf("if (ACTION_RELOAD.equals(action))");
         int reloadThread = source.indexOf("new Thread(() -> {", reloadAction);
