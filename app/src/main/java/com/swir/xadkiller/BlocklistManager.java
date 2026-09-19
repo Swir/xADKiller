@@ -308,7 +308,11 @@ final class BlocklistManager {
                 current = new URL(current, location.trim());
                 continue;
             }
-            if (code < 200 || code >= 300) {
+            // Remote blocklists are complete representation downloads. 204 has no list and
+            // 206 is only a partial representation; both are technically 2xx but accepting
+            // either can replace a healthy cache with incomplete protection data. Require
+            // exactly HTTP 200 after the explicit redirect chain has settled.
+            if (!isAcceptedRemoteSuccessCode(code)) {
                 conn.disconnect();
                 throw new IOException("HTTP " + code + " z " + current);
             }
@@ -337,6 +341,10 @@ final class BlocklistManager {
                 || code == HttpURLConnection.HTTP_MOVED_TEMP
                 || code == HttpURLConnection.HTTP_SEE_OTHER
                 || code == 307 || code == 308;
+    }
+
+    static boolean isAcceptedRemoteSuccessCode(int code) {
+        return code == HttpURLConnection.HTTP_OK;
     }
 
     static boolean isAllowedRemoteUrl(String value) {
