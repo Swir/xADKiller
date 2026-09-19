@@ -10,8 +10,10 @@ on:
       - "browser-extension/tools/feed-v2-rollout-plan.mjs"
       - "browser-extension/tools/validate-feed-v2-rollout-plan.mjs"
       - "browser-extension/tools/verify-feed-v2-remote-state.mjs"
+      - "browser-extension/tools/feed-v2-store-compat-gate.mjs"
       - "browser-extension/tests/feed-v2-rollout-plan-contract.mjs"
       - "browser-extension/tests/feed-v2-remote-state-contract.mjs"
+      - "browser-extension/tests/feed-v2-store-compat-gate.mjs"
       - "browser-intelligence/feed-checksums.json"
       - "browser-intelligence/feed-v2-migration-plan.json"
       - ".github/workflows/feed-v2-rollout-rehearsal.yml"
@@ -31,8 +33,13 @@ jobs:
       run:
         working-directory: browser-extension
     steps:
-      - name: Checkout
+      - name: Checkout development branch
         uses: actions/checkout@v5
+      - name: Checkout current store/main baseline
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          path: store-main
       - name: Node 24
         uses: actions/setup-node@v5
         with:
@@ -42,8 +49,10 @@ jobs:
           node --check tools/feed-v2-rollout-plan.mjs
           node --check tools/validate-feed-v2-rollout-plan.mjs
           node --check tools/verify-feed-v2-remote-state.mjs
+          node --check tools/feed-v2-store-compat-gate.mjs
           node --check tests/feed-v2-rollout-plan-contract.mjs
           node --check tests/feed-v2-remote-state-contract.mjs
+          node --check tests/feed-v2-store-compat-gate.mjs
       - name: Rebuild deterministic schema-v2 candidates from pinned production data
         run: node tools/feed-v2-migration-preflight.mjs --write
       - name: Validate candidate artifact manifest
@@ -56,6 +65,10 @@ jobs:
         run: node tests/feed-v2-remote-state-contract.mjs
       - name: Verify production targets still match optimistic-concurrency preconditions
         run: node tools/verify-feed-v2-remote-state.mjs --mode=pre
+      - name: Unit-test store compatibility gate
+        run: node tests/feed-v2-store-compat-gate.mjs
+      - name: Gate in-place v2 publication against current store/main consumer
+        run: node tools/feed-v2-store-compat-gate.mjs --store-root=../store-main --out=packages/feed-v2-candidates/store-compatibility.json
       - name: Tamper regression for rollout safety contract
         run: node tests/feed-v2-rollout-plan-contract.mjs
       - name: Upload verified rehearsal bundle
