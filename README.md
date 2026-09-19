@@ -14,7 +14,7 @@
 
 <img width="100%" src="assets/readme/android/progress-card.svg" alt="xADKiller Android development progress" />
 
-**Development progress:** **66.7% — 8/12 verified v1.6 development items.**  
+**Development progress:** **75.0% — 9/12 verified v1.6 development items.**  
 **Release readiness:** **BLOCKED** — automated CI is green, but physical-device VPN lifecycle, Wi-Fi/mobile transitions, sleep/wake, real-app behavior and longer stability validation are still required.
 
 | Item | Status |
@@ -35,6 +35,7 @@
 | 🛡️ Local DNS filtering | Blocks known advertising, tracking and malicious domains device-wide without root. |
 | 🔒 Local VPN architecture | Routes only the virtual DNS path needed by the filter; xADKiller does not operate a remote VPN relay. |
 | 💓 VPN liveness heartbeat | Refreshes local service/UI liveness every 5 seconds even when no DNS packets are flowing, while still shutting the heartbeat down with the VPN lifecycle. |
+| 🩺 v1.6 system-health dashboard | Shows VPN, DNS, blocklist, Smart Engine and last-update health independently, then offers one context-aware non-destructive recovery action with maintained PL/EN copy. |
 | ⚡ STANDARD / ULTRA lists | Uses maintained public blocklists plus a bundled offline starter list and user rules. |
 | 🧠 Adaptive DNS upstream pool | Tracks aggregate resolver latency/failures, uses bounded half-open recovery probes, caps the single provider-wide outage emergency attempt to 1200 ms, ages stale latency-only penalties, and starts each newly established VPN session with a fresh RTT/slow-response epoch while preserving failure/cooldown evidence. |
 | 🔎 Private DNS diagnostics | Distinguishes strict Private DNS conflicts, active encrypted system DNS, automatic/unknown states and no-network states without pretending that per-app DoH can be detected. |
@@ -88,6 +89,7 @@ The branch CI additionally validates the manifest, APK archive integrity and SHA
 | `DnsPacket` | Strict IPv4/UDP/DNS parsing and upstream response validation. |
 | `DnsUpstreamPool` | Resolver health scoring, network-epoch latency reset, stale-latency aging, cooldown, bounded half-open recovery and a 1200 ms all-provider emergency attempt while preserving failure evidence. |
 | `BlocklistManager` | Offline bootstrap, remote list parsing/cache, user rules and memory-bounded hashed lookup. |
+| `DashboardStatusModel` | Testable v1.6 health-state aggregation and recovery priority for VPN, DNS, blocklists, Smart Engine and update freshness. |
 | `PrivateDnsHelper` + `DnsPrivacyDiagnostics` | System Private DNS inspection plus testable conflict/risk classification; per-app DoH is deliberately not claimed as detectable. |
 | `SystemLogStore` / `LogStore` | Local diagnostics and blocking records. |
 
@@ -106,7 +108,7 @@ python3 ci/progress_svg.py android
 python3 ci/progress_svg.py android --check
 ```
 
-The Android v1.6 roadmap defines a finite 12-item development denominator. The generator derives the current **8/12 = 66.7%** directly from that checklist; the large-list/ANR item is now backed by the exact-head constrained-heap 750k-domain gate, while release readiness remains a separate physical-device/manual gate.
+The Android v1.6 roadmap defines a finite 12-item development denominator. The generator derives the current **9/12 = 75.0%** directly from that checklist; the dashboard/status/recovery UX and large-list/ANR items are backed by dedicated automated gates, while release readiness remains a separate physical-device/manual gate.
 
 ## 🔎 Search Keywords
 

@@ -46,6 +46,17 @@ public class DashboardStatusModelTest {
     }
 
     @Test
+    public void futureVpnHeartbeatCannotPretendProtectionIsFresh() {
+        DashboardStatusModel model = DashboardStatusModel.evaluate(
+                NOW, true, NOW + 1_000L, true, false,
+                50_000, true, NOW - 1_000L,
+                true, true, NOW - 1_000L);
+
+        assertEquals(DashboardStatusModel.VpnState.STALE, model.vpn);
+        assertEquals(DashboardStatusModel.RecoveryAction.START_VPN, model.recovery);
+    }
+
+    @Test
     public void starterListOrNeverUpdatedRequestsSafeListUpdate() {
         DashboardStatusModel model = DashboardStatusModel.evaluate(
                 NOW, true, NOW - 1_000L, true, false,
@@ -54,6 +65,29 @@ public class DashboardStatusModelTest {
 
         assertEquals(DashboardStatusModel.BlocklistState.STARTER_ONLY, model.blocklist);
         assertEquals(DashboardStatusModel.UpdateState.NEVER, model.update);
+        assertEquals(DashboardStatusModel.RecoveryAction.UPDATE_BLOCKLIST, model.recovery);
+    }
+
+    @Test
+    public void staleFullListRequestsRefreshBeforeAccessibilityRepair() {
+        DashboardStatusModel model = DashboardStatusModel.evaluate(
+                NOW, true, NOW - 1_000L, true, false,
+                125_000, true, NOW - DashboardStatusModel.UPDATE_STALE_MS - 1L,
+                false, true, 0L);
+
+        assertEquals(DashboardStatusModel.UpdateState.STALE, model.update);
+        assertEquals(DashboardStatusModel.SmartState.SERVICE_OFF, model.smart);
+        assertEquals(DashboardStatusModel.RecoveryAction.UPDATE_BLOCKLIST, model.recovery);
+    }
+
+    @Test
+    public void emptyListRequestsRefreshEvenWithRecentUpdateTimestamp() {
+        DashboardStatusModel model = DashboardStatusModel.evaluate(
+                NOW, true, NOW - 1_000L, true, false,
+                0, false, NOW - 1_000L,
+                true, true, NOW - 1_000L);
+
+        assertEquals(DashboardStatusModel.BlocklistState.EMPTY, model.blocklist);
         assertEquals(DashboardStatusModel.RecoveryAction.UPDATE_BLOCKLIST, model.recovery);
     }
 
@@ -69,7 +103,30 @@ public class DashboardStatusModelTest {
     }
 
     @Test
-    public void futureTimestampDoesNotBecomeStale() {
+    public void intentionalSmartDetectorDisableDoesNotForceAccessibilityRecovery() {
+        DashboardStatusModel model = DashboardStatusModel.evaluate(
+                NOW, true, NOW - 1_000L, true, false,
+                120_000, true, NOW - 1_000L,
+                false, false, 0L);
+
+        assertEquals(DashboardStatusModel.SmartState.SERVICE_OFF, model.smart);
+        assertEquals(DashboardStatusModel.RecoveryAction.NONE, model.recovery);
+    }
+
+    @Test
+    public void noNetworkIsVisibleAndCannotCountAsHealthyDns() {
+        DashboardStatusModel model = DashboardStatusModel.evaluate(
+                NOW, true, NOW - 1_000L, false, false,
+                120_000, true, NOW - 1_000L,
+                true, true, NOW - 1_000L);
+
+        assertEquals(DashboardStatusModel.DnsState.NO_NETWORK, model.dns);
+        assertEquals(DashboardStatusModel.RecoveryAction.NONE, model.recovery);
+        assertEquals(4, model.healthyCount);
+    }
+
+    @Test
+    public void futureUpdateTimestampDoesNotBecomeStaleDuringClockCorrection() {
         DashboardStatusModel model = DashboardStatusModel.evaluate(
                 NOW, true, NOW - 1_000L, true, false,
                 120_000, true, NOW + 5_000L,

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="180" viewBox="0 0 1200 180" role="img" aria-labelledby="title desc">
-  <title id="title">xADKiller Android progress — 66.7%</title>
-  <desc id="desc">v1.6.0 development roadmap. Status HARDENING. Roadmap items: 8/12 verified. Development progress and release readiness are separate gates.</desc>
+  <title id="title">xADKiller Android progress — 75.0%</title>
+  <desc id="desc">v1.6.0 development roadmap. Status HARDENING. Roadmap items: 9/12 verified. Development progress and release readiness are separate gates.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#02050A"/>
@@ -26,9 +26,9 @@
   <text x="50" y="96" fill="#8DA8B8" font-family="Segoe UI,Arial,sans-serif" font-size="15">v1.6.0 development roadmap</text>
   <rect x="935" y="25" width="215" height="34" rx="17" fill="#07111C" stroke="#0088FF" stroke-opacity=".75"/>
   <text x="1042.5" y="47" text-anchor="middle" fill="#62E5FF" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700">HARDENING</text>
-  <text x="50" y="122" fill="#8DA8B8" font-family="Segoe UI,Arial,sans-serif" font-size="13">Roadmap items: 8/12 verified</text>
-  <text x="1150" y="122" text-anchor="end" fill="#F4FAFF" font-family="Segoe UI,Arial,sans-serif" font-size="24" font-weight="700">66.7%</text>
+  <text x="50" y="122" fill="#8DA8B8" font-family="Segoe UI,Arial,sans-serif" font-size="13">Roadmap items: 9/12 verified</text>
+  <text x="1150" y="122" text-anchor="end" fill="#F4FAFF" font-family="Segoe UI,Arial,sans-serif" font-size="24" font-weight="700">75.0%</text>
   <rect id="progress-track" x="50" y="138" width="1100" height="18" rx="9" fill="#0A1A28" stroke="#8DA8B8" stroke-opacity=".22"/>
-  <rect id="progress-fill" x="50" y="138" width="733.333333" height="18" rx="9" fill="url(#progressGradient)" filter="url(#softGlow)" clip-path="url(#trackClip)"/>
+  <rect id="progress-fill" x="50" y="138" width="825" height="18" rx="9" fill="url(#progressGradient)" filter="url(#softGlow)" clip-path="url(#trackClip)"/>
   <text x="1150" y="171" text-anchor="end" fill="#8DA8B8" font-family="Segoe UI,Arial,sans-serif" font-size="10">Release readiness is tracked separately.</text>
 </svg>
