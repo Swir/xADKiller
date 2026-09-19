@@ -41,6 +41,18 @@
     if (!parsed || parsed.url.hash || !safeCacheBuster(parsed.url)) return "";
     return `https://${RAW_HOST}${parsed.url.pathname}`;
   }
+  function requestUrlValue(input) {
+    if (typeof input === "string") return input;
+    if (input && typeof input === "object") {
+      // Fetch accepts strings, Request objects and URL objects. The old guard only read
+      // Request.url, which meant fetch(new URL(protectedFeed)) bypassed every feed-specific
+      // transport restriction. Normalize both URL.href and Request.url before deciding
+      // whether the protected-feed contract applies.
+      if (typeof input.url === "string" && input.url) return input.url;
+      if (typeof input.href === "string" && input.href) return input.href;
+    }
+    return "";
+  }
   function requestMethod(input, init) {
     return String(init?.method || input?.method || "GET").trim().toUpperCase();
   }
@@ -188,7 +200,7 @@
     return buffered;
   }
   globalThis.fetch = async (input, init) => {
-    const urlValue = typeof input === "string" ? input : input?.url;
+    const urlValue = requestUrlValue(input);
     const kind = guardedKind(urlValue);
     if (!kind && hasApprovedPath(urlValue)) fail("transport_canonical_url");
     if (!kind) return nativeFetch(input, init);
@@ -207,7 +219,7 @@
   };
   globalThis.XAD_FEED_TRANSPORT_GUARD = Object.freeze({
     MAX_FEED_BYTES, FEED_FETCH_TIMEOUT_MS, FEED_ACCEPT, guardedKind, hasApprovedPath,
-    canonicalFeedUrl, requestMethod, publicDataHeaders, hardenedInit, timedInit,
+    canonicalFeedUrl, requestUrlValue, requestMethod, publicDataHeaders, hardenedInit, timedInit,
     validateContentLength, validateContentType, validateCompleteRepresentation, validateResponse,
     validateBufferedLength, bufferBoundedBody
   });
