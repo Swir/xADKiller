@@ -48,9 +48,17 @@ final class BlocklistManager {
     private static final double SAME_MODE_MIN_RATIO = 0.45d;
     private static final int MAX_REMOTE_REDIRECTS = 4;
     private static final long MAX_REMOTE_BYTES = 64L * 1024L * 1024L;
-    private static final String[] REMOTE_HOST_SUFFIXES = {
-            "githubusercontent.com", "jsdelivr.net", "adaway.org"
-    };
+    private static final String RAW_GITHUB_HOST = "raw.githubusercontent.com";
+    private static final String STEVENBLACK_PATH = "/StevenBlack/hosts/master/hosts";
+    private static final String ADGUARD_DNS_PATH =
+            "/AdguardTeam/FiltersRegistry/master/filters/filter_15_DnsFilter/filter.txt";
+    private static final String ADAWAY_HOST = "adaway.org";
+    private static final String ADAWAY_WWW_HOST = "www.adaway.org";
+    private static final String ADAWAY_PATH = "/hosts.txt";
+    private static final String HAGEZI_PREFIX = "/gh/hagezi/dns-blocklists@";
+    private static final String HAGEZI_ULTIMATE_SUFFIX = "/wildcard/ultimate-onlydomains.txt";
+    private static final String HAGEZI_ANTI_BYPASS_SUFFIX =
+            "/wildcard/doh-vpn-proxy-bypass-onlydomains.txt";
 
     private static volatile long[] BLOCKED = new long[0];
     private static volatile Set<String> ALLOWED = Collections.emptySet();
@@ -354,16 +362,52 @@ final class BlocklistManager {
             if (url.getUserInfo() != null) return false;
             int port = url.getPort();
             if (port != -1 && port != 443) return false;
+            // Feed identity is path-bound. Query/fragment variants can change CDN/raw
+            // semantics or hide an alternate resource while still using an approved host.
+            if (url.getQuery() != null || url.getRef() != null) return false;
             String host = url.getHost();
-            if (host == null) return false;
+            String path = url.getPath();
+            if (host == null || path == null) return false;
             host = host.toLowerCase(Locale.ROOT);
-            for (String suffix : REMOTE_HOST_SUFFIXES) {
-                if (host.equals(suffix) || host.endsWith("." + suffix)) return true;
+
+            if (RAW_GITHUB_HOST.equals(host)) {
+                return STEVENBLACK_PATH.equals(path) || ADGUARD_DNS_PATH.equals(path);
+            }
+            if (ADAWAY_HOST.equals(host) || ADAWAY_WWW_HOST.equals(host)) {
+                return ADAWAY_PATH.equals(path);
+            }
+            if (isJsDelivrHost(host)) {
+                return isAllowedHageziJsDelivrPath(path);
             }
             return false;
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    private static boolean isJsDelivrHost(String host) {
+        return "jsdelivr.net".equals(host) || host.endsWith(".jsdelivr.net");
+    }
+
+    private static boolean isAllowedHageziJsDelivrPath(String path) {
+        if (path == null || !path.startsWith(HAGEZI_PREFIX)) return false;
+        int versionEnd = path.indexOf('/', HAGEZI_PREFIX.length());
+        if (versionEnd < 0) return false;
+        String version = path.substring(HAGEZI_PREFIX.length(), versionEnd);
+        if (!isSafeJsDelivrVersion(version)) return false;
+        String suffix = path.substring(versionEnd);
+        return HAGEZI_ULTIMATE_SUFFIX.equals(suffix) || HAGEZI_ANTI_BYPASS_SUFFIX.equals(suffix);
+    }
+
+    private static boolean isSafeJsDelivrVersion(String version) {
+        if (version == null || version.isEmpty() || version.length() > 64) return false;
+        for (int i = 0; i < version.length(); i++) {
+            char c = version.charAt(i);
+            boolean ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
+            if (!ok) return false;
+        }
+        return true;
     }
 
     static boolean isAllowedRemoteContentType(String value) {
