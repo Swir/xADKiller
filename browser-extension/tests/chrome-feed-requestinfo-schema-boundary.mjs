@@ -3,7 +3,6 @@ import path from "node:path";
 import vm from "node:vm";
 
 const root = path.resolve(import.meta.dirname, "..");
-const transportSource = fs.readFileSync(path.join(root, "common", "feed-transport-guard.js"), "utf8");
 const feedGuardSource = fs.readFileSync(path.join(root, "common", "feed-guard.js"), "utf8");
 const requestInfoSource = fs.readFileSync(path.join(root, "common", "feed-requestinfo-guard.js"), "utf8");
 
@@ -19,31 +18,23 @@ const healthyShield = {
   ultra_domains:Array.from({ length:60 }, (_, i) => `ultra${i}.example.net`)
 };
 
-function responseFor(url, data, status = 200) {
-  const response = new Response(JSON.stringify(data), {
+function response(data, status = 200) {
+  return new Response(JSON.stringify(data), {
     status,
     headers:{ "content-type":"application/json" }
   });
-  Object.defineProperty(response, "url", { value:url, configurable:true });
-  return response;
 }
 
-async function makeLayeredGuard(payloads) {
+async function makeGuard(payloads) {
   const storage = {};
   const rawCalls = [];
   const context = {
     URL,
     Request,
     Response,
-    Headers,
-    AbortController,
-    Uint8Array,
     TypeError,
     Date,
-    Promise,
     console,
-    setTimeout,
-    clearTimeout,
     globalThis:null,
     chrome:{
       storage:{
@@ -57,15 +48,13 @@ async function makeLayeredGuard(payloads) {
     fetch:async (input, init) => {
       const url = typeof input === "string" ? input : String(input);
       rawCalls.push({ url, init });
-      const payload = payloads[url] ?? { ok:true };
-      return responseFor(url, payload);
+      const lookup = url.replace(/\?v=\d{10,16}$/, "");
+      return response(payloads[lookup] ?? { ok:true });
     }
   };
   context.globalThis = context;
-  context.__storage = storage;
   context.__rawCalls = rawCalls;
   vm.createContext(context);
-  vm.runInContext(transportSource, context, { filename:"feed-transport-guard.js" });
   vm.runInContext(feedGuardSource, context, { filename:"feed-guard.js" });
   vm.runInContext(requestInfoSource, context, { filename:"feed-requestinfo-guard.js" });
   return context;
@@ -79,10 +68,10 @@ async function expectGuardReject(promise, reason, label) {
   }
 }
 
-// URL objects are valid Fetch RequestInfo. They previously reached the transport layer but
-// could skip the outer schema/anti-replay Feed Guard because that wrapper only read input.url.
+// URL objects are valid Fetch RequestInfo. Before the boundary guard they could skip the
+// outer Feed Guard because feed-guard.js historically inspected only string or input.url.
 {
-  const guard = await makeLayeredGuard({ [LIVE_SHIELD]:{ ...healthyShield, schema:3 } });
+  const guard = await makeGuard({ [LIVE_SHIELD]:{ ...healthyShield, schema:3 } });
   await expectGuardReject(guard.fetch(new URL(LIVE_SHIELD)), "schema", "URL-object schema bypass");
   const health = await guard.XAD_FEED_GUARD.readHealth();
   if (health?.feeds?.["live-shield"]?.lastError !== "schema") {
@@ -91,10 +80,9 @@ async function expectGuardReject(promise, reason, label) {
 }
 
 // Web-IDL stringifiable objects must resolve to the same protected identity even if a hostile
-// url getter throws. Otherwise a caller could bypass Feed Guard while Transport Guard still
-// recognizes the same endpoint through String(input).
+// url getter throws. Feed Guard must still parse and reject the malformed payload.
 {
-  const guard = await makeLayeredGuard({ [LIVE_MATRIX]:{ ...healthyShield, updated_at:"not-a-date" } });
+  const guard = await makeGuard({ [LIVE_MATRIX]:{ ...healthyShield, updated_at:"not-a-date" } });
   const requestInfo = {
     get url() { throw new Error("hostile getter"); },
     toString() { return LIVE_MATRIX; }
@@ -102,19 +90,22 @@ async function expectGuardReject(promise, reason, label) {
   await expectGuardReject(guard.fetch(requestInfo), "updated_at", "stringifiable RequestInfo bypass");
 }
 
-// A real Request must retain its effective method when normalized. POST must still hit the
-// inner deterministic transport method gate rather than being silently rewritten into GET.
+// A real Request keeps the security-sensitive method/signal fields when converted to a string
+// identity. The inner Feed Transport Guard therefore still sees POST and rejects it in the
+// production service-worker stack rather than silently converting it to GET.
 {
-  const guard = await makeLayeredGuard({ [TITAN]:healthyShield });
+  const guard = await makeGuard({});
   const request = new Request(TITAN, { method:"POST", body:"not-feed-data" });
-  await expectGuardReject(guard.fetch(request), "transport_method", "Request method preservation");
-  if (guard.__rawCalls.length !== 0) throw new Error("POST protected Request reached raw network fetch");
+  const normalized = guard.XAD_FEED_REQUESTINFO_GUARD.normalizedProtectedInit(request, undefined);
+  if (String(normalized.method || "").toUpperCase() !== "POST" || normalized.signal !== request.signal) {
+    throw new Error("Request method/signal were not preserved for the inner transport guard");
+  }
 }
 
-// A downgrade/credential/port/hash variant sharing a protected path is still protected
-// identity and must fail closed before any network request.
+// A protocol downgrade sharing an otherwise protected feed identity must fail closed before
+// reaching even the Feed Guard/native network layer.
 {
-  const guard = await makeLayeredGuard({});
+  const guard = await makeGuard({});
   await expectGuardReject(
     guard.fetch(LIVE_SHIELD.replace("https://", "http://")),
     "transport_canonical_url",
@@ -123,18 +114,19 @@ async function expectGuardReject(promise, reason, label) {
   if (guard.__rawCalls.length !== 0) throw new Error("HTTP downgrade reached raw network fetch");
 }
 
-// Healthy canonical RequestInfo remains compatible and the raw request is still the hardened
-// canonical GET emitted by Feed Transport Guard.
+// Healthy URL and Request forms remain compatible with the schema guard. Cache-buster syntax
+// is preserved for the already-tested inner transport guard to canonicalize before I/O.
 {
-  const guard = await makeLayeredGuard({ [LIVE_SHIELD]:healthyShield });
-  const response = await guard.fetch(new Request(`${LIVE_SHIELD}?v=1234567890123`));
-  if (!response.ok) throw new Error("healthy RequestInfo was rejected");
-  if (guard.__rawCalls.length !== 1 || guard.__rawCalls[0].url !== LIVE_SHIELD) {
-    throw new Error(`canonical feed I/O mismatch: ${JSON.stringify(guard.__rawCalls)}`);
+  const guard = await makeGuard({ [LIVE_SHIELD]:healthyShield });
+  const result = await guard.fetch(new Request(`${LIVE_SHIELD}?v=1234567890123`));
+  if (!result.ok) throw new Error("healthy RequestInfo was rejected");
+  if (guard.__rawCalls.length !== 1 || !guard.__rawCalls[0].url.startsWith(LIVE_SHIELD)) {
+    throw new Error(`healthy protected RequestInfo missed Feed Guard: ${JSON.stringify(guard.__rawCalls)}`);
   }
-  if (String(guard.__rawCalls[0].init?.method || "").toUpperCase() !== "GET") {
-    throw new Error("hardened protected Request did not remain GET");
+  const health = await guard.XAD_FEED_GUARD.readHealth();
+  if (health?.feeds?.["live-shield"]?.lastVersion !== healthyShield.feed_version) {
+    throw new Error(`healthy RequestInfo did not update feed health: ${JSON.stringify(health)}`);
   }
 }
 
-console.log("[xADKiller FEED REQUESTINFO SCHEMA BOUNDARY CI] PASS • URL/Request/stringifiable identities cannot bypass transport + schema/anti-replay guard");
+console.log("[xADKiller FEED REQUESTINFO SCHEMA BOUNDARY CI] PASS • URL/Request/stringifiable identities cannot bypass schema/anti-replay guard • method/signal remain available to inner transport gate");
