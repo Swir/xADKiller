@@ -4,8 +4,26 @@ This branch develops the Android APK independently from the current stable 1.5.1
 
 <img width="100%" src="assets/readme/android/progress-mini.svg" alt="xADKiller Android v1.6.0 roadmap progress" />
 
-**Development progress:** **N/A** — this roadmap is priority-based and does not define a finite checkbox denominator, so no completion percentage is claimed.  
+**Development progress:** **58.3% — 7 / 12 verified v1.6 development items.**  
 **Release readiness:** **BLOCKED** — manual physical-device VPN lifecycle and stability evidence is still required.
+
+## Canonical v1.6 development scope
+
+The checklist below is the finite denominator for Android v1.6 development progress. It measures implemented/verified engineering scope; release readiness remains a separate manual-device gate.
+
+- [x] Local no-root DNS filtering through Android VpnService remains functional without routing ordinary user traffic through a remote xADKiller VPN.
+- [x] DNS packet integrity/privacy hardening covers exact IPv4/UDP framing, malformed queries/responses, EDNS privacy scrubbing/clamping and incoming/synthesized UDP checksums with regression fixtures.
+- [x] Adaptive upstream DNS health/fallback implements bounded cooldown, half-open recovery, single emergency fallback, stale-latency aging, RTT spike damping and fresh network/session latency epochs with tests.
+- [x] Blocklist/update handling keeps a known-good offline/cache path, conservative high-confidence starter coverage and fail-closed corruption/incomplete-update behavior.
+- [x] Private DNS diagnostics distinguish supported system states while explicitly refusing unsupported per-app DoH detection claims.
+- [x] Privacy/platform hardening keeps cleartext disabled, local protection state out of Android backup, no TLS MITM, no remote executable update path and no required telemetry backend.
+- [x] Automated development gates cover Gradle build/lint/unit tests, manifest/privacy checks, deterministic DNS fixtures, APK integrity/checksum and SWIR progress consistency.
+- [ ] Complete the v1.6 dashboard/status/recovery UX pass, including clear VPN, DNS, blocklist, Smart Engine and last-update state without regressions in PL/EN.
+- [ ] Complete large-list memory/ANR stress qualification with explicit bounded-memory evidence on the supported Android scope.
+- [ ] Complete physical-device VPN lifecycle validation across start/stop/restart, package replacement, idle, sleep/wake and Wi-Fi ↔ mobile transitions.
+- [ ] Complete longer physical-device/real-app stability and false-positive recovery regression testing.
+- [ ] Complete the final v1.6 release gate: all automated/manual checks green, no known critical blockers, verified release artifact and promotion of the tested candidate.
+
 
 ## Current validation snapshot — 2026-09-18
 - Development APK CI is **GREEN** after the DNS privacy/integrity and conservative offline-blocking hardening batch: SWIR progress SVG consistency, privacy/network manifest gate, lint, DNS framing/EDNS0 privacy scrub/EDNS UDP-size clamp/incoming + synthesized UDP-checksum regression, dedicated offline starter-list coverage, full unit tests + deterministic benchmark, APK build/package validation, ZIP integrity and SHA-256 are required gates on this branch.
