@@ -128,6 +128,8 @@ jobs:
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsNetworkHandoverRecoveryTest
       - name: VPN boot package-update stale-heartbeat cross-action restart-burst and liveness lifecycle regression
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.VpnLifecycleStartPolicyTest
+      - name: Blocklist transport fail-closed update and interrupted-install cache recovery regression
+        run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.BlocklistTransportSecurityTest --tests com.swir.xadkiller.BlocklistUpdateGuardTest --tests com.swir.xadkiller.BlocklistCacheRecoveryTest
       - name: Offline starter blocklist screenshot-derived coverage regression
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.BlocklistCoverageTest
       - name: Unit tests DNS query EDNS response framing lifecycle upstream health and blocking benchmark
