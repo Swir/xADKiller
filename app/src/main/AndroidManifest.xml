@@ -12,6 +12,7 @@
     <application
         android:name=".XadKillerApp"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@drawable/ic_launcher"
         android:label="xADKiller"
         android:localeConfig="@xml/locales_config"
