@@ -34,6 +34,15 @@ public class BlocklistTransportSecurityTest {
         assertFalse(BlocklistManager.isAllowedRemoteUrl("not a url"));
     }
 
+    @Test public void acceptsOnlyCompleteHttp200BlocklistRepresentations() {
+        assertTrue(BlocklistManager.isAcceptedRemoteSuccessCode(200));
+        assertFalse(BlocklistManager.isAcceptedRemoteSuccessCode(204));
+        assertFalse(BlocklistManager.isAcceptedRemoteSuccessCode(206));
+        assertFalse(BlocklistManager.isAcceptedRemoteSuccessCode(304));
+        assertFalse(BlocklistManager.isAcceptedRemoteSuccessCode(404));
+        assertFalse(BlocklistManager.isAcceptedRemoteSuccessCode(503));
+    }
+
     @Test public void acceptsPlainTextFeedMimeAndRejectsExecutableOrErrorDocuments() {
         assertTrue(BlocklistManager.isAllowedRemoteContentType("text/plain"));
         assertTrue(BlocklistManager.isAllowedRemoteContentType("Text/Plain; charset=utf-8"));
