@@ -13,16 +13,22 @@ import java.nio.charset.StandardCharsets;
 import org.junit.Test;
 
 public class BlocklistTransportSecurityTest {
-    @Test public void acceptsOnlyKnownHttpsFeedInfrastructure() {
+    @Test public void acceptsOnlyPinnedFeedIdentitiesOnKnownHttpsInfrastructure() {
         assertTrue(BlocklistManager.isAllowedRemoteUrl(
                 "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"));
         assertTrue(BlocklistManager.isAllowedRemoteUrl(
+                "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_15_DnsFilter/filter.txt"));
+        assertTrue(BlocklistManager.isAllowedRemoteUrl(
                 "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/ultimate-onlydomains.txt"));
+        assertTrue(BlocklistManager.isAllowedRemoteUrl(
+                "https://edge.jsdelivr.net/gh/hagezi/dns-blocklists@3.2.1/wildcard/ultimate-onlydomains.txt"));
+        assertTrue(BlocklistManager.isAllowedRemoteUrl(
+                "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/doh-vpn-proxy-bypass-onlydomains.txt"));
         assertTrue(BlocklistManager.isAllowedRemoteUrl("https://adaway.org/hosts.txt"));
-        assertTrue(BlocklistManager.isAllowedRemoteUrl("https://edge.jsdelivr.net/path/list.txt"));
+        assertTrue(BlocklistManager.isAllowedRemoteUrl("https://www.adaway.org/hosts.txt"));
     }
 
-    @Test public void rejectsDowngradesCredentialsLookalikesAndCustomPorts() {
+    @Test public void rejectsDowngradesCredentialsLookalikesPortsAndUnpinnedPaths() {
         assertFalse(BlocklistManager.isAllowedRemoteUrl(
                 "http://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"));
         assertFalse(BlocklistManager.isAllowedRemoteUrl(
@@ -30,8 +36,24 @@ public class BlocklistTransportSecurityTest {
         assertFalse(BlocklistManager.isAllowedRemoteUrl(
                 "https://raw.githubusercontent.com.evil.example/hosts"));
         assertFalse(BlocklistManager.isAllowedRemoteUrl("https://evil.example/hosts.txt"));
-        assertFalse(BlocklistManager.isAllowedRemoteUrl("https://cdn.jsdelivr.net:8443/feed.txt"));
+        assertFalse(BlocklistManager.isAllowedRemoteUrl("https://cdn.jsdelivr.net:8443/gh/hagezi/dns-blocklists@latest/wildcard/ultimate-onlydomains.txt"));
         assertFalse(BlocklistManager.isAllowedRemoteUrl("not a url"));
+
+        // Trusted transport host alone is insufficient: redirects stay bound to the exact
+        // blocklist identity we intended to consume.
+        assertFalse(BlocklistManager.isAllowedRemoteUrl("https://edge.jsdelivr.net/path/list.txt"));
+        assertFalse(BlocklistManager.isAllowedRemoteUrl(
+                "https://cdn.jsdelivr.net/gh/evil/project@latest/wildcard/ultimate-onlydomains.txt"));
+        assertFalse(BlocklistManager.isAllowedRemoteUrl(
+                "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/suspicious-onlydomains.txt"));
+        assertFalse(BlocklistManager.isAllowedRemoteUrl(
+                "https://raw.githubusercontent.com/OtherOwner/other-repo/main/hosts"));
+        assertFalse(BlocklistManager.isAllowedRemoteUrl(
+                "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts?download=1"));
+        assertFalse(BlocklistManager.isAllowedRemoteUrl(
+                "https://adaway.org/hosts.txt#mirror"));
+        assertFalse(BlocklistManager.isAllowedRemoteUrl(
+                "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@../other/wildcard/ultimate-onlydomains.txt"));
     }
 
     @Test public void acceptsOnlyCompleteHttp200BlocklistRepresentations() {
