@@ -44,14 +44,20 @@
   function requestUrlValue(input) {
     if (typeof input === "string") return input;
     if (input && typeof input === "object") {
-      // Fetch accepts strings, Request objects and URL objects. The old guard only read
-      // Request.url, which meant fetch(new URL(protectedFeed)) bypassed every feed-specific
-      // transport restriction. Normalize both URL.href and Request.url before deciding
-      // whether the protected-feed contract applies.
-      if (typeof input.url === "string" && input.url) return input.url;
-      if (typeof input.href === "string" && input.href) return input.href;
+      // Fetch accepts Request/URL objects but Web IDL also stringifies other RequestInfo-like
+      // values. Read known URL fields defensively first: hostile getters must not create a
+      // protected-feed bypass or break unrelated fetches before we can apply the fallback.
+      try {
+        if (typeof input.url === "string" && input.url) return input.url;
+      } catch (_) {}
+      try {
+        if (typeof input.href === "string" && input.href) return input.href;
+      } catch (_) {}
     }
-    return "";
+    // Match Fetch's string-conversion surface as the final identity source. This closes the
+    // gap where an object with toString()/Symbol.toPrimitive resolving to a protected feed
+    // previously skipped every feed-specific transport restriction and reached nativeFetch.
+    try { return input == null ? "" : String(input); } catch (_) { return ""; }
   }
   function requestMethod(input, init) {
     return String(init?.method || input?.method || "GET").trim().toUpperCase();
