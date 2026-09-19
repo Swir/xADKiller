@@ -57,6 +57,8 @@ const entry = {
   expected_current_git_blob_sha1: gitBlobSha1(preText),
   expected_current_version: "2026.09.18-v1",
   candidate_version: postJson.feed_version,
+  candidate_git_blob_sha1: gitBlobSha1(postText),
+  candidate_sha256: sha256(postText),
   rollback: {
     previous_version: postJson.rollback.previous_version,
     previous_ref: postJson.rollback.previous_ref,
@@ -70,7 +72,8 @@ const entry = {
   }
 };
 
-validateRolloutEnvelope({ schema: 1, publication_authorized: false, remote_executable_code: false, feeds: [entry] });
+const envelope = { schema: 1, publication_authorized: false, remote_executable_code: false, feeds: [entry] };
+validateRolloutEnvelope(envelope);
 assert.equal((await verifyRemoteEntry(entry, "pre", fetchFor(preText, descriptor))).schema, 1);
 assert.equal((await verifyRemoteEntry(entry, "post", fetchFor(postText, descriptor))).schema, 2);
 
@@ -87,9 +90,38 @@ await rejects(
   verifyRemoteEntry({ ...entry, post_publish_verify: { ...entry.post_publish_verify, git_blob_sha1: gitBlobSha1(badRollbackText), sha256: sha256(badRollbackText) } }, "post", fetchFor(badRollbackText, descriptor)),
   /rollback metadata mismatch/
 );
+
 assert.throws(
-  () => validateRolloutEnvelope({ schema: 1, publication_authorized: true, remote_executable_code: false, feeds: [entry] }),
+  () => validateRolloutEnvelope({ ...envelope, publication_authorized: true }),
   /explicitly unauthorized/
 );
+assert.throws(
+  () => validateRolloutEnvelope({ ...envelope, feeds: [entry, { ...entry }] }),
+  /duplicate feed id/
+);
+assert.throws(
+  () => validateRolloutEnvelope({ ...envelope, feeds: [entry, { ...entry, id: "matrix" }] }),
+  /duplicate publication target/
+);
+assert.throws(
+  () => validateRolloutEnvelope({ ...envelope, feeds: [{ ...entry, target_path: "../escape.json" }] }),
+  /unsafe target path/
+);
+assert.throws(
+  () => validateRolloutEnvelope({ ...envelope, feeds: [{ ...entry, rollback: { ...entry.rollback, previous_version: "wrong" } }] }),
+  /rollback previous_version must equal expected-current version/
+);
+assert.throws(
+  () => validateRolloutEnvelope({ ...envelope, feeds: [{ ...entry, rollback: { ...entry.rollback, previous_git_blob_sha1: "0".repeat(40) } }] }),
+  /rollback Git blob SHA-1 must equal expected-current blob/
+);
+assert.throws(
+  () => validateRolloutEnvelope({ ...envelope, feeds: [{ ...entry, candidate_sha256: "f".repeat(64) }] }),
+  /candidate SHA-256 differs from post-publication fingerprint/
+);
+assert.throws(
+  () => validateRolloutEnvelope({ ...envelope, feeds: [{ ...entry, candidate_version: entry.expected_current_version }] }),
+  /candidate version must differ from current production version/
+);
 
-console.log("Feed v2 remote-state contract OK (pre/post fingerprints, rollback metadata, unauthorized envelope)");
+console.log("Feed v2 remote-state contract OK (pre/post fingerprints, unique targets, rollback binding, safe paths, unauthorized envelope)");

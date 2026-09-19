@@ -7,6 +7,10 @@ import { fetchPinnedJson } from "./feed-v2-network-contract.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const extensionRoot = resolve(here, "..");
 const rolloutPath = resolve(extensionRoot, "packages/feed-v2-candidates/rollout-plan.json");
+const SHA1_RE = /^[0-9a-f]{40}$/;
+const SHA256_RE = /^[0-9a-f]{64}$/;
+const SAFE_REF_RE = /^[A-Za-z0-9._-]+$/;
+const SAFE_SEGMENT_RE = /^[A-Za-z0-9._-]+$/;
 
 function fail(message) {
   throw new Error(`feed_v2_remote_state: ${message}`);
@@ -24,12 +28,74 @@ export function gitBlobSha1(text) {
     .digest("hex");
 }
 
+function requireSafeTarget(ref, path, id) {
+  if (!SAFE_REF_RE.test(ref) || ref === "." || ref === "..") fail(`${id}: unsafe target ref`);
+  if (!path || path.startsWith("/") || path.includes("\\") || path.includes("?") || path.includes("#")) {
+    fail(`${id}: unsafe target path`);
+  }
+  const segments = path.split("/");
+  if (segments.some((part) => !part || part === "." || part === ".." || !SAFE_SEGMENT_RE.test(part))) {
+    fail(`${id}: unsafe target path`);
+  }
+}
+
 function requireEntry(entry) {
   const id = String(entry?.id || "").trim();
   const targetRef = String(entry?.target_ref || "").trim();
   const targetPath = String(entry?.target_path || "").trim();
   if (!id || !targetRef || !targetPath) fail("rollout entry is missing target identity");
+  requireSafeTarget(targetRef, targetPath, id);
   return { id, targetRef, targetPath };
+}
+
+function requireHash(value, pattern, label, id) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!pattern.test(normalized)) fail(`${id}: invalid ${label}`);
+  return normalized;
+}
+
+function requireVersion(value, label, id) {
+  const version = String(value || "").trim();
+  if (!version || version.length > 160 || /[\u0000-\u001f\u007f]/.test(version)) fail(`${id}: invalid ${label}`);
+  return version;
+}
+
+export function validateRolloutEntry(entry, seenIds = new Set(), seenTargets = new Set()) {
+  const { id, targetRef, targetPath } = requireEntry(entry);
+  const targetKey = `${targetRef}\n${targetPath}`;
+  if (seenIds.has(id)) fail(`${id}: duplicate feed id`);
+  if (seenTargets.has(targetKey)) fail(`${id}: duplicate publication target`);
+  seenIds.add(id);
+  seenTargets.add(targetKey);
+
+  const expectedBlob = requireHash(entry.expected_current_git_blob_sha1, SHA1_RE, "expected-current Git blob SHA-1", id);
+  const expectedVersion = requireVersion(entry.expected_current_version, "expected-current version", id);
+  const candidateVersion = requireVersion(entry.candidate_version, "candidate version", id);
+  if (candidateVersion === expectedVersion) fail(`${id}: candidate version must differ from current production version`);
+
+  const rollback = entry.rollback || {};
+  if (rollback.previous_version !== expectedVersion) fail(`${id}: rollback previous_version must equal expected-current version`);
+  if (rollback.previous_ref !== `${targetRef}/${targetPath}`) fail(`${id}: rollback previous_ref must pin the current publication target`);
+  if (requireHash(rollback.previous_git_blob_sha1, SHA1_RE, "rollback Git blob SHA-1", id) !== expectedBlob) {
+    fail(`${id}: rollback Git blob SHA-1 must equal expected-current blob`);
+  }
+
+  const post = entry.post_publish_verify || {};
+  if (post.schema !== 2) fail(`${id}: post-publication schema must be 2`);
+  if (post.feed_version !== candidateVersion) fail(`${id}: post-publication version must equal candidate version`);
+  const postBlob = requireHash(post.git_blob_sha1, SHA1_RE, "post-publication Git blob SHA-1", id);
+  const postSha256 = requireHash(post.sha256, SHA256_RE, "post-publication SHA-256", id);
+
+  if (entry.candidate_git_blob_sha1 !== undefined
+      && requireHash(entry.candidate_git_blob_sha1, SHA1_RE, "candidate Git blob SHA-1", id) !== postBlob) {
+    fail(`${id}: candidate Git blob SHA-1 differs from post-publication fingerprint`);
+  }
+  if (entry.candidate_sha256 !== undefined
+      && requireHash(entry.candidate_sha256, SHA256_RE, "candidate SHA-256", id) !== postSha256) {
+    fail(`${id}: candidate SHA-256 differs from post-publication fingerprint`);
+  }
+
+  return { id, targetRef, targetPath, expectedBlob, expectedVersion, candidateVersion, postBlob, postSha256 };
 }
 
 export async function verifyRemoteEntry(entry, mode = "pre", fetchImpl = globalThis.fetch) {
@@ -71,6 +137,9 @@ export function validateRolloutEnvelope(rollout) {
       || rollout.remote_executable_code !== false || !Array.isArray(rollout.feeds) || !rollout.feeds.length) {
     fail("rollout plan must remain non-empty, development-only, data-only and explicitly unauthorized");
   }
+  const seenIds = new Set();
+  const seenTargets = new Set();
+  for (const entry of rollout.feeds) validateRolloutEntry(entry, seenIds, seenTargets);
   return rollout;
 }
 
