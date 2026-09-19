@@ -12,7 +12,11 @@ import org.junit.Test;
 
 public class BlocklistCacheRecoveryTest {
     private static void write(File file, String value) throws Exception {
-        Files.writeString(file.toPath(), value, StandardCharsets.UTF_8);
+        Files.write(file.toPath(), value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String read(File file) throws Exception {
+        return new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
     }
 
     @Test public void restoresVerifiedBackupWhenPrimaryIsMissing() throws Exception {
@@ -25,7 +29,7 @@ public class BlocklistCacheRecoveryTest {
 
         assertTrue(BlocklistCacheRecovery.recoverFiles(primary, backup, temporary));
         assertTrue(primary.isFile());
-        assertEquals("ads.example\ntracker.example\n", Files.readString(primary.toPath(), StandardCharsets.UTF_8));
+        assertEquals("ads.example\ntracker.example\n", read(primary));
         assertFalse(backup.exists());
         assertFalse(temporary.exists());
     }
@@ -40,7 +44,7 @@ public class BlocklistCacheRecoveryTest {
         write(temporary, "interrupted-next-update.example\n");
 
         assertFalse(BlocklistCacheRecovery.recoverFiles(primary, backup, temporary));
-        assertEquals("new-verified.example\n", Files.readString(primary.toPath(), StandardCharsets.UTF_8));
+        assertEquals("new-verified.example\n", read(primary));
         assertFalse(backup.exists());
         assertFalse(temporary.exists());
     }
