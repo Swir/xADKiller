@@ -60,9 +60,14 @@ async function makeGuard(payloads) {
   return context;
 }
 
-async function expectGuardReject(promise, reason, label) {
+async function expectGuardReject(operation, reason, label) {
   let error = "";
-  try { await promise; } catch (caught) { error = String(caught?.message || caught); }
+  try {
+    if (typeof operation === "function") await operation();
+    else await operation;
+  } catch (caught) {
+    error = String(caught?.message || caught);
+  }
   if (!error.includes(`xad_feed_guard_${reason}`)) {
     throw new Error(`${label} did not fail closed with ${reason}: ${error || "resolved"}`);
   }
@@ -72,7 +77,7 @@ async function expectGuardReject(promise, reason, label) {
 // outer Feed Guard because feed-guard.js historically inspected only string or input.url.
 {
   const guard = await makeGuard({ [LIVE_SHIELD]:{ ...healthyShield, schema:3 } });
-  await expectGuardReject(guard.fetch(new URL(LIVE_SHIELD)), "schema", "URL-object schema bypass");
+  await expectGuardReject(() => guard.fetch(new URL(LIVE_SHIELD)), "schema", "URL-object schema bypass");
   const health = await guard.XAD_FEED_GUARD.readHealth();
   if (health?.feeds?.["live-shield"]?.lastError !== "schema") {
     throw new Error(`URL-object validation failure was not recorded: ${JSON.stringify(health)}`);
@@ -87,7 +92,7 @@ async function expectGuardReject(promise, reason, label) {
     get url() { throw new Error("hostile getter"); },
     toString() { return LIVE_MATRIX; }
   };
-  await expectGuardReject(guard.fetch(requestInfo), "updated_at", "stringifiable RequestInfo bypass");
+  await expectGuardReject(() => guard.fetch(requestInfo), "updated_at", "stringifiable RequestInfo bypass");
 }
 
 // A real Request keeps the security-sensitive method/signal fields when converted to a string
@@ -103,11 +108,12 @@ async function expectGuardReject(promise, reason, label) {
 }
 
 // A protocol downgrade sharing an otherwise protected feed identity must fail closed before
-// reaching even the Feed Guard/native network layer.
+// reaching even the Feed Guard/native network layer. This guard intentionally throws
+// synchronously, so expectGuardReject accepts a thunk and covers both sync and async failures.
 {
   const guard = await makeGuard({});
   await expectGuardReject(
-    guard.fetch(LIVE_SHIELD.replace("https://", "http://")),
+    () => guard.fetch(LIVE_SHIELD.replace("https://", "http://")),
     "transport_canonical_url",
     "HTTP downgrade"
   );
@@ -129,4 +135,4 @@ async function expectGuardReject(promise, reason, label) {
   }
 }
 
-console.log("[xADKiller FEED REQUESTINFO SCHEMA BOUNDARY CI] PASS • URL/Request/stringifiable identities cannot bypass schema/anti-replay guard • method/signal remain available to inner transport gate");
+console.log("[xADKiller FEED REQUESTINFO SCHEMA BOUNDARY CI] PASS • URL/Request/stringifiable identities cannot bypass schema/anti-replay guard • sync/async failures covered • method/signal remain available to inner transport gate");
