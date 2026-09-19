@@ -36,6 +36,15 @@ final class VpnLifecycleStartPolicy {
         return vpnConsentGranted && shouldStart(action, autoStartEnabled, wasRunningBeforeRestart, heartbeatAtMs, nowMs);
     }
 
+    static boolean shouldSuppressStartAttempt(String action, boolean lifecycleAllowsStart,
+                                              String lastAction, long lastAttemptElapsedMs, long nowElapsedMs) {
+        // A non-starting lifecycle signal must never poison the short duplicate window for a
+        // later legitimate BOOT/UPDATE start. Only suppress when this current signal itself
+        // has already passed the lifecycle gate and therefore represents the same start work.
+        return lifecycleAllowsStart
+                && isDuplicateRestart(action, lastAction, lastAttemptElapsedMs, nowElapsedMs);
+    }
+
     static boolean isDuplicateRestart(String action, String lastAction, long lastAttemptElapsedMs, long nowElapsedMs) {
         // Duplicate suppression is driven by SystemClock.elapsedRealtime(), not wall time.
         // That makes short BOOT/UPDATE bursts immune to user/NTP clock changes. A reboot
