@@ -9,7 +9,9 @@ on:
       - "browser-extension/tools/validate-feed-v2-candidate-artifacts.mjs"
       - "browser-extension/tools/feed-v2-rollout-plan.mjs"
       - "browser-extension/tools/validate-feed-v2-rollout-plan.mjs"
+      - "browser-extension/tools/verify-feed-v2-remote-state.mjs"
       - "browser-extension/tests/feed-v2-rollout-plan-contract.mjs"
+      - "browser-extension/tests/feed-v2-remote-state-contract.mjs"
       - "browser-intelligence/feed-checksums.json"
       - "browser-intelligence/feed-v2-migration-plan.json"
       - ".github/workflows/feed-v2-rollout-rehearsal.yml"
@@ -39,7 +41,9 @@ jobs:
         run: |
           node --check tools/feed-v2-rollout-plan.mjs
           node --check tools/validate-feed-v2-rollout-plan.mjs
+          node --check tools/verify-feed-v2-remote-state.mjs
           node --check tests/feed-v2-rollout-plan-contract.mjs
+          node --check tests/feed-v2-remote-state-contract.mjs
       - name: Rebuild deterministic schema-v2 candidates from pinned production data
         run: node tools/feed-v2-migration-preflight.mjs --write
       - name: Validate candidate artifact manifest
@@ -48,6 +52,10 @@ jobs:
         run: node tools/feed-v2-rollout-plan.mjs
       - name: Validate optimistic-concurrency rollback and post-publish fingerprints
         run: node tools/validate-feed-v2-rollout-plan.mjs
+      - name: Unit-test pre/post remote-state safety contract
+        run: node tests/feed-v2-remote-state-contract.mjs
+      - name: Verify production targets still match optimistic-concurrency preconditions
+        run: node tools/verify-feed-v2-remote-state.mjs --mode=pre
       - name: Tamper regression for rollout safety contract
         run: node tests/feed-v2-rollout-plan-contract.mjs
       - name: Upload verified rehearsal bundle

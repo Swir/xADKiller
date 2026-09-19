@@ -86,6 +86,7 @@ jobs:
           node --check tests/chrome-feed-requestinfo-schema-boundary.mjs
           node --check tests/feed-v2-consumer-compat.mjs
           node --check tests/feed-v2-rollout-validity-contract.mjs
+          node --check tests/feed-v2-remote-state-contract.mjs
           node --check tests/rule-quality-ranking.mjs
           node --check tests/chrome-blocking-benchmark.mjs
           node --check tests/chrome-screenshot-regression.mjs
@@ -97,6 +98,7 @@ jobs:
           node --check tools/feed-v2-migration-preflight.mjs
           node --check tools/feed-v2-rollout-plan.mjs
           node --check tools/validate-feed-v2-rollout-plan.mjs
+          node --check tools/verify-feed-v2-remote-state.mjs
           node --check tools/validate-feed-v2-candidate-artifacts.mjs
           node --check tools/validate-feed-checksums.mjs
           node --check tools/validate-v150-safety.mjs
@@ -125,6 +127,10 @@ jobs:
           node tools/feed-v2-rollout-plan.mjs
           node tools/validate-feed-v2-rollout-plan.mjs
           node tests/feed-v2-rollout-validity-contract.mjs
+      - name: Unit-test pre/post remote-state safety contract
+        run: npm run test:feed-v2-remote-state
+      - name: Verify production targets still match optimistic-concurrency preconditions
+        run: npm run verify:feed-v2-prepublication
       - name: Production GitHub feed checksum audit
         run: npm run test:feed-checksums
       - name: Install Chromium

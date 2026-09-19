@@ -16,6 +16,8 @@
     "test:feed-v2-consumers": "node tests/feed-v2-consumer-compat.mjs",
     "test:feed-v2-migration": "node tests/feed-v2-migration-network-contract.mjs && node tools/feed-v2-migration-preflight.mjs",
     "test:feed-v2-artifacts": "node tools/validate-feed-v2-candidate-artifacts.mjs",
+    "test:feed-v2-remote-state": "node tests/feed-v2-remote-state-contract.mjs",
+    "verify:feed-v2-prepublication": "node tools/verify-feed-v2-remote-state.mjs --mode=pre",
     "test:feed-checksums": "node tools/validate-feed-checksums.mjs",
     "test:layer-dedupe": "node tools/dedupe-rule-layers.mjs --check",
     "test:rule-ranking": "node tests/rule-quality-ranking.mjs",
