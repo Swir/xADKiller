@@ -1,0 +1,66 @@
+name: xADKiller feed v2 staging bundle
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ chrome-v150-adaptive-memory ]
+    paths:
+      - "browser-extension/tools/feed-v2-migration-preflight.mjs"
+      - "browser-extension/tools/feed-v2-network-contract.mjs"
+      - "browser-extension/tools/build-feed-v2-parallel-staging.mjs"
+      - "browser-extension/tests/feed-v2-parallel-staging-contract.mjs"
+      - "browser-intelligence/feed-checksums.json"
+      - "browser-intelligence/feed-v2-migration-plan.json"
+      - ".github/workflows/feed-v2-staging-bundle.yml"
+
+concurrency:
+  group: xadkiller-feed-v2-staging-bundle-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-staging-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v5
+      - name: Node 24
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: Syntax and target-isolation contract
+        run: |
+          node --check tools/build-feed-v2-parallel-staging.mjs
+          node --check tests/feed-v2-parallel-staging-contract.mjs
+          node tests/feed-v2-parallel-staging-contract.mjs
+      - name: Regenerate candidates from exact pinned production data
+        run: node tools/feed-v2-migration-preflight.mjs --write
+      - name: Build artifact-only parallel-v2 repository tree
+        run: node tools/build-feed-v2-parallel-staging.mjs
+      - name: Prove bundle remains data-only and non-authorizing
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const manifest = JSON.parse(fs.readFileSync('packages/feed-v2-staging/staging-manifest.json', 'utf8'));
+          if (manifest.schema !== 1 || manifest.publication_authorized !== false || manifest.remote_executable_code !== false) {
+            throw new Error('staging bundle safety flags drifted');
+          }
+          if (!Array.isArray(manifest.files) || manifest.files.length !== 3) throw new Error('expected three staged feeds');
+          for (const file of manifest.files) {
+            if (!file.target_path.startsWith('browser-intelligence/v2/')) throw new Error('staging target escaped v2 namespace');
+          }
+          console.log('Parallel-v2 staging bundle safety flags: PASS');
+          NODE
+      - name: Upload reviewed staging bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: xADKiller-feed-v2-parallel-staging
+          path: browser-extension/packages/feed-v2-staging/**
+          if-no-files-found: error
+          retention-days: 14
