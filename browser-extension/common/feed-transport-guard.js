@@ -50,14 +50,20 @@
     // A single deterministic Accept value is sufficient for every approved data endpoint.
     return Object.freeze({ accept:FEED_ACCEPT });
   }
-  function hardenedInit(init) {
+  function hardenedInit(_init) {
+    // Protected feeds are public, read-only data endpoints. Build their RequestInit from a
+    // tiny allowlist instead of spreading caller options: this prevents referrer/body/
+    // integrity/keepalive/mode or future RequestInit fields from becoming a covert carrier,
+    // altering fetch lifecycle, or weakening the deterministic transport contract.
     return {
-      ...(init || {}),
-      headers:publicDataHeaders(init?.headers),
+      method:"GET",
+      headers:publicDataHeaders(),
       cache:"no-store",
       redirect:"error",
       credentials:"omit",
-      referrerPolicy:"no-referrer"
+      referrerPolicy:"no-referrer",
+      mode:"cors",
+      keepalive:false
     };
   }
   function timedInit(input, init, timeoutMs = FEED_FETCH_TIMEOUT_MS) {
