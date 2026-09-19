@@ -38,21 +38,35 @@ final class VpnLifecycleStartPolicy {
 
     static boolean shouldSuppressStartAttempt(String action, boolean lifecycleAllowsStart,
                                               String lastAction, long lastAttemptElapsedMs, long nowElapsedMs) {
+        return shouldSuppressStartAttempt(action, lifecycleAllowsStart, lastAction,
+                lastAttemptElapsedMs, nowElapsedMs, -1, -1);
+    }
+
+    static boolean shouldSuppressStartAttempt(String action, boolean lifecycleAllowsStart,
+                                              String lastAction, long lastAttemptElapsedMs, long nowElapsedMs,
+                                              int lastBootCount, int currentBootCount) {
         // A non-starting lifecycle signal must never poison the short duplicate window for a
         // later legitimate BOOT/UPDATE start. Only suppress when this current signal itself
         // has already passed the lifecycle gate and therefore represents the same start work.
         return lifecycleAllowsStart
-                && isDuplicateRestart(action, lastAction, lastAttemptElapsedMs, nowElapsedMs);
+                && isDuplicateRestart(action, lastAction, lastAttemptElapsedMs, nowElapsedMs,
+                lastBootCount, currentBootCount);
     }
 
     static boolean isDuplicateRestart(String action, String lastAction, long lastAttemptElapsedMs, long nowElapsedMs) {
-        // Duplicate suppression is driven by SystemClock.elapsedRealtime(), not wall time.
-        // It applies only to repeats of the SAME lifecycle action. BOOT_COMPLETED followed by
-        // MY_PACKAGE_REPLACED (or the reverse) can represent a real second process kill; if
-        // that cross-action signal were suppressed, a just-started VPN could stay dead after
-        // an update. A reboot resets elapsedRealtime; persisted pre-reboot values will then
-        // be greater than the new clock and are intentionally treated as stale.
+        return isDuplicateRestart(action, lastAction, lastAttemptElapsedMs, nowElapsedMs, -1, -1);
+    }
+
+    static boolean isDuplicateRestart(String action, String lastAction, long lastAttemptElapsedMs, long nowElapsedMs,
+                                      int lastBootCount, int currentBootCount) {
+        // Duplicate suppression is driven by SystemClock.elapsedRealtime(), not wall time,
+        // and applies only to repeats of the SAME lifecycle action. Persisted elapsedRealtime
+        // values are ambiguous across reboots: a previous boot can have recorded a small value
+        // and the next BOOT_COMPLETED can arrive later than that value, accidentally looking
+        // like a same-boot duplicate. When Android exposes BOOT_COUNT, bind the marker to that
+        // boot generation so no pre-reboot marker can suppress protection after a real reboot.
         if (!isManagedRestartAction(action) || !action.equals(lastAction)) return false;
+        if (lastBootCount >= 0 && currentBootCount >= 0 && lastBootCount != currentBootCount) return false;
         if (lastAttemptElapsedMs <= 0L || nowElapsedMs <= 0L) return false;
         long ageMs = nowElapsedMs - lastAttemptElapsedMs;
         return ageMs >= 0L && ageMs <= DUPLICATE_RESTART_WINDOW_MS;
