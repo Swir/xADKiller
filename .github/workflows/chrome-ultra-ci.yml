@@ -54,6 +54,7 @@ jobs:
           node --check dist/chrome/feed-data-contract.js
           node --check dist/chrome/feed-cache-integrity.js
           node --check dist/chrome/feed-guard.js
+          node --check dist/chrome/feed-requestinfo-guard.js
           node --check dist/chrome/feed-v2-compat.js
           node --check dist/chrome/feed-health-ui.js
           node --check dist/chrome/rule-budget-ui.js
@@ -82,6 +83,7 @@ jobs:
           node --check tests/chrome-feed-retry-contract.mjs
           node --check tests/chrome-feed-transport-contract.mjs
           node --check tests/chrome-feed-request-privacy.mjs
+          node --check tests/chrome-feed-requestinfo-schema-boundary.mjs
           node --check tests/feed-v2-consumer-compat.mjs
           node --check tests/rule-quality-ranking.mjs
           node --check tests/chrome-blocking-benchmark.mjs
@@ -103,7 +105,7 @@ jobs:
         run: node tests/chrome-feed-request-privacy.mjs
       - name: Protection feed strict schema bounds dedupe data-only and ReDoS contract regression
         run: node tests/chrome-feed-data-contract.mjs
-      - name: GitHub feed integrity anti-replay and downgrade regression test
+      - name: GitHub feed RequestInfo identity schema anti-replay and downgrade regression
         run: npm run test:feeds
       - name: Feed transient retry contract 429 Abort recovery regression
         run: node tests/chrome-feed-retry-contract.mjs
