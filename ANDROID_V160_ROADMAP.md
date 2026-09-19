@@ -4,7 +4,7 @@ This branch develops the Android APK independently from the current stable 1.5.1
 
 <img width="100%" src="assets/readme/android/progress-mini.svg" alt="xADKiller Android v1.6.0 roadmap progress" />
 
-**Development progress:** **58.3% — 7 / 12 verified v1.6 development items.**  
+**Development progress:** **66.7% — 8 / 12 verified v1.6 development items.**  
 **Release readiness:** **BLOCKED** — manual physical-device VPN lifecycle and stability evidence is still required.
 
 ## Canonical v1.6 development scope
@@ -19,14 +19,15 @@ The checklist below is the finite denominator for Android v1.6 development progr
 - [x] Privacy/platform hardening keeps cleartext disabled, local protection state out of Android backup, no TLS MITM, no remote executable update path and no required telemetry backend.
 - [x] Automated development gates cover Gradle build/lint/unit tests, manifest/privacy checks, deterministic DNS fixtures, APK integrity/checksum and SWIR progress consistency.
 - [ ] Complete the v1.6 dashboard/status/recovery UX pass, including clear VPN, DNS, blocklist, Smart Engine and last-update state without regressions in PL/EN.
-- [ ] Complete large-list memory/ANR stress qualification with explicit bounded-memory evidence on the supported Android scope.
+- [x] Complete large-list memory/ANR stress qualification with explicit bounded-memory evidence on the supported Android scope.
 - [ ] Complete physical-device VPN lifecycle validation across start/stop/restart, package replacement, idle, sleep/wake and Wi-Fi ↔ mobile transitions.
 - [ ] Complete longer physical-device/real-app stability and false-positive recovery regression testing.
 - [ ] Complete the final v1.6 release gate: all automated/manual checks green, no known critical blockers, verified release artifact and promotion of the tested candidate.
 
 
-## Current validation snapshot — 2026-09-18
-- Development APK CI is **GREEN** after the DNS privacy/integrity and conservative offline-blocking hardening batch: SWIR progress SVG consistency, privacy/network manifest gate, lint, DNS framing/EDNS0 privacy scrub/EDNS UDP-size clamp/incoming + synthesized UDP-checksum regression, dedicated offline starter-list coverage, full unit tests + deterministic benchmark, APK build/package validation, ZIP integrity and SHA-256 are required gates on this branch.
+## Current validation snapshot — 2026-09-19
+- Development APK CI is **GREEN** after the DNS privacy/integrity, conservative offline-blocking and bounded-memory large-list hardening batches: SWIR progress SVG consistency, privacy/network manifest gate, lint, DNS framing/EDNS0 privacy scrub/EDNS UDP-size clamp/incoming + synthesized UDP-checksum regression, dedicated offline starter-list coverage, full unit tests + deterministic benchmark, constrained-heap 750k-domain qualification, APK build/package validation, ZIP integrity and SHA-256 are required gates on this branch.
+- Large-list/ANR qualification is **GREEN** on the full **750,000-domain** production ceiling under a deliberately constrained **128 MiB max heap**. The test streams its synthetic input through the production parser, enforces a **<30 s** parse budget, proves the production `LongCollector` growth policy stays below a **14 MiB** array-peak budget, and structurally verifies full-cache reload/startup parsing remains off the Android main thread. Exact-head full CI run **#242** passed with this gate enabled.
 - Deterministic offline DNS ad fixture coverage: **100.0% (127/127)**.
 - Benign DNS control false positives: **0/20**.
 - Bundled offline starter list: **126 high-confidence domains**, with larger maintained lists loaded at runtime. The 2026-09-18 expansion reuses only high-confidence cross-platform ad/tracker misses from manual Chrome validation; consent, playback, feature-flag and checkout/fraud infrastructure remains deliberately excluded from the offline starter list.

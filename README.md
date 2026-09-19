@@ -14,7 +14,7 @@
 
 <img width="100%" src="assets/readme/android/progress-card.svg" alt="xADKiller Android development progress" />
 
-**Development progress:** **58.3% — 7/12 verified v1.6 development items.**  
+**Development progress:** **66.7% — 8/12 verified v1.6 development items.**  
 **Release readiness:** **BLOCKED** — automated CI is green, but physical-device VPN lifecycle, Wi-Fi/mobile transitions, sleep/wake, real-app behavior and longer stability validation are still required.
 
 | Item | Status |
@@ -106,7 +106,7 @@ python3 ci/progress_svg.py android
 python3 ci/progress_svg.py android --check
 ```
 
-The Android v1.6 roadmap now defines a finite 12-item development denominator. The generator derives the current **7/12 = 58.3%** directly from that checklist; release readiness remains a separate physical-device/manual gate.
+The Android v1.6 roadmap defines a finite 12-item development denominator. The generator derives the current **8/12 = 66.7%** directly from that checklist; the large-list/ANR item is now backed by the exact-head constrained-heap 750k-domain gate, while release readiness remains a separate physical-device/manual gate.
 
 ## 🔎 Search Keywords
 
