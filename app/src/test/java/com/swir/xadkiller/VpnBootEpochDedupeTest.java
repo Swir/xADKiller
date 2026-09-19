@@ -31,7 +31,24 @@ public class VpnBootEpochDedupeTest {
                 41, 42));
     }
 
-    @Test public void sameBootBurstStillDeduplicatesAndUnknownBootCountKeepsLegacyFallback() {
+    @Test public void legacyUnboundMarkerCannotSuppressWhenCurrentBootGenerationIsKnown() {
+        // Upgrades from a build that persisted elapsedRealtime but not BOOT_COUNT may leave a
+        // plausible-looking marker behind. Once the current boot generation is readable, an
+        // unbound legacy marker cannot prove it belongs to this boot and must fail open.
+        assertFalse(VpnLifecycleStartPolicy.isDuplicateRestart(
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
+                PREVIOUS_MARKER, NOW_ELAPSED,
+                -1, 42));
+
+        assertFalse(VpnLifecycleStartPolicy.shouldSuppressStartAttempt(
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED, true,
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
+                PREVIOUS_MARKER, NOW_ELAPSED,
+                -1, 42));
+    }
+
+    @Test public void sameBootBurstStillDeduplicatesAndUnavailableCurrentBootCountKeepsFallback() {
         assertTrue(VpnLifecycleStartPolicy.isDuplicateRestart(
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
@@ -43,6 +60,14 @@ public class VpnBootEpochDedupeTest {
                 VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
                 PREVIOUS_MARKER, NOW_ELAPSED,
                 -1, -1));
+
+        // If this OEM/build cannot read the current boot count, retain the monotonic-clock
+        // fallback rather than disabling duplicate suppression altogether.
+        assertTrue(VpnLifecycleStartPolicy.isDuplicateRestart(
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
+                VpnLifecycleStartPolicy.ACTION_BOOT_COMPLETED,
+                PREVIOUS_MARKER, NOW_ELAPSED,
+                42, -1));
     }
 
     @Test public void bootEpochDoesNotChangeCrossActionRecoveryRule() {
