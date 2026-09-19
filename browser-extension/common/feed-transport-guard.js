@@ -132,6 +132,20 @@
     }
     return response;
   }
+  function validateBufferedLength(response, actualBytes) {
+    if (!response?.ok) return actualBytes;
+    const raw = String(response?.headers?.get?.("content-length") || "").trim();
+    if (!raw) return actualBytes;
+    const declared = validateContentLength(response);
+    // Browser Fetch transparently decodes compressed bodies while preserving the wire
+    // Content-Length, so byte-for-byte equality is meaningful only for identity/unencoded
+    // payloads. For those responses a mismatch is a strong truncation/smuggling signal and
+    // must fail closed before a partial ruleset can enter the verified cache.
+    const encoding = String(response?.headers?.get?.("content-encoding") || "").trim().toLowerCase();
+    if (encoding && encoding !== "identity") return actualBytes;
+    if (declared !== actualBytes) fail("content_length_mismatch");
+    return actualBytes;
+  }
   async function bufferBoundedBody(response) {
     // The streaming reader is what makes the 2 MiB ceiling apply to the bytes actually
     // delivered to Feed Guard, including responses with a missing/lying Content-Length.
@@ -158,6 +172,7 @@
         chunks.push(chunk);
       }
     } finally { try { reader.releaseLock?.(); } catch (_) {} }
+    validateBufferedLength(response, total);
     const payload = new Uint8Array(total);
     let offset = 0;
     for (const chunk of chunks) { payload.set(chunk, offset); offset += chunk.byteLength; }
@@ -187,6 +202,7 @@
   globalThis.XAD_FEED_TRANSPORT_GUARD = Object.freeze({
     MAX_FEED_BYTES, FEED_FETCH_TIMEOUT_MS, FEED_ACCEPT, guardedKind, hasApprovedPath,
     canonicalFeedUrl, requestMethod, publicDataHeaders, hardenedInit, timedInit,
-    validateContentLength, validateContentType, validateCompleteRepresentation, validateResponse, bufferBoundedBody
+    validateContentLength, validateContentType, validateCompleteRepresentation, validateResponse,
+    validateBufferedLength, bufferBoundedBody
   });
 })();
