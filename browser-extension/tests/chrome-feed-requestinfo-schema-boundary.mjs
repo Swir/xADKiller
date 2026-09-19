@@ -95,6 +95,43 @@ async function expectGuardReject(operation, reason, label) {
   await expectGuardReject(() => guard.fetch(requestInfo), "updated_at", "stringifiable RequestInfo bypass");
 }
 
+// A forged convenience property must not hide the URL that Web-IDL/native fetch will actually
+// stringify. This was a genuine boundary gap: both wrappers could classify the object from a
+// benign .url while native fetch resolved Symbol.toPrimitive to a protected GitHub feed.
+{
+  const guard = await makeGuard({ [LIVE_MATRIX]:healthyShield });
+  const smuggled = {
+    url:"https://example.invalid/looks-benign",
+    [Symbol.toPrimitive]() { return LIVE_MATRIX; }
+  };
+  await expectGuardReject(
+    () => guard.fetch(smuggled),
+    "requestinfo_ambiguous_url",
+    "conflicting RequestInfo identity"
+  );
+  if (guard.__rawCalls.length !== 0) {
+    throw new Error("ambiguous RequestInfo reached raw network fetch");
+  }
+}
+
+// The inverse conflict is equally unsafe: a protected-looking property cannot be allowed to
+// sanitize a different absolute URL supplied by string conversion.
+{
+  const guard = await makeGuard({ [LIVE_MATRIX]:healthyShield });
+  const smuggled = {
+    url:LIVE_MATRIX,
+    toString() { return "https://example.invalid/other"; }
+  };
+  await expectGuardReject(
+    () => guard.fetch(smuggled),
+    "requestinfo_ambiguous_url",
+    "inverse conflicting RequestInfo identity"
+  );
+  if (guard.__rawCalls.length !== 0) {
+    throw new Error("inverse ambiguous RequestInfo reached raw network fetch");
+  }
+}
+
 // A real Request keeps the security-sensitive method/signal fields when converted to a string
 // identity. The inner Feed Transport Guard therefore still sees POST and rejects it in the
 // production service-worker stack rather than silently converting it to GET.
@@ -135,4 +172,4 @@ async function expectGuardReject(operation, reason, label) {
   }
 }
 
-console.log("[xADKiller FEED REQUESTINFO SCHEMA BOUNDARY CI] PASS • URL/Request/stringifiable identities cannot bypass schema/anti-replay guard • sync/async failures covered • method/signal remain available to inner transport gate");
+console.log("[xADKiller FEED REQUESTINFO SCHEMA BOUNDARY CI] PASS • URL/Request/stringifiable identities cannot bypass schema/anti-replay guard • conflicting absolute identities fail closed before network • method/signal remain available to inner transport gate");

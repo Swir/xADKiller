@@ -18,17 +18,18 @@
     throw new TypeError(`xad_feed_guard_${reason}`);
   }
 
-  function requestUrlValue(input) {
-    if (typeof input === "string") return input;
-    if (input && typeof input === "object") {
-      try {
-        if (typeof input.url === "string" && input.url) return input.url;
-      } catch (_) {}
-      try {
-        if (typeof input.href === "string" && input.href) return input.href;
-      } catch (_) {}
+  function requestUrlCandidates(input) {
+    if (typeof input === "string") return [input];
+    const values = [];
+    const add = (value) => {
+      if (typeof value === "string" && value && !values.includes(value)) values.push(value);
+    };
+    if (input && (typeof input === "object" || typeof input === "function")) {
+      try { add(input.url); } catch (_) {}
+      try { add(input.href); } catch (_) {}
     }
-    try { return input == null ? "" : String(input); } catch (_) { return ""; }
+    try { add(input == null ? "" : String(input)); } catch (_) {}
+    return values;
   }
 
   function protectedIdentity(urlValue) {
@@ -36,6 +37,42 @@
     try { url = new URL(String(urlValue || "")); } catch (_) { return null; }
     if (url.hostname !== RAW_HOST || !PROTECTED_PATHS.has(url.pathname)) return null;
     return url;
+  }
+
+  function resolveRequestIdentity(input) {
+    const candidates = requestUrlCandidates(input);
+    const parsed = [];
+    let protectedCandidate = null;
+
+    for (const value of candidates) {
+      let url;
+      try { url = new URL(value); } catch (_) { continue; }
+      parsed.push({ value, url });
+      if (!protectedCandidate && url.hostname === RAW_HOST && PROTECTED_PATHS.has(url.pathname)) {
+        protectedCandidate = { value, url };
+      }
+    }
+
+    if (!protectedCandidate) {
+      return { urlValue:candidates[0] || "", identity:null };
+    }
+
+    // Fetch/Web-IDL ultimately stringifies non-Request values. Never trust a convenient
+    // .url/.href property when another valid URL representation points somewhere else:
+    // an object such as {url:"https://example", toString(){return PROTECTED_FEED}}
+    // previously looked benign to both wrappers but native fetch could still resolve it to
+    // the protected feed. Ambiguous absolute URL identities therefore fail closed.
+    for (const candidate of parsed) {
+      if (candidate.url.href !== protectedCandidate.url.href) {
+        fail("requestinfo_ambiguous_url");
+      }
+    }
+
+    return { urlValue:protectedCandidate.value, identity:protectedCandidate.url };
+  }
+
+  function requestUrlValue(input) {
+    return resolveRequestIdentity(input).urlValue;
   }
 
   function validLocalCacheBuster(url) {
@@ -69,21 +106,22 @@
   }
 
   globalThis.fetch = (input, init) => {
-    const urlValue = requestUrlValue(input);
-    const identity = protectedIdentity(urlValue);
-    if (!identity) return guardedFetch(input, init);
+    const resolved = resolveRequestIdentity(input);
+    if (!resolved.identity) return guardedFetch(input, init);
 
     // Route every representation of a protected feed through the same string identity so
     // Feed Guard cannot be bypassed with new URL(), Request or Symbol.toPrimitive. Reject
     // obvious downgrade/credential/port/hash variants here too instead of treating them as
     // unrelated network traffic.
-    assertProtectedTransport(identity);
-    return guardedFetch(urlValue, normalizedProtectedInit(input, init));
+    assertProtectedTransport(resolved.identity);
+    return guardedFetch(resolved.urlValue, normalizedProtectedInit(input, init));
   };
 
   globalThis.XAD_FEED_REQUESTINFO_GUARD = Object.freeze({
+    requestUrlCandidates,
     requestUrlValue,
     protectedIdentity,
+    resolveRequestIdentity,
     validLocalCacheBuster,
     assertProtectedTransport,
     normalizedProtectedInit
