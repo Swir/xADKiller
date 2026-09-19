@@ -97,6 +97,15 @@
     if (!ALLOWED_SUCCESS_CONTENT_TYPES.has(mediaType)) fail("content_type");
     return mediaType;
   }
+  function validateCompleteRepresentation(response) {
+    if (!response?.ok) return response;
+    // A 200 carrying Content-Range is still a partial-representation smell and must not
+    // become known-good protection data. Genuine raw GitHub feed downloads are complete
+    // representations and do not need byte-range semantics.
+    const contentRange = String(response?.headers?.get?.("content-range") || "").trim();
+    if (contentRange) fail("content_range");
+    return response;
+  }
   function validateResponse(kind, response) {
     if (!response || typeof response !== "object") fail("transport_response");
     if (response.redirected === true) fail("transport_redirect");
@@ -117,11 +126,22 @@
       fail("transport_provenance");
     }
     validateContentLength(response);
-    if (response.ok) validateContentType(response);
+    if (response.ok) {
+      validateContentType(response);
+      validateCompleteRepresentation(response);
+    }
     return response;
   }
   async function bufferBoundedBody(response) {
-    if (!response?.body || typeof response.body.getReader !== "function" || typeof Response !== "function") return response;
+    // The streaming reader is what makes the 2 MiB ceiling apply to the bytes actually
+    // delivered to Feed Guard, including responses with a missing/lying Content-Length.
+    // If a successful protected response cannot expose a readable body, fail closed rather
+    // than silently falling back to an unbounded path. HTTP error responses remain visible
+    // to Feed Guard even when their body is unavailable so retry/backoff classification works.
+    if (!response?.body || typeof response.body.getReader !== "function" || typeof Response !== "function") {
+      if (response?.ok) fail("transport_body");
+      return response;
+    }
     const reader = response.body.getReader();
     const chunks = [];
     let total = 0;
@@ -167,6 +187,6 @@
   globalThis.XAD_FEED_TRANSPORT_GUARD = Object.freeze({
     MAX_FEED_BYTES, FEED_FETCH_TIMEOUT_MS, FEED_ACCEPT, guardedKind, hasApprovedPath,
     canonicalFeedUrl, requestMethod, publicDataHeaders, hardenedInit, timedInit,
-    validateContentLength, validateContentType, validateResponse, bufferBoundedBody
+    validateContentLength, validateContentType, validateCompleteRepresentation, validateResponse, bufferBoundedBody
   });
 })();
