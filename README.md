@@ -14,7 +14,7 @@
 
 <img width="100%" src="assets/readme/android/progress-card.svg" alt="xADKiller Android development progress" />
 
-**Development progress:** **N/A** — the current v1.6.0 roadmap is intentionally priority-based and does not define a finite milestone denominator, so a completion percentage would be fabricated.  
+**Development progress:** **58.3% — 7/12 verified v1.6 development items.**  
 **Release readiness:** **BLOCKED** — automated CI is green, but physical-device VPN lifecycle, Wi-Fi/mobile transitions, sleep/wake, real-app behavior and longer stability validation are still required.
 
 | Item | Status |
@@ -106,7 +106,7 @@ python3 ci/progress_svg.py android
 python3 ci/progress_svg.py android --check
 ```
 
-Because the current Android roadmap has no finite checkbox denominator, the correct project-progress value is **N/A**, not 0% or 100%.
+The Android v1.6 roadmap now defines a finite 12-item development denominator. The generator derives the current **7/12 = 58.3%** directly from that checklist; release readiness remains a separate physical-device/manual gate.
 
 ## 🔎 Search Keywords
 
