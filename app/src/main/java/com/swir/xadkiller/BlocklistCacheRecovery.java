@@ -18,11 +18,13 @@ import java.io.InputStream;
 final class BlocklistCacheRecovery {
     private static final String CACHE_FILE = "remote_blocklist.txt";
 
-    // Keep recovery aligned with BlocklistManager's production update gate. A merely non-empty
-    // file is not enough protection evidence: it must still contain a meaningful number of
-    // unique, parser-valid domains before it can become the active cache after a crash.
+    // Keep recovery aligned with BlocklistManager's production update gate. Recovery runs from
+    // Application.onCreate(), so it must never rescan the entire 750k-entry ceiling on every
+    // normal process start. We only need enough parser-valid unique domains to prove that a
+    // rollback file is a meaningful protection source; fail closed if that evidence is not
+    // reached inside this bounded scan window.
     private static final int MIN_RECOVERY_DOMAINS = 1_000;
-    private static final int MAX_RECOVERY_DOMAINS = 750_000;
+    static final int MAX_RECOVERY_SCAN_DOMAINS = 10_000;
 
     private BlocklistCacheRecovery() {}
 
@@ -53,6 +55,14 @@ final class BlocklistCacheRecovery {
     /** Package-private for deterministic JVM regression tests. */
     static boolean recoverFiles(File primary, File backup, File temporary) {
         if (primary == null || backup == null || temporary == null) return false;
+
+        // The rollback file exists only inside/after the atomic-install recovery window. On the
+        // overwhelmingly common path there is no .bak, so avoid parsing a large active cache on
+        // the main application thread merely to rediscover that there is nothing to restore.
+        if (!backup.exists()) {
+            if (temporary.exists()) temporary.delete();
+            return false;
+        }
 
         boolean primaryHealthy = cacheLooksPlausible(primary);
         boolean backupHealthy = cacheLooksPlausible(backup);
@@ -85,12 +95,12 @@ final class BlocklistCacheRecovery {
     /**
      * Recovery validation deliberately reuses the production domain parser. This prevents a
      * non-empty HTML/error/truncated file or duplicate-inflated payload from being restored as
-     * known-good protection after a crash.
+     * known-good protection after a crash while keeping cold-start work strictly bounded.
      */
     static boolean cacheLooksPlausible(File file) {
         if (file == null || !file.isFile() || file.length() <= 0L) return false;
         try (InputStream input = new FileInputStream(file)) {
-            return BlocklistManager.countUniqueNormalized(input, MAX_RECOVERY_DOMAINS)
+            return BlocklistManager.countUniqueNormalized(input, MAX_RECOVERY_SCAN_DOMAINS)
                     >= MIN_RECOVERY_DOMAINS;
         } catch (IOException | RuntimeException error) {
             return false;

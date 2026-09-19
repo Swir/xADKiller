@@ -27,6 +27,25 @@ public class BlocklistCacheRecoveryTest {
         return out.toString();
     }
 
+    @Test public void recoverySemanticScanIsBoundedForColdStart() {
+        assertEquals(10_000, BlocklistCacheRecovery.MAX_RECOVERY_SCAN_DOMAINS);
+    }
+
+    @Test public void normalStartupWithoutRollbackSkipsRecoveryAndCleansTemporaryFile() throws Exception {
+        File dir = Files.createTempDirectory("xad-cache-normal-start").toFile();
+        File primary = new File(dir, "remote_blocklist.txt");
+        File backup = new File(dir, "remote_blocklist.txt.bak");
+        File temporary = new File(dir, "remote_blocklist.txt.tmp");
+        String current = healthyList("current");
+        write(primary, current);
+        write(temporary, healthyList("interrupted"));
+
+        assertFalse(BlocklistCacheRecovery.recoverFiles(primary, backup, temporary));
+        assertEquals(current, read(primary));
+        assertFalse(backup.exists());
+        assertFalse(temporary.exists());
+    }
+
     @Test public void restoresSemanticallyHealthyBackupWhenPrimaryIsMissing() throws Exception {
         File dir = Files.createTempDirectory("xad-cache-recovery").toFile();
         File primary = new File(dir, "remote_blocklist.txt");
