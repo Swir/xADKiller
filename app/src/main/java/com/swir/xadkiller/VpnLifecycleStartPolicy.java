@@ -63,10 +63,13 @@ final class VpnLifecycleStartPolicy {
         // and applies only to repeats of the SAME lifecycle action. Persisted elapsedRealtime
         // values are ambiguous across reboots: a previous boot can have recorded a small value
         // and the next BOOT_COMPLETED can arrive later than that value, accidentally looking
-        // like a same-boot duplicate. When Android exposes BOOT_COUNT, bind the marker to that
-        // boot generation so no pre-reboot marker can suppress protection after a real reboot.
+        // like a same-boot duplicate. When Android exposes BOOT_COUNT, require the persisted
+        // marker to carry the same generation. An older marker that predates boot-count-aware
+        // storage is deliberately treated as untrusted rather than suppressing a real reboot.
         if (!isManagedRestartAction(action) || !action.equals(lastAction)) return false;
-        if (lastBootCount >= 0 && currentBootCount >= 0 && lastBootCount != currentBootCount) return false;
+        if (currentBootCount >= 0) {
+            if (lastBootCount < 0 || lastBootCount != currentBootCount) return false;
+        }
         if (lastAttemptElapsedMs <= 0L || nowElapsedMs <= 0L) return false;
         long ageMs = nowElapsedMs - lastAttemptElapsedMs;
         return ageMs >= 0L && ageMs <= DUPLICATE_RESTART_WINDOW_MS;
