@@ -6,13 +6,15 @@ const root = path.resolve(import.meta.dirname, "..");
 const source = fs.readFileSync(path.join(root, "common", "feed-transport-guard.js"), "utf8");
 const FEED = "https://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json";
 
+let capturedInput = null;
 let capturedInit = null;
 let nativeCalls = 0;
 const context = {
   URL, TypeError, AbortController, Response, Headers, ReadableStream, Uint8Array,
   setTimeout, clearTimeout, console, globalThis:null,
-  fetch:async (_input, init) => {
+  fetch:async (input, init) => {
     nativeCalls++;
+    capturedInput = input;
     capturedInit = init;
     const response = new Response("{}", { status:200, headers:{ "content-type":"application/json" } });
     Object.defineProperty(response, "url", { value:FEED, configurable:true });
@@ -96,4 +98,19 @@ await expectCanonicalReject(`${FEED}#alternate-spelling`, "fragment feed variant
 if (policy.guardedKind(`${FEED}?cache=1`) !== "") throw new Error("query-string feed variant was treated as canonical");
 if (!policy.hasApprovedPath(`${FEED}?cache=1`)) throw new Error("approved-path detector failed for unsafe feed variant");
 
-console.log("[xADKiller FEED REQUEST PRIVACY CI] PASS • canonical exact URLs • deterministic GET/CORS/no-keepalive • deterministic Accept • no-store • no credentials/referrer • caller secrets and RequestInit fields stripped");
+// URL objects are valid Fetch inputs. They must be recognized as protected feed URLs just
+// like strings/Requests; otherwise a caller could bypass the guard by changing only input type.
+const beforeUrlObject = nativeCalls;
+capturedInput = null;
+capturedInit = null;
+await context.fetch(new URL(`${FEED}?v=1700000000000`), {
+  credentials:"include",
+  headers:{ authorization:"Bearer url-object-secret" }
+});
+if (nativeCalls !== beforeUrlObject + 1) throw new Error("URL object protected feed did not reach native fetch exactly once");
+if (capturedInput !== FEED) throw new Error(`URL object feed was not canonicalized before I/O: ${String(capturedInput)}`);
+if (!capturedInit || capturedInit.credentials !== "omit") throw new Error("URL object feed did not receive protected credentials policy");
+if (new Headers(capturedInit.headers).has("authorization")) throw new Error("URL object feed leaked caller Authorization header");
+if (policy.requestUrlValue(new URL(FEED)) !== FEED) throw new Error("URL object normalization does not recover protected feed href");
+
+console.log("[xADKiller FEED REQUEST PRIVACY CI] PASS • canonical exact URLs including URL objects • deterministic GET/CORS/no-keepalive • deterministic Accept • no-store • no credentials/referrer • caller secrets and RequestInit fields stripped");
