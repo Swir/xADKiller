@@ -10,6 +10,7 @@ const candidateDir = resolve(extensionRoot, "packages/feed-v2-candidates");
 const rolloutPath = resolve(candidateDir, "rollout-plan.json");
 const manifestPath = resolve(candidateDir, "manifest.json");
 const checksumsPath = resolve(repoRoot, "browser-intelligence/feed-checksums.json");
+const MIN_PUBLICATION_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000;
 
 function fail(message) {
   throw new Error(`feed_v2_rollout_plan_validate: ${message}`);
@@ -25,6 +26,12 @@ function gitBlobSha1(text) {
     .update(Buffer.from(`blob ${body.length}\0`, "utf8"))
     .update(body)
     .digest("hex");
+}
+
+function parseTimestamp(value, label) {
+  const ms = Date.parse(String(value || ""));
+  if (!Number.isFinite(ms)) fail(`${label} is not a valid timestamp`);
+  return ms;
 }
 
 async function main() {
@@ -50,6 +57,7 @@ async function main() {
   }
 
   const seen = new Set();
+  const now = Date.now();
   for (const entry of rollout.feeds) {
     const id = String(entry?.id || "");
     if (!id || seen.has(id)) fail(`duplicate or empty rollout feed id: ${id || "<empty>"}`);
@@ -67,6 +75,7 @@ async function main() {
     }
     if (entry.candidate_file !== candidateEntry.candidate_file
         || entry.candidate_version !== candidateEntry.candidate_version
+        || entry.candidate_expires_at !== candidateEntry.candidate_expires_at
         || entry.candidate_sha256 !== candidateEntry.candidate_sha256) {
       fail(`${id}: rollout candidate metadata mismatch`);
     }
@@ -94,6 +103,10 @@ async function main() {
     if (candidate.schema !== 2 || candidate.feed_version !== entry.candidate_version
         || candidate.expires_at !== entry.candidate_expires_at) {
       fail(`${id}: candidate JSON metadata mismatch`);
+    }
+    const expiresMs = parseTimestamp(candidate.expires_at, `${id}: candidate expires_at`);
+    if (expiresMs - now < MIN_PUBLICATION_VALIDITY_MS) {
+      fail(`${id}: rollout artifact has less than 7 days of validity left; regenerate migration metadata`);
     }
     if (candidate.rollback?.previous_version !== entry.rollback.previous_version
         || candidate.rollback?.previous_ref !== entry.rollback.previous_ref) {
