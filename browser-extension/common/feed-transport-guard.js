@@ -101,7 +101,13 @@
     if (!response || typeof response !== "object") fail("transport_response");
     if (response.redirected === true) fail("transport_redirect");
     const responseType = String(response.type || "").trim().toLowerCase();
-    if (responseType === "opaque" || Number(response.status) === 0) fail("transport_opaque");
+    const status = Number(response.status);
+    if (responseType === "opaque" || status === 0) fail("transport_opaque");
+    // A protection-feed success must be a complete 200 response. Fetch considers 204
+    // and 206 successful too, but an empty/partial representation must never become a
+    // known-good ruleset. Non-success responses remain visible so Feed Guard can classify
+    // rate-limit/server failures and fall back to its verified local cache.
+    if (response.ok && status !== 200) fail("transport_status");
     const finalUrl = String(response.url || "").trim();
     const finalParsed = parseApprovedUrl(finalUrl);
     // Protected data must come back from the exact canonical endpoint we requested.
