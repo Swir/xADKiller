@@ -295,6 +295,34 @@ try {
 }
 if (!blockedFinalQuery || nativeCalls !== 16) throw new Error("noncanonical final feed URL was accepted");
 
+// For identity/unencoded successful responses, the declared size must match the bytes
+// actually delivered by the readable stream. This catches truncated HTTP 200 payloads that
+// otherwise look valid enough to poison the known-good cache.
+responseFactory = () => responseWithUrl(
+  new Uint8Array([0x7B, 0x7D]),
+  { status:200, headers:{ "content-length":"3", "content-type":"application/json" } }
+);
+let blockedTruncatedIdentityBody = false;
+try {
+  await context.fetch(LIVE_MATRIX);
+} catch (error) {
+  blockedTruncatedIdentityBody = String(error?.message || "").includes("xad_feed_guard_content_length_mismatch");
+}
+if (!blockedTruncatedIdentityBody || nativeCalls !== 17) {
+  throw new Error("truncated identity feed body with mismatched Content-Length was accepted");
+}
+
+// Compressed fetch bodies may be transparently decoded by the browser while retaining the
+// wire Content-Length, so equality is intentionally not enforced for non-identity encoding.
+responseFactory = () => responseWithUrl(
+  new Uint8Array([0x7B, 0x20, 0x20, 0x7D]),
+  { status:200, headers:{ "content-length":"2", "content-type":"application/json", "content-encoding":"gzip" } }
+);
+const transparentlyDecoded = await context.fetch(LIVE_MATRIX);
+if (nativeCalls !== 18 || (await transparentlyDecoded.arrayBuffer()).byteLength !== 4) {
+  throw new Error("compressed/decoded feed compatibility path regressed");
+}
+
 if (policy.FEED_FETCH_TIMEOUT_MS !== 15000) throw new Error(`unexpected feed timeout ${policy.FEED_FETCH_TIMEOUT_MS}`);
 if (policy.MAX_FEED_BYTES !== MAX_FEED_BYTES) throw new Error(`unexpected feed size ceiling ${policy.MAX_FEED_BYTES}`);
 if (policy.guardedKind(`${LIVE_MATRIX}?cache=1`) !== "") throw new Error("noncanonical query-string feed URL treated as canonical");
@@ -303,6 +331,9 @@ if (policy.guardedKind("http://raw.githubusercontent.com/Swir/xADKiller/main/bro
 if (policy.guardedKind("https://raw.githubusercontent.com.evil.example/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json")) throw new Error("lookalike raw GitHub host accepted");
 if (policy.validateContentType({ headers:headers({ "content-type":"application/octet-stream" }) }) !== "application/octet-stream") {
   throw new Error("approved raw-data MIME was rejected");
+}
+if (policy.validateBufferedLength({ ok:true, headers:headers({ "content-length":"2" }) }, 2) !== 2) {
+  throw new Error("matching identity Content-Length was rejected");
 }
 
 const caller = new AbortController();
@@ -316,4 +347,4 @@ await new Promise((resolve) => setTimeout(resolve, 20));
 if (!timeoutTimed.init.signal.aborted) throw new Error("bounded feed timeout did not abort stalled request signal");
 timeoutTimed.cleanup();
 
-console.log("[xADKiller FEED TRANSPORT CI] PASS • exact canonical final URL • opaque/status-0 denied • complete HTTP 200 without Content-Range • readable bounded success body required • deterministic Accept • GET-only • redirect denied • credentials/referrer omitted • provenance pinned • declared + streamed body size bounded • mandatory approved MIME • caller abort + full-transfer timeout • HTTP error classification preserved • non-feed fetch untouched");
+console.log("[xADKiller FEED TRANSPORT CI] PASS • exact canonical final URL • opaque/status-0 denied • complete HTTP 200 without Content-Range • readable bounded success body required • identity Content-Length matches streamed bytes • deterministic Accept • GET-only • redirect denied • credentials/referrer omitted • provenance pinned • declared + streamed body size bounded • mandatory approved MIME • caller abort + full-transfer timeout • HTTP error classification preserved • non-feed fetch untouched");
