@@ -21,13 +21,10 @@ function responseWithUrl(body, init, url = LIVE_MATRIX) {
 
 let nativeCalls = 0;
 let lastInit = null;
-let responseFactory = () => ({
-  ok:true,
-  status:200,
-  url:LIVE_MATRIX,
-  redirected:false,
-  headers:headers({ "content-length":"1024", "content-type":"text/plain; charset=utf-8" })
-});
+let responseFactory = () => responseWithUrl(
+  new Uint8Array([0x7B, 0x7D]),
+  { status:200, headers:{ "content-length":"2", "content-type":"text/plain; charset=utf-8" } }
+);
 
 const context = {
   URL,
@@ -162,6 +159,27 @@ try {
 }
 if (!blockedMissingMime || nativeCalls !== 7) throw new Error("successful feed without Content-Type was accepted");
 
+// Status 200 alone is not enough to prove a complete representation. Content-Range on a
+// protected success indicates byte-range semantics and must fail closed before caching.
+responseFactory = () => ({
+  ok:true,
+  status:200,
+  url:LIVE_MATRIX,
+  redirected:false,
+  headers:headers({
+    "content-length":"256",
+    "content-type":"application/json",
+    "content-range":"bytes 0-255/1024"
+  })
+});
+let blockedContentRange = false;
+try {
+  await context.fetch(LIVE_MATRIX);
+} catch (error) {
+  blockedContentRange = String(error?.message || "").includes("xad_feed_guard_content_range");
+}
+if (!blockedContentRange || nativeCalls !== 8) throw new Error("HTTP 200 response with Content-Range was accepted");
+
 // HTTP errors must remain visible to Feed Guard so it can classify 429/5xx and honor
 // Retry-After. Their error-page MIME is therefore intentionally not treated as feed data.
 responseFactory = () => ({
@@ -172,7 +190,7 @@ responseFactory = () => ({
   headers:headers({ "content-length":"256", "content-type":"text/html", "retry-after":"120" })
 });
 const rateLimited = await context.fetch(LIVE_MATRIX);
-if (rateLimited.status !== 429 || nativeCalls !== 8) throw new Error("HTTP error response was hidden by MIME validation");
+if (rateLimited.status !== 429 || nativeCalls !== 9) throw new Error("HTTP error response was hidden by MIME validation");
 
 // Content-Length is only an advisory preflight. The streamed body itself must also be
 // bounded so missing/lying headers or transparent decompression cannot exceed 2 MiB.
@@ -186,7 +204,7 @@ try {
 } catch (error) {
   blockedStreamedOversize = String(error?.message || "").includes("xad_feed_guard_payload_size");
 }
-if (!blockedStreamedOversize || nativeCalls !== 9) throw new Error("oversized streamed feed body without Content-Length was accepted");
+if (!blockedStreamedOversize || nativeCalls !== 10) throw new Error("oversized streamed feed body without Content-Length was accepted");
 
 const boundedPayload = new Uint8Array(4096);
 boundedPayload[0] = 0x7B;
@@ -197,17 +215,34 @@ responseFactory = () => responseWithUrl(
 );
 const bounded = await context.fetch(LIVE_MATRIX);
 const boundedBytes = new Uint8Array(await bounded.arrayBuffer());
-if (nativeCalls !== 10 || boundedBytes.length !== boundedPayload.length || bounded.url !== LIVE_MATRIX) {
+if (nativeCalls !== 11 || boundedBytes.length !== boundedPayload.length || bounded.url !== LIVE_MATRIX) {
   throw new Error("bounded streamed feed body was not preserved after transport validation");
 }
 if (boundedBytes[0] !== 0x7B || boundedBytes[boundedBytes.length - 1] !== 0x7D) {
   throw new Error("bounded feed payload bytes changed while buffering");
 }
 
+// A successful protected response must expose the readable stream that enforces the
+// actual-byte ceiling. Silently returning an unstreamable success would bypass that gate.
+responseFactory = () => ({
+  ok:true,
+  status:200,
+  url:LIVE_MATRIX,
+  redirected:false,
+  headers:headers({ "content-length":"256", "content-type":"application/json" })
+});
+let blockedUnreadableBody = false;
+try {
+  await context.fetch(LIVE_MATRIX);
+} catch (error) {
+  blockedUnreadableBody = String(error?.message || "").includes("xad_feed_guard_transport_body");
+}
+if (!blockedUnreadableBody || nativeCalls !== 12) throw new Error("successful feed without a readable stream was accepted");
+
 lastInit = null;
 responseFactory = () => ({ ok:true, status:200, url:"https://example.com/data.json", redirected:false, headers:headers() });
 await context.fetch("https://example.com/data.json", { credentials:"include" });
-if (nativeCalls !== 11 || lastInit?.credentials !== "include") throw new Error("non-feed fetch was unexpectedly modified");
+if (nativeCalls !== 13 || lastInit?.credentials !== "include") throw new Error("non-feed fetch was unexpectedly modified");
 
 // A protected response without a concrete final URL cannot prove origin and must never
 // enter Feed Guard or become a known-good cache entry.
@@ -224,7 +259,7 @@ try {
 } catch (error) {
   blockedMissingFinalUrl = String(error?.message || "").includes("xad_feed_guard_transport_provenance");
 }
-if (!blockedMissingFinalUrl || nativeCalls !== 12) throw new Error("protected response without final URL was accepted");
+if (!blockedMissingFinalUrl || nativeCalls !== 14) throw new Error("protected response without final URL was accepted");
 
 // Opaque/status-0 responses do not provide inspectable provenance/status semantics.
 responseFactory = () => ({
@@ -241,7 +276,7 @@ try {
 } catch (error) {
   blockedOpaque = String(error?.message || "").includes("xad_feed_guard_transport_opaque");
 }
-if (!blockedOpaque || nativeCalls !== 13) throw new Error("opaque/status-0 protected response was accepted");
+if (!blockedOpaque || nativeCalls !== 15) throw new Error("opaque/status-0 protected response was accepted");
 
 // The caller-side numeric cache buster is stripped before network I/O. If it appears on
 // the final response URL, provenance is no longer the exact canonical endpoint.
@@ -258,7 +293,7 @@ try {
 } catch (error) {
   blockedFinalQuery = String(error?.message || "").includes("xad_feed_guard_transport_provenance");
 }
-if (!blockedFinalQuery || nativeCalls !== 14) throw new Error("noncanonical final feed URL was accepted");
+if (!blockedFinalQuery || nativeCalls !== 16) throw new Error("noncanonical final feed URL was accepted");
 
 if (policy.FEED_FETCH_TIMEOUT_MS !== 15000) throw new Error(`unexpected feed timeout ${policy.FEED_FETCH_TIMEOUT_MS}`);
 if (policy.MAX_FEED_BYTES !== MAX_FEED_BYTES) throw new Error(`unexpected feed size ceiling ${policy.MAX_FEED_BYTES}`);
@@ -281,4 +316,4 @@ await new Promise((resolve) => setTimeout(resolve, 20));
 if (!timeoutTimed.init.signal.aborted) throw new Error("bounded feed timeout did not abort stalled request signal");
 timeoutTimed.cleanup();
 
-console.log("[xADKiller FEED TRANSPORT CI] PASS • exact canonical final URL • opaque/status-0 denied • deterministic Accept • GET-only • redirect denied • credentials/referrer omitted • provenance pinned • declared + streamed body size bounded • mandatory approved MIME • caller abort + full-transfer timeout • HTTP error classification preserved • non-feed fetch untouched");
+console.log("[xADKiller FEED TRANSPORT CI] PASS • exact canonical final URL • opaque/status-0 denied • complete HTTP 200 without Content-Range • readable bounded success body required • deterministic Accept • GET-only • redirect denied • credentials/referrer omitted • provenance pinned • declared + streamed body size bounded • mandatory approved MIME • caller abort + full-transfer timeout • HTTP error classification preserved • non-feed fetch untouched");
