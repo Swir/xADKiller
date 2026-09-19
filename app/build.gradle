@@ -48,10 +48,19 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
 }
 
+def xadLargeListQualification = project.findProperty('xadkillerLargeListQualification')?.toString()?.toBoolean() ?: false
+
 tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
     testLogging {
         events "passed", "failed", "skipped"
         showStandardStreams = true
         exceptionFormat "full"
+    }
+    if (xadLargeListQualification) {
+        // Dedicated CI proof: production 750k parser + JUnit/Android stubs must fit in a
+        // deliberately constrained worker heap. The test also checks the deterministic
+        // LongCollector array-peak model against the current production source.
+        maxHeapSize = '128m'
+        systemProperty 'xadkiller.largeListQualification', 'true'
     }
 }
