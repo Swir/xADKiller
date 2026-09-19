@@ -19,22 +19,31 @@ final class PrivateDnsHelper {
         final String privateDnsServerName;
         final List<String> dnsServers;
         final boolean networkAvailable;
+        final DnsPrivacyDiagnostics.Assessment diagnostics;
 
-        Snapshot(String mode, String specifier, boolean privateDnsActive, String privateDnsServerName, List<String> dnsServers, boolean networkAvailable) {
+        Snapshot(String mode, String specifier, boolean privateDnsActive, String privateDnsServerName,
+                 List<String> dnsServers, boolean networkAvailable) {
             this.mode = mode == null ? "unknown" : mode;
             this.specifier = specifier == null ? "" : specifier;
             this.privateDnsActive = privateDnsActive;
             this.privateDnsServerName = privateDnsServerName == null ? "" : privateDnsServerName;
             this.dnsServers = dnsServers;
             this.networkAvailable = networkAvailable;
+            this.diagnostics = DnsPrivacyDiagnostics.assess(
+                    networkAvailable,
+                    this.mode,
+                    this.specifier,
+                    privateDnsActive,
+                    this.privateDnsServerName,
+                    dnsServers == null ? 0 : dnsServers.size());
         }
 
-        boolean isStrict() { return "hostname".equalsIgnoreCase(mode) || (!specifier.isEmpty() && "unknown".equals(mode)); }
+        boolean isStrict() { return diagnostics.localDnsConflict; }
+
         String pretty() {
-            if (isStrict()) return "Nazwa hosta / STRICT" + (specifier.isEmpty() ? "" : " • " + specifier);
-            if ("off".equalsIgnoreCase(mode)) return "Wyłączony";
-            if ("opportunistic".equalsIgnoreCase(mode) || "automatic".equalsIgnoreCase(mode)) return "Automatyczny" + (privateDnsActive ? " • aktywny" : "");
-            return mode + (privateDnsActive ? " • aktywny" : "");
+            String summary = diagnostics.summary(DnsPrivacyDiagnostics.isPolishLocale());
+            String resolver = privateDnsServerName.isEmpty() ? specifier : privateDnsServerName;
+            return resolver.isEmpty() ? summary : summary + " • " + resolver;
         }
     }
 

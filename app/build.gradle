@@ -10,8 +10,8 @@ android {
         applicationId 'com.swir.xadkiller'
         minSdk 26
         targetSdk 35
-        versionCode 10
-        versionName '1.5.1'
+        versionCode 11
+        versionName '1.6.0-dev'
     }
 
     buildTypes {
@@ -28,5 +28,39 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
+    lint {
+        // Each dynamic status receiver uses RECEIVER_NOT_EXPORTED on Android 13+
+        // and the only available legacy overload below API 33. Current lint
+        // flags the guarded pre-33 branch even though the flag API did not exist
+        // there. Keep every other lint rule fatal; suppress only this reviewed
+        // compatibility false-positive.
+        disable 'UnspecifiedRegisterReceiverFlag'
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
+
+def xadLargeListQualification = project.findProperty('xadkillerLargeListQualification')?.toString()?.toBoolean() ?: false
+
+tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
+    testLogging {
+        events "passed", "failed", "skipped"
+        showStandardStreams = true
+        exceptionFormat "full"
+    }
+    if (xadLargeListQualification) {
+        // Dedicated CI proof: production 750k parser + JUnit/Android stubs must fit in a
+        // deliberately constrained worker heap. The test also checks the deterministic
+        // LongCollector array-peak model against the current production source.
+        maxHeapSize = '128m'
+        systemProperty 'xadkiller.largeListQualification', 'true'
     }
 }

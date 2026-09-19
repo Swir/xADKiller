@@ -3,23 +3,50 @@ name: Build xADKiller APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, android-v160-mega ]
+    paths:
+      - "app/**"
+      - "build.gradle"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "ci/**"
+      - "assets/readme/android/**"
+      - "README.md"
+      - "ANDROID_V160_ROADMAP.md"
+      - ".github/workflows/build-apk.yml"
+
+concurrency:
+  group: xadkiller-android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
-      - name: Install Android 35
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Android 35 from runner SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -perm -111 | sort -V | tail -n1)"
+          fi
+          test -n "$SDKMANAGER"
+          echo "Using sdkmanager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/aapt"
       - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -30,14 +57,106 @@ jobs:
           base64 -d ci/xadkiller-debug.keystore.b64 > "$HOME/.android/debug.keystore"
           chmod 600 "$HOME/.android/debug.keystore"
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey >/dev/null
+      - name: SWIR progress SVG consistency
+        run: python3 ci/progress_svg.py android --check
+      - name: Android privacy network receiver and data-extraction gate
+        run: |
+          set -euo pipefail
+          MANIFEST=app/src/main/AndroidManifest.xml
+          NETCFG=app/src/main/res/xml/network_security_config.xml
+          DATARULES=app/src/main/res/xml/data_extraction_rules.xml
+          grep -q 'android:allowBackup="false"' "$MANIFEST"
+          grep -q 'android:dataExtractionRules="@xml/data_extraction_rules"' "$MANIFEST"
+          grep -q 'android:usesCleartextTraffic="false"' "$MANIFEST"
+          grep -q 'android:networkSecurityConfig="@xml/network_security_config"' "$MANIFEST"
+          grep -q 'android:permission="android.permission.BIND_VPN_SERVICE"' "$MANIFEST"
+          ! grep -q 'android.permission.QUERY_ALL_PACKAGES' "$MANIFEST"
+          test -s "$DATARULES"
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          ns = "{http://schemas.android.com/apk/res/android}"
+          root = ET.parse("app/src/main/AndroidManifest.xml").getroot()
+          app = root.find("application")
+          assert app is not None, "application element missing"
+          assert app.attrib.get(ns + "allowBackup") == "false", "allowBackup must remain false"
+          assert app.attrib.get(ns + "dataExtractionRules") == "@xml/data_extraction_rules", "dataExtractionRules must remain pinned"
+
+          receivers = [r for r in root.findall(".//receiver") if r.attrib.get(ns + "name") == ".BootReceiverV121"]
+          assert len(receivers) == 1, "BootReceiverV121 must be declared exactly once"
+          assert receivers[0].attrib.get(ns + "exported") == "false", "BootReceiverV121 must remain non-exported"
+          actions = {a.attrib.get(ns + "name") for a in receivers[0].findall("./intent-filter/action")}
+          assert actions == {"android.intent.action.BOOT_COMPLETED", "android.intent.action.MY_PACKAGE_REPLACED"}, actions
+
+          net_root = ET.parse("app/src/main/res/xml/network_security_config.xml").getroot()
+          base = net_root.find("base-config")
+          assert base is not None, "network security base-config missing"
+          assert base.attrib.get("cleartextTrafficPermitted") == "false", "cleartext must remain disabled"
+          certificates = base.findall("./trust-anchors/certificates")
+          assert len(certificates) == 1, "exactly one Android trust anchor source is required"
+          assert certificates[0].attrib.get("src") == "system", "network trust must remain system-CA only"
+          assert not any(c.attrib.get("src") == "user" for c in net_root.findall(".//certificates")), "user-added CA trust is forbidden"
+
+          data_root = ET.parse("app/src/main/res/xml/data_extraction_rules.xml").getroot()
+          assert data_root.tag == "data-extraction-rules", "data extraction root must remain explicit"
+          required_domains = {"root", "file", "database", "sharedpref", "external"}
+          for section_name in ("cloud-backup", "device-transfer"):
+              section = data_root.find(section_name)
+              assert section is not None, f"{section_name} section missing"
+              assert not section.findall("include"), f"{section_name} must not opt data back into export"
+              excluded = {item.attrib.get("domain") for item in section.findall("exclude") if item.attrib.get("path") == "."}
+              assert excluded == required_domains, f"{section_name} exclusions incomplete: {excluded}"
+          cloud = data_root.find("cloud-backup")
+          assert cloud.attrib.get("disableIfNoEncryptionCapabilities") == "true", "cloud backup encryption gate missing"
+
+          print("Boot receiver exposure/action gate: PASS")
+          print("Android system-only TLS trust-anchor gate: PASS")
+          print("Android cloud/D2D data-extraction exclusion gate: PASS")
+          PY
+          echo "Android privacy manifest gate: PASS"
+      - name: Android lint
+        run: gradle --no-daemon lintDebug
+      - name: DNS framing QNAME canonicalization EDNS0 privacy scrub UDP-size clamp incoming and synthesized UDP checksum regression
+        run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsPacketHardeningTest --tests com.swir.xadkiller.DnsQuestionCompressionHardeningTest
+      - name: DNS upstream cooldown suppression half-open and bounded emergency fallback regression
+        run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsUpstreamPoolTest --tests com.swir.xadkiller.DnsEmergencyTimeoutTest
+      - name: DNS upstream connected-peer source pinning regression
+        run: |
+          grep -q 'socket.connect(target);' app/src/main/java/com/swir/xadkiller/AdBlockVpnServiceV121.java
+          grep -q 'target.equals(response.getSocketAddress())' app/src/main/java/com/swir/xadkiller/AdBlockVpnServiceV121.java
+          gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsUpstreamPeerPinningTest
+      - name: DNS Wi-Fi mobile handover immediate bounded resolver revalidation regression
+        run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DnsNetworkHandoverRecoveryTest
+      - name: VPN boot package-update stale-heartbeat cross-action restart-burst and liveness lifecycle regression
+        run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.VpnLifecycleStartPolicyTest
+      - name: Blocklist transport fail-closed update and interrupted-install cache recovery regression
+        run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.BlocklistTransportSecurityTest --tests com.swir.xadkiller.BlocklistUpdateGuardTest --tests com.swir.xadkiller.BlocklistCacheRecoveryTest
+      - name: Android 750k-domain parser constrained-heap memory latency and off-main-thread ANR qualification
+        run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.BlocklistLargeListQualificationTest -PxadkillerLargeListQualification=true
+      - name: Offline starter blocklist screenshot-derived coverage regression
+        run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.BlocklistCoverageTest
+      - name: Unit tests DNS query EDNS response framing lifecycle upstream health and blocking benchmark
+        run: gradle --no-daemon testDebugUnitTest
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
+      - name: Validate APK package
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -tq "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee /tmp/xadkiller-badging.txt
+          grep -q "package: name='com.swir.xadkiller.debug'" /tmp/xadkiller-badging.txt
+          grep -q "sdkVersion:'26'" /tmp/xadkiller-badging.txt
+          grep -q "targetSdkVersion:'35'" /tmp/xadkiller-badging.txt
       - name: APK checksum
-        run: sha256sum app/build/outputs/apk/debug/app-debug.apk
-      - name: Upload APK
+        run: |
+          mkdir -p artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk artifacts/xADKiller-Android-v1.6.0-dev-debug.apk
+          (cd artifacts && sha256sum xADKiller-Android-v1.6.0-dev-debug.apk > SHA256SUMS.txt && sha256sum -c SHA256SUMS.txt)
+      - name: Upload tested development APK
         uses: actions/upload-artifact@v4
         with:
-          name: xADKiller-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: xADKiller-Android-v1.6.0-dev-tested
+          path: artifacts/*
           if-no-files-found: error
           retention-days: 30
