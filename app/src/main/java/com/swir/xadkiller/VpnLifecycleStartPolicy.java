@@ -47,10 +47,12 @@ final class VpnLifecycleStartPolicy {
 
     static boolean isDuplicateRestart(String action, String lastAction, long lastAttemptElapsedMs, long nowElapsedMs) {
         // Duplicate suppression is driven by SystemClock.elapsedRealtime(), not wall time.
-        // That makes short BOOT/UPDATE bursts immune to user/NTP clock changes. A reboot
-        // resets elapsedRealtime; persisted pre-reboot values will then be greater than the
-        // new clock and are intentionally treated as stale rather than suppressing startup.
-        if (!isManagedRestartAction(action) || !isManagedRestartAction(lastAction)) return false;
+        // It applies only to repeats of the SAME lifecycle action. BOOT_COMPLETED followed by
+        // MY_PACKAGE_REPLACED (or the reverse) can represent a real second process kill; if
+        // that cross-action signal were suppressed, a just-started VPN could stay dead after
+        // an update. A reboot resets elapsedRealtime; persisted pre-reboot values will then
+        // be greater than the new clock and are intentionally treated as stale.
+        if (!isManagedRestartAction(action) || !action.equals(lastAction)) return false;
         if (lastAttemptElapsedMs <= 0L || nowElapsedMs <= 0L) return false;
         long ageMs = nowElapsedMs - lastAttemptElapsedMs;
         return ageMs >= 0L && ageMs <= DUPLICATE_RESTART_WINDOW_MS;
