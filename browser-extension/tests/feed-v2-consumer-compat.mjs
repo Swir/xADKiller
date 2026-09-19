@@ -10,6 +10,8 @@ const otherUrl = "https://example.com/data.json";
 
 const originalFetch = globalThis.fetch;
 const originalGuard = globalThis.XAD_FEED_GUARD;
+const originalTransportGuard = globalThis.XAD_FEED_TRANSPORT_GUARD;
+const originalCompatApi = globalThis.XAD_FEED_V2_COMPAT;
 const originalFlag = globalThis.__xadFeedV2Compat;
 
 const v2 = {
@@ -28,14 +30,27 @@ try {
       return String(value).startsWith("https://raw.githubusercontent.com/Swir/xADKiller/") ? "live-matrix" : "";
     }
   };
+  globalThis.XAD_FEED_TRANSPORT_GUARD = {
+    requestUrlValue(input) {
+      if (typeof input === "string") return input;
+      if (input && typeof input === "object") {
+        if (typeof input.url === "string" && input.url) return input.url;
+        if (typeof input.href === "string" && input.href) return input.href;
+      }
+      return "";
+    }
+  };
   globalThis.fetch = async (input) => {
-    const url = String(typeof input === "string" ? input : input?.url || "");
+    const url = String(typeof input === "string" ? input : input?.url || input?.href || "");
     if (url === protectedUrl) {
-      return new Response(JSON.stringify(v2), { status:200, headers:{ "content-type":"application/json", "x-test":"v2" } });
+      const response = new Response(JSON.stringify(v2), { status:200, headers:{ "content-type":"application/json", "x-test":"v2" } });
+      try { Object.defineProperty(response, "url", { value:protectedUrl, configurable:true }); } catch (_) {}
+      return response;
     }
     return new Response(JSON.stringify({ schema:2, untouched:true }), { status:200, headers:{ "x-test":"other" } });
   };
   delete globalThis.__xadFeedV2Compat;
+  delete globalThis.XAD_FEED_V2_COMPAT;
 
   const scriptUrl = pathToFileURL(path.join(common, "feed-v2-compat.js"));
   scriptUrl.searchParams.set("test", String(Date.now()));
@@ -48,6 +63,23 @@ try {
   assert.equal(adapted.expires_at, v2.expires_at, "v2 expiry metadata must be preserved");
   assert.deepEqual(adapted.rollback, v2.rollback, "v2 rollback metadata must be preserved");
   assert.equal(adaptedResponse.headers.get("x-test"), "v2");
+  assert.equal(adaptedResponse.url, protectedUrl, "compatibility rebuild should preserve verified response provenance metadata");
+
+  const urlObjectResponse = await globalThis.fetch(new URL(protectedUrl));
+  const urlObjectAdapted = await urlObjectResponse.json();
+  assert.equal(urlObjectAdapted.schema, 1,
+    "URL-object protected feed requests must receive the same validated v2-to-v1 compatibility view");
+  assert.equal(urlObjectAdapted.feed_version, v2.feed_version);
+
+  if (typeof Request === "function") {
+    const requestResponse = await globalThis.fetch(new Request(protectedUrl));
+    const requestAdapted = await requestResponse.json();
+    assert.equal(requestAdapted.schema, 1,
+      "Request-object protected feed requests must receive the same validated v2-to-v1 compatibility view");
+  }
+
+  assert.equal(globalThis.XAD_FEED_V2_COMPAT.requestUrlValue(new URL(protectedUrl)), protectedUrl,
+    "adapter URL normalization must cover URL.href without weakening the transport guard");
 
   const untouchedResponse = await globalThis.fetch(otherUrl);
   const untouched = await untouchedResponse.json();
@@ -72,6 +104,10 @@ try {
   globalThis.fetch = originalFetch;
   if (originalGuard === undefined) delete globalThis.XAD_FEED_GUARD;
   else globalThis.XAD_FEED_GUARD = originalGuard;
+  if (originalTransportGuard === undefined) delete globalThis.XAD_FEED_TRANSPORT_GUARD;
+  else globalThis.XAD_FEED_TRANSPORT_GUARD = originalTransportGuard;
+  if (originalCompatApi === undefined) delete globalThis.XAD_FEED_V2_COMPAT;
+  else globalThis.XAD_FEED_V2_COMPAT = originalCompatApi;
   if (originalFlag === undefined) delete globalThis.__xadFeedV2Compat;
   else globalThis.__xadFeedV2Compat = originalFlag;
 }
