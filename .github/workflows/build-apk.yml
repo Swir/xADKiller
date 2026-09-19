@@ -63,6 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           MANIFEST=app/src/main/AndroidManifest.xml
+          NETCFG=app/src/main/res/xml/network_security_config.xml
           grep -q 'android:allowBackup="false"' "$MANIFEST"
           grep -q 'android:usesCleartextTraffic="false"' "$MANIFEST"
           grep -q 'android:networkSecurityConfig="@xml/network_security_config"' "$MANIFEST"
@@ -77,7 +78,17 @@ jobs:
           assert receivers[0].attrib.get(ns + "exported") == "false", "BootReceiverV121 must remain non-exported"
           actions = {a.attrib.get(ns + "name") for a in receivers[0].findall("./intent-filter/action")}
           assert actions == {"android.intent.action.BOOT_COMPLETED", "android.intent.action.MY_PACKAGE_REPLACED"}, actions
+
+          net_root = ET.parse("app/src/main/res/xml/network_security_config.xml").getroot()
+          base = net_root.find("base-config")
+          assert base is not None, "network security base-config missing"
+          assert base.attrib.get("cleartextTrafficPermitted") == "false", "cleartext must remain disabled"
+          certificates = base.findall("./trust-anchors/certificates")
+          assert len(certificates) == 1, "exactly one Android trust anchor source is required"
+          assert certificates[0].attrib.get("src") == "system", "network trust must remain system-CA only"
+          assert not any(c.attrib.get("src") == "user" for c in net_root.findall(".//certificates")), "user-added CA trust is forbidden"
           print("Boot receiver exposure/action gate: PASS")
+          print("Android system-only TLS trust-anchor gate: PASS")
           PY
           echo "Android privacy manifest gate: PASS"
       - name: Android lint
