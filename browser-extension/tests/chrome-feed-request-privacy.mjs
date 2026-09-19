@@ -27,6 +27,11 @@ await context.fetch(FEED, {
   cache:"force-cache",
   credentials:"include",
   referrerPolicy:"unsafe-url",
+  referrer:"https://secret.example/private/path?token=must-not-leak",
+  mode:"no-cors",
+  keepalive:true,
+  integrity:"sha256-must-not-survive",
+  body:"must-not-leak",
   headers:{
     accept:"application/json, x-secret=must-not-leak",
     authorization:"Bearer must-not-leak",
@@ -38,10 +43,18 @@ await context.fetch(FEED, {
 });
 
 if (!capturedInit) throw new Error("protected feed did not reach native fetch");
+if (capturedInit.method !== "GET") throw new Error(`protected feed method not forced: ${capturedInit.method}`);
 if (capturedInit.cache !== "no-store") throw new Error(`protected feed cache policy not forced: ${capturedInit.cache}`);
 if (capturedInit.credentials !== "omit") throw new Error(`credentials not omitted: ${capturedInit.credentials}`);
 if (capturedInit.referrerPolicy !== "no-referrer") throw new Error(`referrer policy not hardened: ${capturedInit.referrerPolicy}`);
 if (capturedInit.redirect !== "error") throw new Error(`redirect policy not hardened: ${capturedInit.redirect}`);
+if (capturedInit.mode !== "cors") throw new Error(`protected feed mode not forced to cors: ${capturedInit.mode}`);
+if (capturedInit.keepalive !== false) throw new Error(`protected feed keepalive not disabled: ${capturedInit.keepalive}`);
+for (const key of ["referrer", "integrity", "body"]) {
+  if (Object.prototype.hasOwnProperty.call(capturedInit, key)) {
+    throw new Error(`caller-controlled RequestInit field survived hardening: ${key}`);
+  }
+}
 
 const policy = context.XAD_FEED_TRANSPORT_GUARD;
 const sent = new Headers(capturedInit.headers);
@@ -56,6 +69,9 @@ if ([...sent.keys()].some((name) => name !== "accept")) {
 }
 
 const defaults = policy.hardenedInit({});
+if (defaults.method !== "GET" || defaults.mode !== "cors" || defaults.keepalive !== false) {
+  throw new Error("default protected-feed RequestInit is not deterministic");
+}
 if (new Headers(defaults.headers).get("accept") !== policy.FEED_ACCEPT) {
   throw new Error("default public-data Accept header is not deterministic");
 }
@@ -80,4 +96,4 @@ await expectCanonicalReject(`${FEED}#alternate-spelling`, "fragment feed variant
 if (policy.guardedKind(`${FEED}?cache=1`) !== "") throw new Error("query-string feed variant was treated as canonical");
 if (!policy.hasApprovedPath(`${FEED}?cache=1`)) throw new Error("approved-path detector failed for unsafe feed variant");
 
-console.log("[xADKiller FEED REQUEST PRIVACY CI] PASS • canonical exact URLs • deterministic Accept • no-store • no credentials/referrer • caller secrets stripped");
+console.log("[xADKiller FEED REQUEST PRIVACY CI] PASS • canonical exact URLs • deterministic GET/CORS/no-keepalive • deterministic Accept • no-store • no credentials/referrer • caller secrets and RequestInit fields stripped");
