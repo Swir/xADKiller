@@ -2,11 +2,19 @@ name: Test xADKiller Chrome TITAN
 
 on:
   push:
-    branches: [ main, chrome-titan-v140, chrome-v141-pl-en ]
+    branches: [ main, chrome-titan-v140, chrome-v141-pl-en, chrome-v150-adaptive-memory ]
     paths:
+      - "README.md"
       - "browser-extension/**"
+      - "browser-intelligence/**"
+      - "assets/readme/chrome/**"
+      - "ci/progress_svg.py"
       - ".github/workflows/chrome-ultra-ci.yml"
   workflow_dispatch:
+
+concurrency:
+  group: xadkiller-chrome-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -14,30 +22,48 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     defaults:
       run:
         working-directory: browser-extension
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Node 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "24"
+      - name: SWIR progress SVG consistency
+        run: python3 ../ci/progress_svg.py chrome --check
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Compile static dynamic session and adaptive boost rules
         run: npm run build
       - name: Validate Chrome TITAN package
         run: npm run validate
+      - name: Cross-layer static dynamic session dedupe regression
+        run: npm run test:layer-dedupe
+      - name: Static rule source agreement and resource coverage ranking regression
+        run: npm run test:rule-ranking
+      - name: Validate v1.5 safety invariants
+        run: node tools/validate-v150-safety.mjs
       - name: JavaScript syntax
         run: |
           node --check dist/chrome/service-worker.js
+          node --check dist/chrome/feed-transport-guard.js
+          node --check dist/chrome/feed-data-contract.js
+          node --check dist/chrome/feed-cache-integrity.js
+          node --check dist/chrome/feed-guard.js
+          node --check dist/chrome/feed-requestinfo-guard.js
+          node --check dist/chrome/feed-v2-compat.js
+          node --check dist/chrome/feed-health-ui.js
+          node --check dist/chrome/rule-budget-ui.js
           node --check dist/chrome/background.js
           node --check dist/chrome/live-signatures.js
           node --check dist/chrome/titan-engine.js
           node --check dist/chrome/static-boost.js
+          node --check dist/chrome/standard-core-boost.js
+          node --check dist/chrome/temporary-site-guard.js
           node --check dist/chrome/titan-main.js
           node --check dist/chrome/network-scout.js
           node --check dist/chrome/early-guard.js
@@ -48,33 +74,115 @@ jobs:
           node --check dist/chrome/popup.js
           node --check dist/chrome/cosmetic-data.js
           node --check dist/chrome/build-meta.js
+          node --check tests/chrome-adaptive-memory-runtime.mjs
+          node --check tests/chrome-temporary-pause-runtime.mjs
+          node --check tests/chrome-feed-cache-integrity.mjs
+          node --check tests/chrome-feed-guard-runtime.mjs
+          node --check tests/chrome-feed-data-contract.mjs
+          node --check tests/chrome-feed-offline-fallback.mjs
+          node --check tests/chrome-feed-retry-contract.mjs
+          node --check tests/chrome-feed-transport-contract.mjs
+          node --check tests/chrome-feed-request-privacy.mjs
+          node --check tests/chrome-feed-requestinfo-schema-boundary.mjs
+          node --check tests/feed-v2-consumer-compat.mjs
+          node --check tests/feed-v2-rollout-validity-contract.mjs
+          node --check tests/feed-v2-remote-state-contract.mjs
+          node --check tests/rule-quality-ranking.mjs
+          node --check tests/chrome-blocking-benchmark.mjs
+          node --check tests/chrome-screenshot-regression.mjs
+          node --check tests/chrome-shadow-mutation-soak.mjs
+          node --check tests/chrome-real-page-soak.mjs
+          node --check tests/chrome-performance-budget.mjs
+          node --check tools/dedupe-rule-layers.mjs
+          node --check tools/rule-quality.mjs
+          node --check tools/feed-v2-migration-preflight.mjs
+          node --check tools/feed-v2-rollout-plan.mjs
+          node --check tools/validate-feed-v2-rollout-plan.mjs
+          node --check tools/verify-feed-v2-remote-state.mjs
+          node --check tools/validate-feed-v2-candidate-artifacts.mjs
+          node --check tools/validate-feed-checksums.mjs
+          node --check tools/validate-v150-safety.mjs
+      - name: Protection feed fallback cache fail-closed integrity regression
+        run: node tests/chrome-feed-cache-integrity.mjs
+      - name: Protection feed transport privacy provenance mandatory-MIME streamed-size and full-transfer timeout regression
+        run: node tests/chrome-feed-transport-contract.mjs
+      - name: Protection feed canonical URL deterministic-header and caller-secret stripping regression
+        run: node tests/chrome-feed-request-privacy.mjs
+      - name: Protection feed strict schema bounds dedupe data-only and ReDoS contract regression
+        run: node tests/chrome-feed-data-contract.mjs
+      - name: GitHub feed RequestInfo identity schema anti-replay and downgrade regression
+        run: npm run test:feeds
+      - name: Feed transient retry contract 429 Abort recovery regression
+        run: node tests/chrome-feed-retry-contract.mjs
+      - name: Feed v2 consumer compatibility regression
+        run: npm run test:feed-v2-consumers
+      - name: Feed v2 production migration parity preflight
+        run: npm run test:feed-v2-migration
+      - name: Build deterministic feed v2 migration candidates
+        run: npm run build:feed-v2-candidates
+      - name: Validate feed v2 candidate artifact manifest
+        run: npm run test:feed-v2-artifacts
+      - name: Validate feed v2 rollout freshness and rollback rehearsal
+        run: |
+          node tools/feed-v2-rollout-plan.mjs
+          node tools/validate-feed-v2-rollout-plan.mjs
+          node tests/feed-v2-rollout-validity-contract.mjs
+      - name: Unit-test pre/post remote-state safety contract
+        run: npm run test:feed-v2-remote-state
+      - name: Verify production targets still match optimistic-concurrency preconditions
+        run: npm run verify:feed-v2-prepublication
+      - name: Production GitHub feed checksum audit
+        run: npm run test:feed-checksums
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Chromium TITAN runtime test
         run: timeout --signal=TERM --kill-after=10s 300s npm run test:chrome
+      - name: Chromium Shadow DOM mutation soak
+        run: timeout --signal=TERM --kill-after=10s 180s npm run test:shadow-soak
+      - name: Chromium broader real-page soak
+        run: timeout --signal=TERM --kill-after=10s 180s npm run test:real-page
+      - name: Chromium startup DOM and heap performance budget
+        run: timeout --signal=TERM --kill-after=10s 180s npm run test:performance
       - name: Chromium adaptive static boost test
         run: timeout --signal=TERM --kill-after=10s 180s npm run test:boost
       - name: Chromium no-COMPAT regression test
         run: timeout --signal=TERM --kill-after=10s 120s npm run test:compat
       - name: Chromium PL EN language switch test
         run: timeout --signal=TERM --kill-after=10s 120s npm run test:language
-      - name: Package Chrome TITAN PL EN ZIP
+      - name: Chromium Adaptive Memory persistence test
+        run: timeout --signal=TERM --kill-after=10s 180s npm run test:memory
+      - name: Chromium Breakage Guard pause and resume test
+        run: timeout --signal=TERM --kill-after=10s 180s npm run test:pause
+      - name: Chromium blocking effectiveness benchmark
+        run: timeout --signal=TERM --kill-after=10s 180s npm run test:benchmark
+      - name: Chromium screenshot-derived ads and trackers regression
+        run: timeout --signal=TERM --kill-after=10s 180s node tests/chrome-screenshot-regression.mjs
+      - name: Package Chrome TITAN Adaptive Memory ZIP
         run: |
-          rm -rf packages
           mkdir -p packages
-          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.4.0-TITAN-PL-EN.zip .)
+          rm -f packages/xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip packages/SHA256SUMS.txt
+          (cd dist/chrome && zip -qr ../../packages/xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip .)
       - name: Checksums
         run: |
           cd packages
-          sha256sum xADKiller-Chrome-v1.4.0-TITAN-PL-EN.zip > SHA256SUMS.txt
+          sha256sum xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip > SHA256SUMS.txt
       - name: Verify archive
         run: |
-          unzip -tq packages/xADKiller-Chrome-v1.4.0-TITAN-PL-EN.zip
+          unzip -tq packages/xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip
           (cd packages && sha256sum -c SHA256SUMS.txt)
-      - name: Upload tested Chrome TITAN PL EN package
+      - name: Upload tested Chrome TITAN Adaptive Memory package
         uses: actions/upload-artifact@v4
         with:
-          name: xADKiller-Chrome-v1.4.0-TITAN-PL-EN-tested
-          path: browser-extension/packages/*
+          name: xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory-tested
+          path: |
+            browser-extension/packages/xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip
+            browser-extension/packages/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
+      - name: Upload verified feed v2 migration candidates
+        uses: actions/upload-artifact@v4
+        with:
+          name: xADKiller-feed-v2-migration-candidates-verified
+          path: browser-extension/packages/feed-v2-candidates/*
+          if-no-files-found: error
+          retention-days: 14
