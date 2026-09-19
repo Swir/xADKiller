@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const extensionRoot = resolve(here, "..");
 const defaultStoreRoot = resolve(extensionRoot, "..");
+const PARALLEL_V2_PREFIX = "browser-intelligence/v2/";
 
 function fail(message) {
   throw new Error(`feed_v2_store_compat_gate: ${message}`);
@@ -25,6 +26,17 @@ function importsV2Compat(serviceWorker) {
   return /feed-v2-compat\.js/.test(String(serviceWorker || ""));
 }
 
+function hasIsolatedParallelTargets(plan) {
+  return Array.isArray(plan?.feeds) && plan.feeds.length > 0 && plan.feeds.every((entry) => {
+    const candidateRef = String(entry?.candidate_target_ref || "");
+    const candidatePath = String(entry?.candidate_target_path || "");
+    return entry?.publication_mode === "parallel-v2"
+      && candidateRef.length > 0
+      && candidatePath.startsWith(PARALLEL_V2_PREFIX)
+      && !(candidateRef === entry.target_ref && candidatePath === entry.target_path);
+  });
+}
+
 export function inspectStoreCompatibility(background, serviceWorker) {
   const strictV1Consumer = schemaOneOnly(background);
   const compatLoaded = importsV2Compat(serviceWorker);
@@ -40,6 +52,11 @@ export function inspectStoreCompatibility(background, serviceWorker) {
 export function validatePublicationSafety(plan, compatibility, requireCompatible = false) {
   if (!plan || plan.schema !== 1 || !Array.isArray(plan.feeds)) fail("invalid rollout plan");
   if (plan.remote_executable_code !== false) fail("rollout plan must remain data-only");
+
+  const parallelStagingReady = hasIsolatedParallelTargets(plan);
+  if (!compatibility.accepts_schema_v2 && !parallelStagingReady) {
+    fail("store/main is schema-v1-only and rollout lacks isolated parallel-v2 targets");
+  }
   if (requireCompatible && !compatibility.accepts_schema_v2) {
     fail("store/main is still schema-v1-only; in-place schema-v2 publication is blocked");
   }
@@ -52,6 +69,7 @@ export function validatePublicationSafety(plan, compatibility, requireCompatible
     store_compatibility: compatibility,
     rollout_publication_authorized: plan.publication_authorized === true,
     in_place_schema_v2_publication_blocked: !compatibility.accepts_schema_v2,
+    parallel_v2_staging_ready: parallelStagingReady,
     required_strategy: compatibility.safe_strategy,
     remote_executable_code: false
   };
@@ -78,11 +96,11 @@ async function main() {
     await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
   }
 
-  const status = report.in_place_schema_v2_publication_blocked ? "BLOCKED" : "COMPATIBLE";
+  const status = report.in_place_schema_v2_publication_blocked ? "IN_PLACE_BLOCKED" : "COMPATIBLE";
   console.log(
     `Feed v2 store compatibility: ${status} • strategy=${report.required_strategy} • `
-    + `strict_v1=${compatibility.strict_v1_consumer} • compat=${compatibility.feed_v2_compat_loaded} `
-    + `• publication_authorized=${report.rollout_publication_authorized}`
+    + `parallel_v2_staging_ready=${report.parallel_v2_staging_ready} • strict_v1=${compatibility.strict_v1_consumer} `
+    + `• compat=${compatibility.feed_v2_compat_loaded} • publication_authorized=${report.rollout_publication_authorized}`
   );
 }
 

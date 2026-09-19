@@ -54,14 +54,23 @@ async function main() {
 
   await withTamper(originalText, (data) => {
     data.feeds[0].target_path = "browser-intelligence/other.json";
-  }, "target path drift");
+  }, "production anchor drift");
+
+  await withTamper(originalText, (data) => {
+    data.feeds[0].candidate_target_path = data.feeds[0].target_path;
+    data.feeds[0].candidate_target_ref = data.feeds[0].target_ref;
+  }, "parallel target aliases production v1");
+
+  await withTamper(originalText, (data) => {
+    data.feeds[0].candidate_target_path = "browser-intelligence/not-v2/live-shield.json";
+  }, "parallel target escapes v2 namespace");
 
   await withTamper(originalText, (data) => {
     data.feeds[0].post_publish_verify.sha256 = "0".repeat(64);
   }, "post-publish fingerprint drift");
 
   runValidator(true, "restored baseline");
-  console.log("Feed v2 rollout plan contract regression OK (authorization/target/rollback/fingerprint tamper rejected)");
+  console.log("Feed v2 rollout plan contract regression OK (authorization/production/parallel/rollback/fingerprint tamper rejected)");
 }
 
 main().catch((error) => {

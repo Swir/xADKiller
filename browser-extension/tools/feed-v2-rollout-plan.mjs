@@ -13,6 +13,7 @@ const migrationPlanPath = resolve(repoRoot, "browser-intelligence/feed-v2-migrat
 const outputPath = resolve(candidateDir, "rollout-plan.json");
 
 const MIN_PUBLICATION_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000;
+const PARALLEL_V2_PREFIX = "browser-intelligence/v2/";
 
 function fail(message) {
   throw new Error(`feed_v2_rollout_plan: ${message}`);
@@ -81,8 +82,18 @@ async function main() {
     const targetPath = String(pinned.path || "");
     assertSafeTarget(targetRef, targetPath, id);
 
+    const parallelRef = String(target.parallel_v2_ref || "");
+    const parallelPath = String(target.parallel_v2_path || "");
+    assertSafeTarget(parallelRef, parallelPath, id);
+    if (!parallelPath.startsWith(PARALLEL_V2_PREFIX)) {
+      fail(`${id}: parallel v2 target must stay under ${PARALLEL_V2_PREFIX}`);
+    }
+    if (parallelRef === targetRef && parallelPath === targetPath) {
+      fail(`${id}: parallel v2 target must not overwrite the production v1 path`);
+    }
+
     if (candidateEntry.source_ref !== targetRef || candidateEntry.source_path !== targetPath) {
-      fail(`${id}: candidate provenance differs from production target`);
+      fail(`${id}: candidate provenance differs from production source`);
     }
     if (candidateEntry.source_git_blob_sha1 !== pinned.git_blob_sha1) {
       fail(`${id}: candidate expected-current blob differs from production ledger`);
@@ -115,10 +126,13 @@ async function main() {
     const candidateBlobSha1 = gitBlobSha1(candidateText);
     feeds.push({
       id,
+      publication_mode: "parallel-v2",
       target_ref: targetRef,
       target_path: targetPath,
       expected_current_git_blob_sha1: pinned.git_blob_sha1,
       expected_current_version: pinned.feed_version,
+      candidate_target_ref: parallelRef,
+      candidate_target_path: parallelPath,
       candidate_file: candidateFile,
       candidate_version: candidate.feed_version,
       candidate_expires_at: candidate.expires_at,
@@ -140,7 +154,7 @@ async function main() {
 
   const rollout = {
     schema: 1,
-    purpose: "Development-only feed-v2 publication rehearsal. This file authorizes no remote write; it pins the exact optimistic-concurrency precondition, candidate blob and immutable rollback blob for a future reviewed data-only rollout.",
+    purpose: "Development-only parallel schema-v2 staging rehearsal. Production schema-v1 targets remain immutable for the current store/main consumer; this file authorizes no remote write and pins exact candidate, rollback and optimistic-concurrency evidence.",
     publication_authorized: false,
     remote_executable_code: false,
     source_candidate_manifest: "browser-extension/packages/feed-v2-candidates/manifest.json",
@@ -151,7 +165,7 @@ async function main() {
   };
 
   await writeFile(outputPath, `${JSON.stringify(rollout, null, 2)}\n`, "utf8");
-  console.log(`Feed v2 rollout rehearsal plan OK (${feeds.map((feed) => `${feed.id}:${feed.expected_current_git_blob_sha1.slice(0, 10)}->${feed.candidate_git_blob_sha1.slice(0, 10)}`).join(", ")}); publication_authorized=false`);
+  console.log(`Feed v2 parallel staging plan OK (${feeds.map((feed) => `${feed.id}:${feed.candidate_target_ref}/${feed.candidate_target_path}`).join(", ")}); production-v1 untouched; publication_authorized=false`);
 }
 
 main().catch((error) => {

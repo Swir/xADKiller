@@ -57,17 +57,17 @@ jobs:
         run: node tools/feed-v2-migration-preflight.mjs --write
       - name: Validate candidate artifact manifest
         run: node tools/validate-feed-v2-candidate-artifacts.mjs
-      - name: Build unauthorized data-only rollout rehearsal plan
+      - name: Build unauthorized isolated parallel-v2 staging plan
         run: node tools/feed-v2-rollout-plan.mjs
-      - name: Validate optimistic-concurrency rollback and post-publish fingerprints
+      - name: Validate parallel targets optimistic-concurrency rollback and post-publish fingerprints
         run: node tools/validate-feed-v2-rollout-plan.mjs
       - name: Unit-test pre/post remote-state safety contract
         run: node tests/feed-v2-remote-state-contract.mjs
-      - name: Verify production targets still match optimistic-concurrency preconditions
+      - name: Verify production v1 targets still match optimistic-concurrency preconditions
         run: node tools/verify-feed-v2-remote-state.mjs --mode=pre
-      - name: Unit-test store compatibility gate
+      - name: Unit-test store compatibility and parallel staging gate
         run: node tests/feed-v2-store-compat-gate.mjs
-      - name: Gate in-place v2 publication against current store/main consumer
+      - name: Gate store/main and prove isolated parallel-v2 staging does not overwrite v1
         run: node tools/feed-v2-store-compat-gate.mjs --store-root=../store-main --out=packages/feed-v2-candidates/store-compatibility.json
       - name: Tamper regression for rollout safety contract
         run: node tests/feed-v2-rollout-plan-contract.mjs
