@@ -59,20 +59,28 @@ jobs:
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey >/dev/null
       - name: SWIR progress SVG consistency
         run: python3 ci/progress_svg.py android --check
-      - name: Android privacy network and receiver exposure gate
+      - name: Android privacy network receiver and data-extraction gate
         run: |
           set -euo pipefail
           MANIFEST=app/src/main/AndroidManifest.xml
           NETCFG=app/src/main/res/xml/network_security_config.xml
+          DATARULES=app/src/main/res/xml/data_extraction_rules.xml
           grep -q 'android:allowBackup="false"' "$MANIFEST"
+          grep -q 'android:dataExtractionRules="@xml/data_extraction_rules"' "$MANIFEST"
           grep -q 'android:usesCleartextTraffic="false"' "$MANIFEST"
           grep -q 'android:networkSecurityConfig="@xml/network_security_config"' "$MANIFEST"
           grep -q 'android:permission="android.permission.BIND_VPN_SERVICE"' "$MANIFEST"
           ! grep -q 'android.permission.QUERY_ALL_PACKAGES' "$MANIFEST"
+          test -s "$DATARULES"
           python3 - <<'PY'
           import xml.etree.ElementTree as ET
           ns = "{http://schemas.android.com/apk/res/android}"
           root = ET.parse("app/src/main/AndroidManifest.xml").getroot()
+          app = root.find("application")
+          assert app is not None, "application element missing"
+          assert app.attrib.get(ns + "allowBackup") == "false", "allowBackup must remain false"
+          assert app.attrib.get(ns + "dataExtractionRules") == "@xml/data_extraction_rules", "dataExtractionRules must remain pinned"
+
           receivers = [r for r in root.findall(".//receiver") if r.attrib.get(ns + "name") == ".BootReceiverV121"]
           assert len(receivers) == 1, "BootReceiverV121 must be declared exactly once"
           assert receivers[0].attrib.get(ns + "exported") == "false", "BootReceiverV121 must remain non-exported"
@@ -87,8 +95,22 @@ jobs:
           assert len(certificates) == 1, "exactly one Android trust anchor source is required"
           assert certificates[0].attrib.get("src") == "system", "network trust must remain system-CA only"
           assert not any(c.attrib.get("src") == "user" for c in net_root.findall(".//certificates")), "user-added CA trust is forbidden"
+
+          data_root = ET.parse("app/src/main/res/xml/data_extraction_rules.xml").getroot()
+          assert data_root.tag == "data-extraction-rules", "data extraction root must remain explicit"
+          required_domains = {"root", "file", "database", "sharedpref", "external"}
+          for section_name in ("cloud-backup", "device-transfer"):
+              section = data_root.find(section_name)
+              assert section is not None, f"{section_name} section missing"
+              assert not section.findall("include"), f"{section_name} must not opt data back into export"
+              excluded = {item.attrib.get("domain") for item in section.findall("exclude") if item.attrib.get("path") == "."}
+              assert excluded == required_domains, f"{section_name} exclusions incomplete: {excluded}"
+          cloud = data_root.find("cloud-backup")
+          assert cloud.attrib.get("disableIfNoEncryptionCapabilities") == "true", "cloud backup encryption gate missing"
+
           print("Boot receiver exposure/action gate: PASS")
           print("Android system-only TLS trust-anchor gate: PASS")
+          print("Android cloud/D2D data-extraction exclusion gate: PASS")
           PY
           echo "Android privacy manifest gate: PASS"
       - name: Android lint
