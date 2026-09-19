@@ -14,7 +14,7 @@
     "test:pause": "node tests/chrome-temporary-pause-runtime.mjs",
     "test:feeds": "node tests/chrome-feed-cache-integrity.mjs && node tests/chrome-feed-rollback-provenance.mjs && node tests/chrome-feed-guard-runtime.mjs && node tests/chrome-feed-offline-fallback.mjs && node tests/chrome-feed-success-status.mjs && node tests/chrome-feed-requestinfo-normalization.mjs && node tests/chrome-feed-requestinfo-schema-boundary.mjs",
     "test:feed-v2-consumers": "node tests/feed-v2-consumer-compat.mjs",
-    "test:feed-v2-migration": "node tools/feed-v2-migration-preflight.mjs",
+    "test:feed-v2-migration": "node tests/feed-v2-migration-network-contract.mjs && node tools/feed-v2-migration-preflight.mjs",
     "test:feed-v2-artifacts": "node tools/validate-feed-v2-candidate-artifacts.mjs",
     "test:feed-checksums": "node tools/validate-feed-checksums.mjs",
     "test:layer-dedupe": "node tools/dedupe-rule-layers.mjs --check",

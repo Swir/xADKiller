@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { fetchPinnedJson } from "./feed-v2-network-contract.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const extensionRoot = resolve(here, "..");
@@ -80,16 +81,17 @@ function validateTargetMetadata(target, production, pinned, now) {
 }
 
 async function fetchPinnedProduction(pinned) {
-  const url = `https://raw.githubusercontent.com/Swir/xADKiller/${encodeURIComponent(pinned.source_ref)}/${pinned.path}`;
-  const response = await fetch(url, { headers: { "User-Agent": "xADKiller-feed-v2-preflight" } });
-  if (!response.ok) fail(`${pinned.id}: production fetch returned HTTP ${response.status}`);
-  const text = await response.text();
+  // Migration preflight now uses its own strict network contract before any candidate is
+  // generated: exact pinned raw-GitHub provenance, redirect denial, public GET privacy,
+  // approved MIME, bounded transfer, strict UTF-8/JSON and unencoded length consistency.
+  // This mirrors the runtime feed guard's fail-closed posture without executing remote code.
+  const fetched = await fetchPinnedJson(pinned);
+  const text = fetched.text;
   const actualBlob = gitBlobSha1(text);
   if (actualBlob !== pinned.git_blob_sha1) {
     fail(`${pinned.id}: pinned production blob changed (${actualBlob} != ${pinned.git_blob_sha1})`);
   }
-  let json;
-  try { json = JSON.parse(text); } catch { fail(`${pinned.id}: production payload is not valid JSON`); }
+  const json = fetched.json;
   if (json.schema !== 1) fail(`${pinned.id}: production source is no longer schema v1; update the migration gate`);
   if (json.feed_version !== pinned.feed_version) fail(`${pinned.id}: production version mismatch`);
   if (json.updated_at !== pinned.updated_at) fail(`${pinned.id}: production timestamp mismatch`);
