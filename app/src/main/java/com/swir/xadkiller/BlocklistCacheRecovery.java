@@ -3,6 +3,9 @@ package com.swir.xadkiller;
 import android.content.Context;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 
 /**
  * Repairs the tiny crash window in the rollback-safe blocklist installer.
@@ -14,6 +17,12 @@ import java.io.File;
  */
 final class BlocklistCacheRecovery {
     private static final String CACHE_FILE = "remote_blocklist.txt";
+
+    // Keep recovery aligned with BlocklistManager's production update gate. A merely non-empty
+    // file is not enough protection evidence: it must still contain a meaningful number of
+    // unique, parser-valid domains before it can become the active cache after a crash.
+    private static final int MIN_RECOVERY_DOMAINS = 1_000;
+    private static final int MAX_RECOVERY_DOMAINS = 750_000;
 
     private BlocklistCacheRecovery() {}
 
@@ -45,14 +54,15 @@ final class BlocklistCacheRecovery {
     static boolean recoverFiles(File primary, File backup, File temporary) {
         if (primary == null || backup == null || temporary == null) return false;
 
-        boolean primaryHealthy = primary.isFile() && primary.length() > 0L;
-        boolean backupHealthy = backup.isFile() && backup.length() > 0L;
+        boolean primaryHealthy = cacheLooksPlausible(primary);
+        boolean backupHealthy = cacheLooksPlausible(backup);
         boolean restored = false;
 
         if (!primaryHealthy && backupHealthy) {
+            // A truncated/non-domain primary must not win simply because it is non-empty.
             if (primary.exists() && !primary.delete()) return false;
             restored = backup.renameTo(primary);
-            primaryHealthy = restored && primary.isFile() && primary.length() > 0L;
+            primaryHealthy = restored && cacheLooksPlausible(primary);
         }
 
         // A .tmp belongs to an interrupted download/install and has not necessarily passed
@@ -63,11 +73,27 @@ final class BlocklistCacheRecovery {
             // If both files survived, the active primary is the already-promoted verified
             // candidate. The older rollback copy is stale and can be discarded.
             if (backup.exists()) backup.delete();
-        } else if (backup.exists() && backup.length() <= 0L) {
-            // Empty backups cannot be a known-good protection source.
+        } else if (backup.exists()) {
+            // Empty, malformed, duplicate-inflated or tiny backups cannot be a known-good
+            // protection source and should not be retried forever on every process start.
             backup.delete();
         }
 
         return restored;
+    }
+
+    /**
+     * Recovery validation deliberately reuses the production domain parser. This prevents a
+     * non-empty HTML/error/truncated file or duplicate-inflated payload from being restored as
+     * known-good protection after a crash.
+     */
+    static boolean cacheLooksPlausible(File file) {
+        if (file == null || !file.isFile() || file.length() <= 0L) return false;
+        try (InputStream input = new FileInputStream(file)) {
+            return BlocklistManager.countUniqueNormalized(input, MAX_RECOVERY_DOMAINS)
+                    >= MIN_RECOVERY_DOMAINS;
+        } catch (IOException | RuntimeException error) {
+            return false;
+        }
     }
 }
