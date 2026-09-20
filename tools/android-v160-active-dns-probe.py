@@ -3,8 +3,8 @@
 
 The tool never contacts a web service itself. It drives a locally connected adb device,
 binds evidence to the tested APK when supplied, stores only a short SHA-256 of the adb
-serial, and verifies that a benign hostname resolves while known high-confidence ad hosts
-are refused by the active local VPN/DNS path.
+serial, and verifies repeated benign/blocking DNS behavior while the local VPN heartbeat
+remains fresh and advances across the probe window.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -22,7 +21,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
-SCHEMA = 1
+SCHEMA = 2
 DEFAULT_ALLOWED = ("example.com",)
 DEFAULT_BLOCKED = (
     "doubleclick.net",
@@ -30,6 +29,12 @@ DEFAULT_BLOCKED = (
     "googlesyndication.com",
 )
 HEARTBEAT_MAX_AGE_MS = 30_000
+DEFAULT_REPEAT = 3
+DEFAULT_INTERVAL_SECONDS = 6.0
+MIN_REPEAT = 2
+MAX_REPEAT = 10
+MIN_INTERVAL_SECONDS = 1.0
+MAX_INTERVAL_SECONDS = 30.0
 RESOLVER_FAILURE_TOKENS = (
     "unknown host",
     "bad address",
@@ -54,6 +59,15 @@ class ProbeResult:
     exit_code: int
     method: str
     output_excerpt: str
+    round_index: int = 1
+
+
+@dataclass(frozen=True)
+class VpnSample:
+    round_index: int
+    vpn_running: bool | None
+    heartbeat_at_ms: int | None
+    heartbeat_age_ms: int | None
 
 
 def run(command: list[str], timeout: int = 20) -> CommandResult:
@@ -154,24 +168,48 @@ def source_commit() -> str:
     return value if result.code == 0 and re.fullmatch(r"[0-9a-f]{40}", value) else "unknown"
 
 
+def read_vpn_sample(serial: str, package: str, round_index: int, now_ms: int | None = None) -> VpnSample:
+    prefs = adb(serial, "shell", "run-as", package, "cat", "shared_prefs/xadkiller_prefs.xml")
+    vpn_running = parse_pref_bool(prefs.output, "running") if prefs.code == 0 else None
+    heartbeat_at = parse_pref_long(prefs.output, "vpn_heartbeat_v121") if prefs.code == 0 else None
+    current_ms = int(time.time() * 1000) if now_ms is None else int(now_ms)
+    heartbeat_age_ms = current_ms - heartbeat_at if heartbeat_at and heartbeat_at > 0 else None
+    return VpnSample(round_index, vpn_running, heartbeat_at, heartbeat_age_ms)
+
+
 def gate_quality(
     probes: Iterable[ProbeResult],
-    vpn_running: bool | None,
-    heartbeat_age_ms: int | None,
+    vpn_samples: Iterable[VpnSample],
     artifact_sha256: str,
+    expected_rounds: int,
 ) -> tuple[bool, list[str]]:
     probes = list(probes)
+    samples = list(vpn_samples)
     reasons: list[str] = []
     allowed = [p for p in probes if p.expected == "allow"]
     blocked = [p for p in probes if p.expected == "block"]
+
+    if expected_rounds < MIN_REPEAT or len(samples) != expected_rounds:
+        reasons.append("dns_stability_window_not_proven")
+    rounds_seen = {p.round_index for p in probes}
+    if rounds_seen != set(range(1, expected_rounds + 1)):
+        reasons.append("dns_round_coverage_incomplete")
     if not allowed or any(p.classification != "resolved" for p in allowed):
         reasons.append("benign_resolution_not_proven")
-    if len(blocked) < 2 or any(p.classification != "refused_or_unresolved" for p in blocked):
+    if len(blocked) < expected_rounds * 2 or any(p.classification != "refused_or_unresolved" for p in blocked):
         reasons.append("blocking_not_proven")
-    if vpn_running is not True:
+    if any(sample.vpn_running is not True for sample in samples):
         reasons.append("vpn_running_not_proven")
-    if heartbeat_age_ms is None or heartbeat_age_ms < 0 or heartbeat_age_ms > HEARTBEAT_MAX_AGE_MS:
+    if any(
+        sample.heartbeat_age_ms is None
+        or sample.heartbeat_age_ms < 0
+        or sample.heartbeat_age_ms > HEARTBEAT_MAX_AGE_MS
+        for sample in samples
+    ):
         reasons.append("fresh_heartbeat_not_proven")
+    heartbeats = [sample.heartbeat_at_ms for sample in samples if sample.heartbeat_at_ms and sample.heartbeat_at_ms > 0]
+    if len(heartbeats) != len(samples) or len(heartbeats) < MIN_REPEAT or heartbeats[-1] <= heartbeats[0]:
+        reasons.append("heartbeat_not_advancing")
     if not re.fullmatch(r"[0-9a-f]{64}", artifact_sha256 or ""):
         reasons.append("apk_sha256_not_bound")
     return not reasons, reasons
@@ -201,11 +239,19 @@ def main() -> int:
     parser.add_argument("--apk", default="", help="Exact APK under test; required for gate-quality evidence")
     parser.add_argument("--allowed-domain", action="append", default=[])
     parser.add_argument("--blocked-domain", action="append", default=[])
+    parser.add_argument("--repeat", type=int, default=DEFAULT_REPEAT, help=f"Probe rounds ({MIN_REPEAT}..{MAX_REPEAT}); default {DEFAULT_REPEAT}")
+    parser.add_argument("--interval-seconds", type=float, default=DEFAULT_INTERVAL_SECONDS, help=f"Delay between rounds ({MIN_INTERVAL_SECONDS}..{MAX_INTERVAL_SECONDS}); default {DEFAULT_INTERVAL_SECONDS:g}")
     parser.add_argument("--out", default="")
     args = parser.parse_args()
 
     if not shutil.which("adb"):
         print("ERROR: adb is required in PATH", file=sys.stderr)
+        return 2
+    if not MIN_REPEAT <= args.repeat <= MAX_REPEAT:
+        print(f"ERROR: --repeat must be {MIN_REPEAT}..{MAX_REPEAT}", file=sys.stderr)
+        return 2
+    if not MIN_INTERVAL_SECONDS <= args.interval_seconds <= MAX_INTERVAL_SECONDS:
+        print(f"ERROR: --interval-seconds must be {MIN_INTERVAL_SECONDS:g}..{MAX_INTERVAL_SECONDS:g}", file=sys.stderr)
         return 2
 
     apk_path = Path(args.apk).resolve() if args.apk else None
@@ -223,26 +269,28 @@ def main() -> int:
     allowed_domains = tuple(args.allowed_domain) or DEFAULT_ALLOWED
     blocked_domains = tuple(args.blocked_domain) or DEFAULT_BLOCKED
     probes: list[ProbeResult] = []
+    vpn_samples: list[VpnSample] = []
 
-    for expected, domains in (("allow", allowed_domains), ("block", blocked_domains)):
-        for domain in domains:
-            result = resolve(serial, method, domain)
-            probes.append(ProbeResult(
-                domain=domain,
-                expected=expected,
-                classification=classify_resolution(result.code, result.output),
-                exit_code=result.code,
-                method=method,
-                output_excerpt=normalize_excerpt(result.output),
-            ))
+    for round_index in range(1, args.repeat + 1):
+        for expected, domains in (("allow", allowed_domains), ("block", blocked_domains)):
+            for domain in domains:
+                result = resolve(serial, method, domain)
+                probes.append(ProbeResult(
+                    domain=domain,
+                    expected=expected,
+                    classification=classify_resolution(result.code, result.output),
+                    exit_code=result.code,
+                    method=method,
+                    output_excerpt=normalize_excerpt(result.output),
+                    round_index=round_index,
+                ))
+        vpn_samples.append(read_vpn_sample(serial, args.package, round_index))
+        if round_index != args.repeat:
+            time.sleep(args.interval_seconds)
 
-    prefs = adb(serial, "shell", "run-as", args.package, "cat", "shared_prefs/xadkiller_prefs.xml")
-    vpn_running = parse_pref_bool(prefs.output, "running") if prefs.code == 0 else None
-    heartbeat_at = parse_pref_long(prefs.output, "vpn_heartbeat_v121") if prefs.code == 0 else None
-    now_ms = int(time.time() * 1000)
-    heartbeat_age_ms = now_ms - heartbeat_at if heartbeat_at and heartbeat_at > 0 else None
     digest = apk_sha256(apk_path)
-    quality, blockers = gate_quality(probes, vpn_running, heartbeat_age_ms, digest)
+    quality, blockers = gate_quality(probes, vpn_samples, digest, args.repeat)
+    now_ms = int(time.time() * 1000)
 
     witness = {
         "schema": SCHEMA,
@@ -252,19 +300,20 @@ def main() -> int:
         "device_serial_sha256_16": serial_token(serial),
         "resolver_method": method,
         "apk_sha256": digest,
-        "vpn_running": vpn_running,
-        "heartbeat_age_ms": heartbeat_age_ms,
+        "probe_rounds": args.repeat,
+        "probe_interval_seconds": args.interval_seconds,
+        "vpn_samples": [asdict(sample) for sample in vpn_samples],
         "probes": [asdict(p) for p in probes],
         "gate_quality": quality,
         "blockers": blockers,
         "release_gate_closed": False,
-        "note": "This probe supplements, but never replaces, the full physical lifecycle and real-app stability witness.",
+        "note": "This repeated active-DNS probe supplements, but never replaces, the full physical lifecycle and real-app stability witness.",
     }
 
     out = Path(args.out).resolve() if args.out else Path("artifacts") / f"android-v160-active-dns-{int(time.time())}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(witness, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({"out": str(out), "gate_quality": quality, "blockers": blockers}, sort_keys=True))
+    print(json.dumps({"out": str(out), "gate_quality": quality, "blockers": blockers, "rounds": args.repeat}, sort_keys=True))
     return 0 if quality else 1
 
 

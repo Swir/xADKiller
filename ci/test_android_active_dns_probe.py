@@ -10,12 +10,28 @@ TOOL = ROOT / "tools" / "android-v160-active-dns-probe.py"
 spec = importlib.util.spec_from_file_location("xad_android_dns_probe", TOOL)
 probe = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
-# dataclasses resolves postponed annotations through sys.modules on newer Python releases.
 sys.modules[spec.name] = probe
 spec.loader.exec_module(probe)
 
 
 class ActiveDnsProbeContractTest(unittest.TestCase):
+    def good_probes(self):
+        results = []
+        for round_index in range(1, 4):
+            results.extend([
+                probe.ProbeResult("example.com", "allow", "resolved", 0, "getent", "ok", round_index),
+                probe.ProbeResult("doubleclick.net", "block", "refused_or_unresolved", 1, "getent", "not found", round_index),
+                probe.ProbeResult("googleadservices.com", "block", "refused_or_unresolved", 1, "getent", "not found", round_index),
+            ])
+        return results
+
+    def good_samples(self):
+        return [
+            probe.VpnSample(1, True, 1_000, 1_000),
+            probe.VpnSample(2, True, 7_000, 1_000),
+            probe.VpnSample(3, True, 13_000, 1_000),
+        ]
+
     def test_resolution_classification(self):
         self.assertEqual(probe.classify_resolution(0, "93.184.216.34 example.com"), "resolved")
         self.assertEqual(probe.classify_resolution(1, "ping: bad address 'doubleclick.net'"), "refused_or_unresolved")
@@ -27,34 +43,47 @@ class ActiveDnsProbeContractTest(unittest.TestCase):
         self.assertEqual(probe.parse_pref_long(xml, "vpn_heartbeat_v121"), 123456)
         self.assertIsNone(probe.parse_pref_long(xml, "missing"))
 
-    def test_gate_quality_requires_benign_blocked_vpn_heartbeat_and_artifact(self):
-        results = [
-            probe.ProbeResult("example.com", "allow", "resolved", 0, "getent", "ok"),
-            probe.ProbeResult("doubleclick.net", "block", "refused_or_unresolved", 1, "getent", "not found"),
-            probe.ProbeResult("googleadservices.com", "block", "refused_or_unresolved", 1, "getent", "not found"),
-        ]
-        ok, blockers = probe.gate_quality(results, True, 5_000, "a" * 64)
+    def test_gate_quality_requires_stable_dns_vpn_heartbeat_and_artifact(self):
+        ok, blockers = probe.gate_quality(self.good_probes(), self.good_samples(), "a" * 64, 3)
         self.assertTrue(ok)
         self.assertEqual(blockers, [])
 
-        ok, blockers = probe.gate_quality(results, True, probe.HEARTBEAT_MAX_AGE_MS + 1, "a" * 64)
+        stale = self.good_samples()
+        stale[-1] = probe.VpnSample(3, True, 13_000, probe.HEARTBEAT_MAX_AGE_MS + 1)
+        ok, blockers = probe.gate_quality(self.good_probes(), stale, "a" * 64, 3)
         self.assertFalse(ok)
         self.assertIn("fresh_heartbeat_not_proven", blockers)
 
-        ok, blockers = probe.gate_quality(results, False, 5_000, "")
+    def test_gate_rejects_single_round_or_nonadvancing_heartbeat(self):
+        single = [probe.ProbeResult("example.com", "allow", "resolved", 0, "getent", "ok", 1)]
+        samples = [probe.VpnSample(1, True, 1_000, 1_000)]
+        ok, blockers = probe.gate_quality(single, samples, "a" * 64, 1)
         self.assertFalse(ok)
-        self.assertIn("vpn_running_not_proven", blockers)
-        self.assertIn("apk_sha256_not_bound", blockers)
+        self.assertIn("dns_stability_window_not_proven", blockers)
+        self.assertIn("blocking_not_proven", blockers)
+        self.assertIn("heartbeat_not_advancing", blockers)
+
+        flat = [
+            probe.VpnSample(1, True, 1_000, 1_000),
+            probe.VpnSample(2, True, 1_000, 1_000),
+            probe.VpnSample(3, True, 1_000, 1_000),
+        ]
+        ok, blockers = probe.gate_quality(self.good_probes(), flat, "a" * 64, 3)
+        self.assertFalse(ok)
+        self.assertIn("heartbeat_not_advancing", blockers)
 
     def test_gate_rejects_ambiguous_block_failure(self):
-        results = [
-            probe.ProbeResult("example.com", "allow", "resolved", 0, "getent", "ok"),
-            probe.ProbeResult("doubleclick.net", "block", "command_failed", 2, "getent", "permission denied"),
-            probe.ProbeResult("googleadservices.com", "block", "refused_or_unresolved", 1, "getent", "not found"),
-        ]
-        ok, blockers = probe.gate_quality(results, True, 1_000, "b" * 64)
+        results = self.good_probes()
+        results[1] = probe.ProbeResult("doubleclick.net", "block", "command_failed", 2, "getent", "permission denied", 1)
+        ok, blockers = probe.gate_quality(results, self.good_samples(), "b" * 64, 3)
         self.assertFalse(ok)
         self.assertIn("blocking_not_proven", blockers)
+
+    def test_gate_requires_exact_round_coverage(self):
+        results = [p for p in self.good_probes() if p.round_index != 2]
+        ok, blockers = probe.gate_quality(results, self.good_samples(), "c" * 64, 3)
+        self.assertFalse(ok)
+        self.assertIn("dns_round_coverage_incomplete", blockers)
 
     def test_serial_is_never_written_raw(self):
         token = probe.serial_token("sensitive-device-serial")
