@@ -1,6 +1,7 @@
 package com.swir.xadkiller;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
@@ -68,5 +69,27 @@ public class LogStoreTest {
         assertEquals("ads19999.example.net", recent.get(0).domain);
         assertEquals("ads19975.example.net", recent.get(24).domain);
         assertTrue(file.length() > 1024 * 1024);
+    }
+
+    @Test public void recoverySelectorSkipsInvalidNewestDomainAndNormalizesNextValidOne() throws Exception {
+        File file = Files.createTempFile("xad-recovery-domain", ".log").toFile();
+        StringBuilder body = new StringBuilder();
+        append(body, 1, 1001, "ads.example.net");
+        append(body, 2, 1002, "HTTPS://bad.example/path");
+        append(body, 3, 1003, "TRACKER.Example.NET.");
+        append(body, 4, 1004, "not a domain");
+        Files.write(file.toPath(), body.toString().getBytes(StandardCharsets.UTF_8));
+
+        assertEquals("tracker.example.net", LogStore.latestRecoverableDomainFile(file));
+    }
+
+    @Test public void recoverySelectorReturnsNullWhenNoDomainIsRecoverable() throws Exception {
+        File file = Files.createTempFile("xad-recovery-empty", ".log").toFile();
+        StringBuilder body = new StringBuilder();
+        append(body, 1, 1001, "not a domain");
+        append(body, 2, 1002, "https://example.com/path");
+        Files.write(file.toPath(), body.toString().getBytes(StandardCharsets.UTF_8));
+
+        assertNull(LogStore.latestRecoverableDomainFile(file));
     }
 }

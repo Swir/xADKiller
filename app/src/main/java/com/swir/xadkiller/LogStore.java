@@ -83,7 +83,12 @@ final class LogStore {
 
     /** Returns the newest valid blocked domain without exposing history outside the app. */
     static synchronized String latestRecoverableDomain(Context context) {
-        for (Entry entry : readRecent(context, 20)) {
+        return latestRecoverableDomainFile(new File(context.getFilesDir(), FILE_NAME));
+    }
+
+    /** Testable file-level selector used by the local recovery UI. */
+    static String latestRecoverableDomainFile(File file) {
+        for (Entry entry : readRecentFile(file, 20)) {
             String normalized = BlocklistManager.normalize(entry.domain);
             if (normalized != null) return normalized;
         }
