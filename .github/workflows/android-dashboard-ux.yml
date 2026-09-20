@@ -7,7 +7,9 @@ on:
     paths:
       - "app/src/main/java/com/swir/xadkiller/DashboardStatusModel.java"
       - "app/src/main/java/com/swir/xadkiller/MainActivityV121.java"
+      - "app/src/main/java/com/swir/xadkiller/SmartEngineAccessGuide.java"
       - "app/src/test/java/com/swir/xadkiller/DashboardStatusModelTest.java"
+      - "app/src/test/java/com/swir/xadkiller/SmartEngineAccessGuideTest.java"
       - ".github/workflows/android-dashboard-ux.yml"
 
 concurrency:
@@ -55,6 +57,8 @@ jobs:
 
           path = Path("app/src/main/java/com/swir/xadkiller/MainActivityV121.java")
           text = path.read_text(encoding="utf-8")
+          access_path = Path("app/src/main/java/com/swir/xadkiller/SmartEngineAccessGuide.java")
+          access = access_path.read_text(encoding="utf-8")
           required_pairs = [
               ("STAN SYSTEMU • v1.6", "SYSTEM HEALTH • v1.6"),
               ("Zdrowe moduły: ", "Healthy modules: "),
@@ -75,13 +79,24 @@ jobs:
               "PrivateDnsHelper.settingsIntent()",
               "VpnService.prepare(this)",
               "BlocklistManager.updateRemote(getApplicationContext())",
-              "Settings.ACTION_ACCESSIBILITY_SETTINGS",
+              "SmartEngineAccessGuide.open(this)",
               "healthHandler.removeCallbacks(healthRefresh)",
               "I18n.language(this)",
           ]
           for token in required_safe_actions:
               assert token in text, f"dashboard safe-recovery contract missing: {token}"
 
+          restricted_access_contract = [
+              "Settings.ACTION_ACCESSIBILITY_SETTINGS",
+              "Settings.ACTION_APPLICATION_DETAILS_SETTINGS",
+              "shouldOfferRestrictedSettingsHelp",
+              "xADKiller cannot bypass this Android security gate.",
+              "xADKiller nie może ominąć tej blokady systemowej.",
+          ]
+          for token in restricted_access_contract:
+              assert token in access, f"Smart Engine restricted-settings recovery missing: {token}"
+
           assert "delete" not in text.lower() or "custom rules" in text.lower(), "dashboard recovery must not introduce silent destructive flow"
+          assert "WRITE_SECURE_SETTINGS" not in access, "Smart Engine helper must not bypass Android restricted settings"
           print("Android v1.6 dashboard PL/EN + safe-recovery contract: PASS")
           PY
