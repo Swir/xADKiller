@@ -28,7 +28,11 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '22'
-      - name: Privacy and schema regression
+      - name: Syntax
+        run: |
+          node --check browser-extension/tools/normal-browsing-beta-witness.mjs
+          node --check browser-extension/tests/normal-browsing-beta-witness.mjs
+      - name: Privacy provenance and release-gate regression
         working-directory: browser-extension
         run: npm run test:beta-witness
       - name: Witness safety contract
@@ -36,9 +40,13 @@ jobs:
         run: |
           set -euo pipefail
           TOOL=browser-extension/tools/normal-browsing-beta-witness.mjs
-          grep -q 'release_gate_closed: true' "$TOOL"
+          grep -q 'schema: 2' "$TOOL"
+          grep -q 'release_gate_closed: false' "$TOOL"
+          grep -q 'manual_beta_review_ready' "$TOOL"
+          grep -q 'source_commit' "$TOOL"
+          grep -q 'package_sha256' "$TOOL"
           grep -q 'hostnames: "sha256-prefix-16"' "$TOOL"
           grep -q 'urls: "omitted"' "$TOOL"
           grep -q 'telemetry: false' "$TOOL"
           ! grep -Eq 'fetch\(|XMLHttpRequest|WebSocket|https?://' "$TOOL"
-          echo "Chrome normal-browsing witness remains local, redacted and non-authorizing: PASS"
+          echo "Chrome normal-browsing witness remains local, provenance-bound, redacted and non-authorizing: PASS"

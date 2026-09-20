@@ -9,6 +9,12 @@ const MODES = new Set(["standard", "ultra"]);
 const PAGE_TYPES = new Set(["news", "video", "shop", "login", "checkout", "search", "social", "other"]);
 const RECOVERY = new Set(["none", "heuristic_pause", "site_pause", "allowlist"]);
 const MAX_RECORDS = 200;
+const SHA256_RE = /^[0-9a-f]{64}$/;
+const COMMIT_RE = /^[0-9a-f]{40}$/;
+const REVIEW_MIN_OBSERVATIONS = 8;
+const REVIEW_MIN_UNIQUE_HOSTS = 6;
+const REVIEW_MIN_PAGE_TYPES = 4;
+const REVIEW_MIN_PER_MODE = 2;
 
 export function normalizeHostname(value) {
   if (typeof value !== "string") throw new Error("host must be a string");
@@ -39,7 +45,25 @@ function hashHost(host) {
   return crypto.createHash("sha256").update(host, "utf8").digest("hex").slice(0, 16);
 }
 
-export function buildWitness(records, generatedAt = new Date().toISOString()) {
+function normalizeCandidate(provenance = {}) {
+  const sourceCommit = String(provenance.source_commit ?? "").trim().toLowerCase();
+  const packageSha256 = String(provenance.package_sha256 ?? "").trim().toLowerCase();
+
+  if (sourceCommit && !COMMIT_RE.test(sourceCommit)) {
+    throw new Error("source_commit must be a 40-character lowercase hex Git commit");
+  }
+  if (packageSha256 && !SHA256_RE.test(packageSha256)) {
+    throw new Error("package_sha256 must be a 64-character lowercase hex SHA-256");
+  }
+
+  return {
+    source_commit: sourceCommit || "unbound",
+    package_sha256: packageSha256 || "unbound",
+    bound: Boolean(sourceCommit && packageSha256)
+  };
+}
+
+export function buildWitness(records, generatedAt = new Date().toISOString(), provenance = {}) {
   if (!Array.isArray(records) || records.length < 1 || records.length > MAX_RECORDS) {
     throw new Error(`observations must contain 1..${MAX_RECORDS} records`);
   }
@@ -69,18 +93,43 @@ export function buildWitness(records, generatedAt = new Date().toISOString()) {
     };
   });
 
+  const uniqueHosts = new Set(observations.map((item) => item.host_hash)).size;
+  const pageTypes = new Set(observations.map((item) => item.page_type)).size;
+  const standard = observations.filter((item) => item.mode === "standard").length;
+  const ultra = observations.filter((item) => item.mode === "ultra").length;
+  const contentOk = observations.filter((item) => item.expected_content_ok).length;
+  const blockingObserved = observations.filter((item) => item.blocking_observed).length;
+  const breakage = observations.filter((item) => item.breakage).length;
+  const recovered = observations.filter((item) => item.breakage && item.recovery !== "none").length;
+  const unrecoveredBreakage = observations.filter((item) => item.breakage && item.recovery === "none").length;
+  const contentFailures = observations.length - contentOk;
+  const candidate = normalizeCandidate(provenance);
+  const reviewReady =
+    candidate.bound &&
+    observations.length >= REVIEW_MIN_OBSERVATIONS &&
+    uniqueHosts >= REVIEW_MIN_UNIQUE_HOSTS &&
+    pageTypes >= REVIEW_MIN_PAGE_TYPES &&
+    standard >= REVIEW_MIN_PER_MODE &&
+    ultra >= REVIEW_MIN_PER_MODE &&
+    contentFailures === 0 &&
+    unrecoveredBreakage === 0;
+
   const summary = {
     observations: observations.length,
-    standard: observations.filter((item) => item.mode === "standard").length,
-    ultra: observations.filter((item) => item.mode === "ultra").length,
-    content_ok: observations.filter((item) => item.expected_content_ok).length,
-    blocking_observed: observations.filter((item) => item.blocking_observed).length,
-    breakage: observations.filter((item) => item.breakage).length,
-    recovered: observations.filter((item) => item.breakage && item.recovery !== "none").length
+    unique_hosts: uniqueHosts,
+    page_types: pageTypes,
+    standard,
+    ultra,
+    content_ok: contentOk,
+    content_failures: contentFailures,
+    blocking_observed: blockingObserved,
+    breakage,
+    recovered,
+    unrecovered_breakage: unrecoveredBreakage
   };
 
   return {
-    schema: 1,
+    schema: 2,
     generated_at: new Date(generatedAt).toISOString(),
     scope: "xADKiller Chrome v1.5 normal-browsing beta witness",
     privacy: {
@@ -91,7 +140,18 @@ export function buildWitness(records, generatedAt = new Date().toISOString()) {
       notes: "omitted-content-only-presence-retained",
       telemetry: false
     },
-    release_gate_closed: true,
+    candidate,
+    review_requirements: {
+      min_observations: REVIEW_MIN_OBSERVATIONS,
+      min_unique_hosts: REVIEW_MIN_UNIQUE_HOSTS,
+      min_page_types: REVIEW_MIN_PAGE_TYPES,
+      min_per_mode: REVIEW_MIN_PER_MODE,
+      require_bound_candidate: true,
+      require_zero_content_failures: true,
+      require_zero_unrecovered_breakage: true
+    },
+    manual_beta_review_ready: reviewReady,
+    release_gate_closed: false,
     summary,
     observations
   };
@@ -102,6 +162,9 @@ function parseArgs(argv) {
   for (const arg of argv) {
     if (arg.startsWith("--input=")) out.input = arg.slice(8);
     else if (arg.startsWith("--output=")) out.output = arg.slice(9);
+    else if (arg.startsWith("--source-commit=")) out.sourceCommit = arg.slice(16);
+    else if (arg.startsWith("--package-sha256=")) out.packageSha256 = arg.slice(17);
+    else if (arg.startsWith("--package=")) out.package = arg.slice(10);
     else if (arg === "--help" || arg === "-h") out.help = true;
     else throw new Error(`unknown argument: ${arg}`);
   }
@@ -109,15 +172,31 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return "Usage: node tools/normal-browsing-beta-witness.mjs --input=observations.json --output=beta-witness.json";
+  return "Usage: node tools/normal-browsing-beta-witness.mjs --input=observations.json --output=beta-witness.json [--source-commit=<40hex>] [--package=ZIP|--package-sha256=<64hex>]";
+}
+
+function sha256File(target) {
+  const hash = crypto.createHash("sha256");
+  const handle = fs.openSync(target, "r");
+  try {
+    const buffer = Buffer.allocUnsafe(1024 * 1024);
+    for (;;) {
+      const read = fs.readSync(handle, buffer, 0, buffer.length, null);
+      if (!read) break;
+      hash.update(buffer.subarray(0, read));
+    }
+  } finally {
+    fs.closeSync(handle);
+  }
+  return hash.digest("hex");
 }
 
 function writeAtomic(target, data) {
   const dir = path.dirname(target);
   fs.mkdirSync(dir, { recursive: true });
-  const tmp = `${target}.tmp-${process.pid}`;
-  fs.writeFileSync(tmp, data, { encoding: "utf8", mode: 0o600 });
-  fs.renameSync(tmp, target);
+  const tmpPath = `${target}.tmp-${process.pid}`;
+  fs.writeFileSync(tmpPath, data, { encoding: "utf8", mode: 0o600 });
+  fs.renameSync(tmpPath, target);
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
@@ -129,12 +208,34 @@ if (isMain) {
       process.exit(0);
     }
     if (!args.input || !args.output) throw new Error("--input and --output are required");
+
+    let packageSha256 = args.packageSha256 || "";
+    if (args.package) {
+      if (!fs.existsSync(args.package)) throw new Error(`package not found: ${args.package}`);
+      const computed = sha256File(args.package);
+      if (packageSha256 && packageSha256.toLowerCase() !== computed) {
+        throw new Error(`package SHA-256 mismatch (${computed} != ${packageSha256.toLowerCase()})`);
+      }
+      packageSha256 = computed;
+    }
+
     const raw = JSON.parse(fs.readFileSync(args.input, "utf8"));
     const records = Array.isArray(raw) ? raw : raw.observations;
-    const witness = buildWitness(records);
+    const witness = buildWitness(records, new Date().toISOString(), {
+      source_commit: args.sourceCommit || "",
+      package_sha256: packageSha256
+    });
     writeAtomic(args.output, `${JSON.stringify(witness, null, 2)}\n`);
-    console.log(`Normal-browsing beta witness: ${witness.summary.observations} observations, ${witness.summary.breakage} breakage, ${witness.summary.recovered} recovered`);
-    console.log("Privacy: hostnames hashed; URLs, paths, page titles and note contents omitted; release gate remains closed.");
+    console.log(
+      `Normal-browsing beta witness: ${witness.summary.observations} observations, ` +
+      `${witness.summary.unique_hosts} unique hosts, ${witness.summary.breakage} breakage, ` +
+      `${witness.summary.recovered} recovered`
+    );
+    console.log(
+      `Manual beta review ready: ${witness.manual_beta_review_ready ? "YES" : "NO"}; ` +
+      "release gate remains closed pending human review and the remaining release checks."
+    );
+    console.log("Privacy: hostnames hashed; URLs, paths, page titles and note contents omitted; no telemetry.");
   } catch (error) {
     console.error(`ERROR: ${error?.message || error}`);
     console.error(usage());
