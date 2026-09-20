@@ -10,6 +10,7 @@ on:
       - "browser-extension/common/service-worker.js"
       - "browser-extension/tests/chrome-feed-v2-beta-channel.mjs"
       - "browser-extension/tests/chrome-beta-review-contract.mjs"
+      - "browser-extension/tests/chrome-blocking-benchmark.mjs"
       - "browser-extension/tests/feed-v2-consumer-compat.mjs"
       - "browser-intelligence/v2/xadkiller-live-shield.json"
       - "browser-intelligence/v2/xadkiller-live-matrix.json"
@@ -46,6 +47,7 @@ jobs:
           node --check common/beta-review.js
           node --check tests/chrome-feed-v2-beta-channel.mjs
           node --check tests/chrome-beta-review-contract.mjs
+          node --check tests/chrome-blocking-benchmark.mjs
           node --check tests/feed-v2-consumer-compat.mjs
       - name: Pinned feed-v2 exact-byte routing contract
         run: node tests/chrome-feed-v2-beta-channel.mjs
@@ -53,6 +55,8 @@ jobs:
         run: node tests/feed-v2-consumer-compat.mjs
       - name: Local beta review privacy and PL-EN contract
         run: node tests/chrome-beta-review-contract.mjs
+      - name: Deterministic STANDARD ULTRA and benign blocking benchmark
+        run: node tests/chrome-blocking-benchmark.mjs
       - name: Pinned candidate integrity metadata contract
         run: |
           grep -q 'blobSha1:"1e2931556cd6d888fd50da92d04266512a213fc7"' common/feed-v2-beta-channel.js
