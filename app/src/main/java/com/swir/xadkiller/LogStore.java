@@ -10,6 +10,7 @@ import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -17,6 +18,7 @@ import java.util.List;
 final class LogStore {
     private static final String FILE_NAME = "blocked.log";
     private static final long MAX_BYTES = 1024 * 1024;
+    private static final int MAX_READ_ENTRIES = 5_000;
 
     static final class Entry {
         final long time;
@@ -50,23 +52,54 @@ final class LogStore {
     }
 
     static synchronized List<Entry> readRecent(Context context, int limit) {
-        File f = new File(context.getFilesDir(), FILE_NAME);
-        if (!f.isFile()) return Collections.emptyList();
-        ArrayList<Entry> all = new ArrayList<>();
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(new FileInputStream(f), StandardCharsets.UTF_8))) {
+        return readRecentFile(new File(context.getFilesDir(), FILE_NAME), limit);
+    }
+
+    /**
+     * Reads only the newest bounded tail into memory while streaming the log once.
+     * This prevents System Console / recovery reads from retaining the whole 1 MiB log
+     * as Entry objects and also makes malformed historical lines harmless.
+     */
+    static List<Entry> readRecentFile(File file, int limit) {
+        if (file == null || !file.isFile()) return Collections.emptyList();
+        int wanted = Math.max(1, Math.min(limit, MAX_READ_ENTRIES));
+        ArrayDeque<Entry> tail = new ArrayDeque<>(Math.min(wanted, 256));
+        try (BufferedReader r = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
             String line;
             while ((line = r.readLine()) != null) {
-                String[] p = line.split("\\t", -1);
-                if (p.length < 6) continue;
-                try {
-                    all.add(new Entry(Long.parseLong(p[0]), Integer.parseInt(p[1]), p[2], p[3], p[4], p[5]));
-                } catch (Exception ignored) {}
+                Entry entry = parseLine(line);
+                if (entry == null) continue;
+                if (tail.size() == wanted) tail.removeFirst();
+                tail.addLast(entry);
             }
-        } catch (Exception ignored) {}
-        int from = Math.max(0, all.size() - Math.max(1, limit));
-        ArrayList<Entry> out = new ArrayList<>(all.subList(from, all.size()));
+        } catch (Exception ignored) {
+            return Collections.emptyList();
+        }
+        if (tail.isEmpty()) return Collections.emptyList();
+        ArrayList<Entry> out = new ArrayList<>(tail);
         Collections.reverse(out);
         return out;
+    }
+
+    /** Returns the newest valid blocked domain without exposing history outside the app. */
+    static synchronized String latestRecoverableDomain(Context context) {
+        for (Entry entry : readRecent(context, 20)) {
+            String normalized = BlocklistManager.normalize(entry.domain);
+            if (normalized != null) return normalized;
+        }
+        return null;
+    }
+
+    /**
+     * Local-only false-positive recovery primitive. It updates the existing allowlist;
+     * no hostname, package name or browsing data is uploaded anywhere.
+     */
+    static synchronized boolean recoverLatestFalsePositive(Context context) {
+        String domain = latestRecoverableDomain(context);
+        if (domain == null) return false;
+        BlocklistManager.addAllow(context, domain);
+        SystemLogStore.info(context, "RECOVERY", "Allowed latest blocked domain from local log");
+        return true;
     }
 
     static synchronized void clear(Context context) {
@@ -75,10 +108,21 @@ final class LogStore {
     }
 
     private static void rotate(Context context, File f) {
-        List<Entry> recent = readRecent(context, 250);
+        List<Entry> recent = readRecentFile(f, 250);
         if (!f.delete()) return;
         Collections.reverse(recent);
         for (Entry e : recent) add(context, e);
+    }
+
+    private static Entry parseLine(String line) {
+        if (line == null || line.isEmpty()) return null;
+        String[] p = line.split("\\t", -1);
+        if (p.length < 6) return null;
+        try {
+            return new Entry(Long.parseLong(p[0]), Integer.parseInt(p[1]), p[2], p[3], p[4], p[5]);
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private static String clean(String s) {
