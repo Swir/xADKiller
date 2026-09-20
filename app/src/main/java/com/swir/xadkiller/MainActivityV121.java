@@ -1,11 +1,9 @@
 package com.swir.xadkiller;
 
 import android.Manifest;
-import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.content.pm.ServiceInfo;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -18,7 +16,6 @@ import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.accessibility.AccessibilityManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -27,7 +24,6 @@ import android.widget.Toast;
 
 import java.text.DateFormat;
 import java.util.Date;
-import java.util.List;
 import java.util.Locale;
 
 /**
@@ -165,7 +161,7 @@ public class MainActivityV121 extends MainActivityV140 {
         SharedPreferences p = getSharedPreferences(BlocklistManager.PREFS, MODE_PRIVATE);
         boolean vpnRequested = p.getBoolean("running", false);
         long vpnHeartbeat = p.getLong(AdBlockVpnServiceV121.KEY_HEARTBEAT, 0L);
-        boolean smartService = smartServiceEnabled();
+        boolean smartService = SmartEngineAccessGuide.isServiceEnabled(this);
         boolean smartDetector = p.getBoolean(SmartAdAccessibilityService.KEY_SMART_ENABLED, true);
         long smartHeartbeat = p.getLong(SmartAdAccessibilityService.KEY_HEARTBEAT, 0L);
         long lastUpdate = p.getLong(BlocklistManager.KEY_LAST_UPDATE, 0L);
@@ -281,11 +277,7 @@ public class MainActivityV121 extends MainActivityV140 {
                 updateBlocklistRecovery();
                 break;
             case OPEN_ACCESSIBILITY:
-                try {
-                    startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
-                } catch (Exception e) {
-                    Toast.makeText(this, tr("Nie można otworzyć ustawień Accessibility.", "Cannot open Accessibility settings."), Toast.LENGTH_LONG).show();
-                }
+                SmartEngineAccessGuide.open(this);
                 break;
             default:
                 refreshHealthPanel();
@@ -356,27 +348,6 @@ public class MainActivityV121 extends MainActivityV140 {
                 });
             }
         }, "xADKiller-V160-Recovery").start();
-    }
-
-    private boolean smartServiceEnabled() {
-        try {
-            AccessibilityManager manager = (AccessibilityManager) getSystemService(ACCESSIBILITY_SERVICE);
-            if (manager == null || !manager.isEnabled()) return false;
-            List<AccessibilityServiceInfo> list = manager.getEnabledAccessibilityServiceList(
-                    AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
-            for (AccessibilityServiceInfo info : list) {
-                if (info == null || info.getResolveInfo() == null || info.getResolveInfo().serviceInfo == null) continue;
-                ServiceInfo service = info.getResolveInfo().serviceInfo;
-                if (getPackageName().equals(service.packageName)
-                        && service.name != null
-                        && service.name.endsWith("SmartAdAccessibilityService")) {
-                    return true;
-                }
-            }
-        } catch (Throwable error) {
-            SystemLogStore.error(this, "UI_RECOVERY", "Smart Engine state read failed", error);
-        }
-        return false;
     }
 
     private void refreshDevelopmentLabels() {
