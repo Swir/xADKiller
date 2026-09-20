@@ -89,9 +89,11 @@ try {
   const serviceWorker = fs.readFileSync(path.join(common, "service-worker.js"), "utf8");
   assert.match(
     serviceWorker,
-    /importScripts\("feed-transport-guard\.js",\s*"feed-data-contract\.js",\s*"feed-rollback-provenance\.js",\s*"feed-guard\.js",\s*"feed-requestinfo-guard\.js",\s*"feed-v2-compat\.js"/,
-    "Feed transport/data-contract/rollback guards must run before Feed Guard; RequestInfo normalization must wrap Feed Guard before the v2 compatibility adapter"
+    /importScripts\("feed-transport-guard\.js",\s*"feed-v2-beta-channel\.js",\s*"feed-data-contract\.js",\s*"feed-rollback-provenance\.js",\s*"feed-guard\.js",\s*"feed-requestinfo-guard\.js",\s*"feed-v2-compat\.js"/,
+    "Transport guard and local pinned-v2 beta router must run before data/rollback/Feed Guard validation; RequestInfo normalization must wrap Feed Guard before the v2 compatibility adapter"
   );
+  assert.ok(!/eval\s*\(|new\s+Function\s*\(/.test(fs.readFileSync(path.join(common, "feed-v2-beta-channel.js"), "utf8")),
+    "pinned-v2 beta router must not execute remote code");
   assert.ok(!/eval\s*\(|new\s+Function\s*\(/.test(fs.readFileSync(path.join(common, "feed-requestinfo-guard.js"), "utf8")),
     "RequestInfo boundary guard must not execute remote code");
   assert.ok(!/eval\s*\(|new\s+Function\s*\(/.test(fs.readFileSync(path.join(common, "feed-v2-compat.js"), "utf8")),
