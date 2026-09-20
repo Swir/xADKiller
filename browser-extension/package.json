@@ -27,6 +27,7 @@
     "test:performance": "node tests/chrome-performance-budget.mjs",
     "test:beta-witness": "node tests/normal-browsing-beta-witness.mjs && node tests/chrome-beta-review-contract.mjs",
     "beta:witness": "node tools/normal-browsing-beta-witness.mjs",
+    "qualify:v150": "node tools/chrome-v150-qualification.mjs",
     "build:feed-v2-candidates": "node tools/feed-v2-migration-preflight.mjs --write",
     "build:legacy": "node tools/build.mjs"
   },
