@@ -87,7 +87,8 @@ public class LogStoreTest {
         File file = Files.createTempFile("xad-recovery-empty", ".log").toFile();
         StringBuilder body = new StringBuilder();
         append(body, 1, 1001, "not a domain");
-        append(body, 2, 1002, "https://example.com/path");
+        append(body, 2, 1002, "localhost");
+        append(body, 3, 1003, "singlelabel");
         Files.write(file.toPath(), body.toString().getBytes(StandardCharsets.UTF_8));
 
         assertNull(LogStore.latestRecoverableDomainFile(file));
