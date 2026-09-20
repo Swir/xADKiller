@@ -1,0 +1,39 @@
+name: xADKiller Android restart witness contract
+
+on:
+  push:
+    branches: [ android-v160-mega ]
+    paths:
+      - "tools/android-v160-restart-validation.sh"
+      - "ci/validate_android_restart_witness.py"
+      - ".github/workflows/android-restart-witness-contract.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: xadkiller-android-restart-witness-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: SWIR progress SVG consistency
+        run: python3 ci/progress_svg.py android --check
+      - name: Shell syntax
+        run: bash -n tools/android-v160-restart-validation.sh
+      - name: Restart witness validator self-test
+        run: python3 ci/validate_android_restart_witness.py --self-test
+      - name: Local-only privacy and release-gate contract
+        run: |
+          grep -q 'privacy=local-only-no-urls-no-hostnames-no-app-traffic-log' tools/android-v160-restart-validation.sh
+          grep -q 'serial_hash=' tools/android-v160-restart-validation.sh
+          ! grep -q '^serial=' tools/android-v160-restart-validation.sh
+          grep -q '"release_gate_closed":False' ci/validate_android_restart_witness.py
+          ! grep -Eq '(^|[[:space:]])(import|from)[[:space:]]+(requests|urllib|socket)([[:space:].]|$)|\b(requests|urllib|socket)\.' ci/validate_android_restart_witness.py
+          echo "Android restart witness safety contract: PASS"
