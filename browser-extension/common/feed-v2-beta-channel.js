@@ -14,13 +14,22 @@
   const RAW_PREFIX = `https://raw.githubusercontent.com/Swir/xADKiller/${PINNED_REF}/browser-intelligence/v2/`;
   const TARGETS = Object.freeze({
     "https://raw.githubusercontent.com/Swir/xADKiller/live-shield-feed/browser-intelligence/xadkiller-live-shield.json": Object.freeze({
-      kind:"live-shield", pinnedUrl:`${RAW_PREFIX}xadkiller-live-shield.json`
+      kind:"live-shield",
+      pinnedUrl:`${RAW_PREFIX}xadkiller-live-shield.json`,
+      blobSha1:"1e2931556cd6d888fd50da92d04266512a213fc7",
+      blobSize:3771
     }),
     "https://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json": Object.freeze({
-      kind:"live-matrix", pinnedUrl:`${RAW_PREFIX}xadkiller-live-matrix.json`
+      kind:"live-matrix",
+      pinnedUrl:`${RAW_PREFIX}xadkiller-live-matrix.json`,
+      blobSha1:"a10298b6d9004f0466bee6d601efce77d1a439a8",
+      blobSize:10292
     }),
     "https://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-titan-feed.json": Object.freeze({
-      kind:"titan", pinnedUrl:`${RAW_PREFIX}xadkiller-titan-feed.json`
+      kind:"titan",
+      pinnedUrl:`${RAW_PREFIX}xadkiller-titan-feed.json`,
+      blobSha1:"ea60aa6a868b65b05f1554b89a5db3fa12d50214",
+      blobSize:2085
     })
   });
   const ALLOWED_TYPES = new Set(["application/json", "text/plain", "application/octet-stream"]);
@@ -98,6 +107,34 @@
     guard?.validateCompleteRepresentation?.(response);
     return response;
   }
+  function bytesToHex(bytes) {
+    let out = "";
+    for (const value of bytes) out += value.toString(16).padStart(2, "0");
+    return out;
+  }
+  async function verifyPinnedBody(target, response) {
+    if (!target || !/^[0-9a-f]{40}$/.test(String(target.blobSha1 || ""))) {
+      throw new TypeError("xad_v2_beta_integrity_metadata");
+    }
+    if (!Number.isSafeInteger(target.blobSize) || target.blobSize < 0) {
+      throw new TypeError("xad_v2_beta_integrity_metadata");
+    }
+    if (!globalThis.crypto?.subtle || typeof TextEncoder !== "function") {
+      throw new TypeError("xad_v2_beta_integrity_unavailable");
+    }
+    const payload = new Uint8Array(await response.arrayBuffer());
+    if (payload.byteLength !== target.blobSize) throw new TypeError("xad_v2_beta_integrity_size");
+    const prefix = new TextEncoder().encode(`blob ${payload.byteLength}\0`);
+    const gitBlob = new Uint8Array(prefix.byteLength + payload.byteLength);
+    gitBlob.set(prefix, 0);
+    gitBlob.set(payload, prefix.byteLength);
+    const digest = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-1", gitBlob));
+    if (bytesToHex(digest) !== target.blobSha1) throw new TypeError("xad_v2_beta_integrity_sha1");
+    const rebuilt = new Response(payload, { status:response.status, statusText:response.statusText, headers:response.headers });
+    try { Object.defineProperty(rebuilt, "url", { value:target.pinnedUrl, configurable:true }); } catch (_) {}
+    try { Object.defineProperty(rebuilt, "redirected", { value:false, configurable:true }); } catch (_) {}
+    return rebuilt;
+  }
   function safePinnedInit(input, init) {
     const controller = new AbortController();
     const callerSignal = init?.signal || input?.signal || null;
@@ -132,13 +169,17 @@
     try {
       const response = await guardedFetch(target.pinnedUrl, safe.init);
       validatePinnedResponse(target, response);
-      if (typeof guard?.bufferBoundedBody === "function") return await guard.bufferBoundedBody(response);
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      const max = Number(guard?.MAX_FEED_BYTES || (2 * 1024 * 1024));
-      if (bytes.byteLength > max) throw new TypeError("xad_v2_beta_payload_size");
-      const rebuilt = new Response(bytes, { status:response.status, statusText:response.statusText, headers:response.headers });
-      try { Object.defineProperty(rebuilt, "url", { value:target.pinnedUrl, configurable:true }); } catch (_) {}
-      return rebuilt;
+      let buffered;
+      if (typeof guard?.bufferBoundedBody === "function") {
+        buffered = await guard.bufferBoundedBody(response);
+      } else {
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        const max = Number(guard?.MAX_FEED_BYTES || (2 * 1024 * 1024));
+        if (bytes.byteLength > max) throw new TypeError("xad_v2_beta_payload_size");
+        buffered = new Response(bytes, { status:response.status, statusText:response.statusText, headers:response.headers });
+        try { Object.defineProperty(buffered, "url", { value:target.pinnedUrl, configurable:true }); } catch (_) {}
+      }
+      return await verifyPinnedBody(target, buffered);
     } finally { safe.cleanup(); }
   }
 
@@ -153,16 +194,31 @@
 
     try {
       const response = await fetchPinned(target, input, init);
-      await recordRuntime(target.kind, { transport:"pinned-v2", ok:true, status:200, fallback:false, error:"" });
+      await recordRuntime(target.kind, {
+        transport:"pinned-v2",
+        integrity:"git-blob-sha1",
+        blob_sha1:target.blobSha1,
+        ok:true,
+        status:200,
+        fallback:false,
+        error:""
+      });
       return response;
     } catch (error) {
-      await recordRuntime(target.kind, { transport:"production-v1-fallback", ok:false, status:0, fallback:true, error:safeReason(error) });
+      await recordRuntime(target.kind, {
+        transport:"production-v1-fallback",
+        integrity:"failed",
+        ok:false,
+        status:0,
+        fallback:true,
+        error:safeReason(error)
+      });
       return guardedFetch(input, init);
     }
   };
 
   globalThis.XAD_FEED_V2_BETA_CHANNEL = Object.freeze({
     STATE_KEY, RUNTIME_KEY, SCHEMA, MAX_SESSION_MS, PINNED_REF, TARGETS,
-    canonicalOriginal, normalizeState, activeState, validatePinnedResponse
+    canonicalOriginal, normalizeState, activeState, validatePinnedResponse, verifyPinnedBody
   });
 })();
