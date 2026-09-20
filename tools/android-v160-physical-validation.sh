@@ -118,6 +118,10 @@ SOURCE_COMMIT="$(git rev-parse HEAD 2>/dev/null || true)"
 [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || SOURCE_COMMIT="unknown"
 
 adb_shell() { "${ADB[@]}" shell "$@"; }
+read_radio_flag() {
+  local key="$1"
+  adb_shell settings get global "$key" 2>/dev/null | tr -d '\r' | head -n1 || true
+}
 restore_device_state() {
   set +e
   if (( IDLE_FORCED )); then adb_shell cmd deviceidle unforce >/dev/null 2>&1; fi
@@ -131,7 +135,7 @@ trap restore_device_state EXIT INT TERM
 snapshot() {
   local label="$1"
   local dir="$OUT/snapshots/$label"
-  local epoch
+  local epoch wifi_on mobile_data
   epoch="$(date -u +%s)"
   mkdir -p "$dir"
   printf '%s\t%s\n' "$epoch" "$label" >> "$TIMELINE"
@@ -144,10 +148,16 @@ snapshot() {
   adb_shell settings get global boot_count > "$dir/boot_count.txt" 2>&1 || true
   "${ADB[@]}" shell run-as "$PACKAGE" cat shared_prefs/xadkiller_prefs.xml > "$dir/prefs.xml" 2> "$dir/prefs.err" || true
   "${ADB[@]}" shell run-as "$PACKAGE" cat files/system_console.log > "$dir/system_console.log" 2> "$dir/system_console.err" || true
+  wifi_on="$(read_radio_flag wifi_on)"
+  mobile_data="$(read_radio_flag mobile_data)"
+  cat > "$dir/radio-state.env" <<EOF_RADIO
+wifi_on=$wifi_on
+mobile_data=$mobile_data
+EOF_RADIO
 }
 
 cat > "$OUT/metadata.env" <<EOF_META
-schema=2
+schema=3
 package=$PACKAGE
 activity=$ACTIVITY
 serial=$SERIAL
@@ -209,8 +219,8 @@ if (( DO_IDLE )); then
 fi
 
 if (( DO_HANDOVER )); then
-  WIFI_BEFORE="$(adb_shell settings get global wifi_on 2>/dev/null | tr -d '\r' || true)"
-  DATA_BEFORE="$(adb_shell settings get global mobile_data 2>/dev/null | tr -d '\r' || true)"
+  WIFI_BEFORE="$(read_radio_flag wifi_on)"
+  DATA_BEFORE="$(read_radio_flag mobile_data)"
   [[ "$WIFI_BEFORE" =~ ^[01]$ ]] || WIFI_BEFORE=""
   [[ "$DATA_BEFORE" =~ ^[01]$ ]] || DATA_BEFORE=""
 

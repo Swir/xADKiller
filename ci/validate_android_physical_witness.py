@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Validate xADKiller Android v1.6 physical-device witness bundles.
 
-Schema 2 ties lifecycle observations to fresh, advancing VPN heartbeats and, when an APK is
-supplied, to the exact APK SHA-256. Synthetic/host-only evidence can test this validator but
-never closes the physical-device release gate by itself.
+Schema 3 ties lifecycle observations to fresh, advancing VPN heartbeats, explicit
+radio-state evidence during handover, every captured soak checkpoint and, when
+an APK is supplied, to the exact APK SHA-256. Synthetic/host-only evidence can
+test this validator but never closes the physical-device release gate by itself.
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ HEARTBEAT = re.compile(r'<long name="vpn_heartbeat_v121" value="(\d+)"')
 VERSION_CODE = re.compile(r'\bversionCode=(\d+)\b')
 VERSION_NAME = re.compile(r'\bversionName=([^\s]+)')
 SHA256_RE = re.compile(r'^[0-9a-f]{64}$')
+SOAK_LABEL_RE = re.compile(r'^soak_(\d+)m$')
 DEFAULT_MAX_HEARTBEAT_AGE_MS = 30_000
 MAX_HEARTBEAT_FUTURE_SKEW_MS = 15_000
 
@@ -30,14 +32,18 @@ def read_text(path: Path) -> str:
         return ""
 
 
-def read_metadata(root: Path) -> dict[str, str]:
+def read_env(path: Path) -> dict[str, str]:
     out: dict[str, str] = {}
-    for raw in read_text(root / "metadata.env").splitlines():
+    for raw in read_text(path).splitlines():
         if not raw or raw.startswith("#") or "=" not in raw:
             continue
         key, value = raw.split("=", 1)
         out[key.strip()] = value.strip()
     return out
+
+
+def read_metadata(root: Path) -> dict[str, str]:
+    return read_env(root / "metadata.env")
 
 
 def read_timeline(root: Path) -> dict[str, int]:
@@ -95,6 +101,15 @@ def has_transport(text: str, transport: str) -> bool:
     return bool(re.search(rf'\b(?:TRANSPORT_)?{re.escape(token)}\b', text.upper()))
 
 
+def radio_state(snap: Path) -> tuple[str, str]:
+    data = read_env(snap / "radio-state.env")
+    wifi = data.get("wifi_on", "")
+    mobile = data.get("mobile_data", "")
+    assert wifi in {"0", "1"}, f"{snap.name}: wifi_on radio state is missing/invalid: {wifi!r}"
+    assert mobile in {"0", "1"}, f"{snap.name}: mobile_data radio state is missing/invalid: {mobile!r}"
+    return wifi, mobile
+
+
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as handle:
@@ -111,9 +126,18 @@ def package_identity(snap: Path) -> tuple[str, str]:
     return code.group(1), name.group(1)
 
 
+def expected_soak_minutes(total: int) -> list[int]:
+    if total <= 0:
+        return []
+    values = list(range(5, total + 1, 5))
+    if not values or values[-1] != total:
+        values.append(total)
+    return values
+
+
 def validate(root: Path, apk_path: Path | None = None) -> dict[str, object]:
     meta = read_metadata(root)
-    assert meta.get("schema") == "2", "physical witness schema 2 is required for gate-quality evidence"
+    assert meta.get("schema") == "3", "physical witness schema 3 is required for gate-quality evidence"
     timeline = read_timeline(root)
     snapshot(root, "baseline")
     snapshot(root, "final")
@@ -124,12 +148,18 @@ def validate(root: Path, apk_path: Path | None = None) -> dict[str, object]:
         raise AssertionError("max_heartbeat_age_ms must be an integer") from None
     assert 5_000 <= max_age_ms <= 60_000, "max_heartbeat_age_ms outside reviewed bounds"
 
+    try:
+        soak_minutes = int(meta.get("requested_soak_minutes", "0") or 0)
+    except ValueError:
+        raise AssertionError("requested_soak_minutes must be an integer") from None
+    assert soak_minutes >= 0, "requested_soak_minutes cannot be negative"
+
     requested = {
         "handover": meta.get("requested_handover") == "1",
         "sleep_wake": meta.get("requested_sleep_wake") == "1",
         "idle": meta.get("requested_idle") == "1",
         "package_replace": meta.get("requested_package_replace") == "1",
-        "soak_minutes": int(meta.get("requested_soak_minutes", "0") or 0),
+        "soak_minutes": soak_minutes,
     }
     checks: dict[str, str] = {}
 
@@ -170,9 +200,19 @@ def validate(root: Path, apk_path: Path | None = None) -> dict[str, object]:
         checks["idle_liveness"] = "PASS"
 
     if requested["handover"]:
-        wifi = read_text(snapshot(root, "wifi_ready") / "connectivity.txt")
-        mobile = read_text(snapshot(root, "mobile_only") / "connectivity.txt")
-        restored = read_text(snapshot(root, "wifi_restored") / "connectivity.txt")
+        wifi_snap = snapshot(root, "wifi_ready")
+        mobile_snap = snapshot(root, "mobile_only")
+        restored_snap = snapshot(root, "wifi_restored")
+        wifi = read_text(wifi_snap / "connectivity.txt")
+        mobile = read_text(mobile_snap / "connectivity.txt")
+        restored = read_text(restored_snap / "connectivity.txt")
+        wifi_radio = radio_state(wifi_snap)
+        mobile_radio = radio_state(mobile_snap)
+        restored_radio = radio_state(restored_snap)
+        assert wifi_radio[0] == "1", "wifi_ready: Wi-Fi radio is not proven enabled"
+        assert mobile_radio[0] == "0", "mobile_only: Wi-Fi radio is not proven disabled"
+        assert mobile_radio[1] == "1", "mobile_only: mobile data radio is not proven enabled"
+        assert restored_radio[0] == "1", "wifi_restored: Wi-Fi radio is not proven re-enabled"
         assert has_transport(wifi, "WIFI"), "wifi_ready: Wi-Fi transport not observed"
         assert has_transport(mobile, "CELLULAR"), "mobile_only: cellular transport not observed"
         assert has_transport(restored, "WIFI"), "wifi_restored: Wi-Fi transport not observed"
@@ -181,21 +221,25 @@ def validate(root: Path, apk_path: Path | None = None) -> dict[str, object]:
         restored_hb = require_running(root, "wifi_restored", timeline, max_age_ms)
         require_advanced(wifi_hb, mobile_hb, "wifi_to_mobile_handover")
         require_advanced(mobile_hb, restored_hb, "mobile_to_wifi_handover")
-        checks["wifi_mobile_wifi_handover"] = "PASS"
+        checks["wifi_mobile_wifi_handover"] = "PASS (transport + radio-state + heartbeat)"
 
-    soak_minutes = int(requested["soak_minutes"])
     if soak_minutes > 0:
         start_hb = require_running(root, "soak_start", timeline, max_age_ms)
-        end_hb = require_running(root, f"soak_{soak_minutes}m", timeline, max_age_ms)
-        require_advanced(start_hb, end_hb, "soak_liveness")
-        checks["soak_liveness"] = f"PASS ({soak_minutes}m)"
+        previous_hb = start_hb
+        checkpoints = expected_soak_minutes(soak_minutes)
+        for minute in checkpoints:
+            label = f"soak_{minute}m"
+            current_hb = require_running(root, label, timeline, max_age_ms)
+            require_advanced(previous_hb, current_hb, f"soak_{minute}m_liveness")
+            previous_hb = current_hb
+        checks["soak_liveness"] = f"PASS ({soak_minutes}m, {len(checkpoints)} checkpoint(s))"
 
     baseline_hb = require_running(root, "baseline", timeline, max_age_ms)
     assert final_heartbeat >= baseline_hb, "final VPN heartbeat regressed behind baseline"
     checks["heartbeat_freshness"] = f"PASS (max_age={max_age_ms}ms)"
 
     summary = {
-        "schema": 2,
+        "schema": 3,
         "package": meta.get("package", ""),
         "serial": meta.get("serial", ""),
         "source_commit": meta.get("source_commit", ""),
@@ -209,7 +253,16 @@ def validate(root: Path, apk_path: Path | None = None) -> dict[str, object]:
     return summary
 
 
-def write_snapshot(root: Path, name: str, *, epoch: int, transport: str = "WIFI", heartbeat_offset_ms: int = -1000) -> None:
+def write_snapshot(
+    root: Path,
+    name: str,
+    *,
+    epoch: int,
+    transport: str = "WIFI",
+    wifi_on: str = "1",
+    mobile_data: str = "1",
+    heartbeat_offset_ms: int = -1000,
+) -> None:
     path = root / "snapshots" / name
     path.mkdir(parents=True, exist_ok=True)
     heartbeat = epoch * 1000 + heartbeat_offset_ms
@@ -220,6 +273,10 @@ def write_snapshot(root: Path, name: str, *, epoch: int, transport: str = "WIFI"
     (path / "connectivity.txt").write_text(f"NetworkCapabilities: TRANSPORT_{transport}\n", encoding="utf-8")
     (path / "package.txt").write_text("versionCode=160 minSdk=26 targetSdk=35\nversionName=1.6.0-dev\n", encoding="utf-8")
     (path / "snapshot_epoch_seconds.txt").write_text(f"{epoch}\n", encoding="utf-8")
+    (path / "radio-state.env").write_text(
+        f"wifi_on={wifi_on}\nmobile_data={mobile_data}\n",
+        encoding="utf-8",
+    )
 
 
 def self_test() -> None:
@@ -230,7 +287,7 @@ def self_test() -> None:
         apk_sha = sha256_file(apk)
         (root / "metadata.env").write_text(
             "\n".join([
-                "schema=2",
+                "schema=3",
                 "package=com.swir.xadkiller.debug",
                 "serial=TEST123",
                 "source_commit=" + "a" * 40,
@@ -238,7 +295,7 @@ def self_test() -> None:
                 "requested_sleep_wake=1",
                 "requested_idle=1",
                 "requested_package_replace=1",
-                "requested_soak_minutes=1",
+                "requested_soak_minutes=10",
                 "apk_supplied=1",
                 "apk_basename=tested.apk",
                 f"apk_sha256={apk_sha}",
@@ -249,18 +306,21 @@ def self_test() -> None:
         names = [
             "baseline", "pre_package_replace", "post_package_replace", "pre_sleep", "post_wake",
             "pre_idle", "forced_idle", "post_idle", "wifi_ready", "mobile_only", "wifi_restored",
-            "soak_start", "soak_1m", "final",
+            "soak_start", "soak_5m", "soak_10m", "final",
         ]
         rows = []
         for index, name in enumerate(names):
             epoch = 1_700_000_000 + index * 10
             transport = "CELLULAR" if name == "mobile_only" else "WIFI"
-            write_snapshot(root, name, epoch=epoch, transport=transport)
+            wifi_on = "0" if name == "mobile_only" else "1"
+            write_snapshot(root, name, epoch=epoch, transport=transport, wifi_on=wifi_on, mobile_data="1")
             rows.append(f"{epoch}\t{name}")
         (root / "timeline.tsv").write_text("\n".join(rows) + "\n", encoding="utf-8")
 
         summary = validate(root, apk)
-        assert summary["checks"]["wifi_mobile_wifi_handover"] == "PASS"
+        assert summary["schema"] == 3
+        assert summary["checks"]["wifi_mobile_wifi_handover"].startswith("PASS")
+        assert summary["checks"]["soak_liveness"] == "PASS (10m, 2 checkpoint(s))"
         assert summary["checks"]["apk_provenance"].startswith("PASS")
         assert summary["release_gate_closed"] is False
 
@@ -272,8 +332,19 @@ def self_test() -> None:
         except AssertionError as error:
             assert "cellular transport not observed" in str(error)
         else:
-            raise AssertionError("tampered handover evidence was accepted")
+            raise AssertionError("tampered handover transport evidence was accepted")
         mobile_path.write_text(original_mobile, encoding="utf-8")
+
+        radio_path = root / "snapshots" / "mobile_only" / "radio-state.env"
+        original_radio = radio_path.read_text(encoding="utf-8")
+        radio_path.write_text("wifi_on=1\nmobile_data=1\n", encoding="utf-8")
+        try:
+            validate(root, apk)
+        except AssertionError as error:
+            assert "Wi-Fi radio is not proven disabled" in str(error)
+        else:
+            raise AssertionError("tampered handover radio evidence was accepted")
+        radio_path.write_text(original_radio, encoding="utf-8")
 
         stale = root / "snapshots" / "post_wake" / "prefs.xml"
         original_stale = stale.read_text(encoding="utf-8")
@@ -289,6 +360,17 @@ def self_test() -> None:
             raise AssertionError("stale VPN heartbeat was accepted")
         stale.write_text(original_stale, encoding="utf-8")
 
+        missing_checkpoint = root / "snapshots" / "soak_5m"
+        renamed_checkpoint = root / "snapshots" / "soak_5m-missing"
+        missing_checkpoint.rename(renamed_checkpoint)
+        try:
+            validate(root, apk)
+        except AssertionError as error:
+            assert "missing snapshot: soak_5m" in str(error)
+        else:
+            raise AssertionError("missing soak checkpoint was accepted")
+        renamed_checkpoint.rename(missing_checkpoint)
+
         bad_apk = root / "tampered.apk"
         bad_apk.write_bytes(b"different APK bytes\n")
         try:
@@ -298,7 +380,7 @@ def self_test() -> None:
         else:
             raise AssertionError("wrong APK bytes were accepted")
 
-    print("Android physical witness validator schema-2 self-test: PASS")
+    print("Android physical witness validator schema-3 self-test: PASS")
 
 
 def main() -> None:
