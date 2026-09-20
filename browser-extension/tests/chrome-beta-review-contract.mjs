@@ -25,9 +25,17 @@ expect(!manifest.permissions.includes("tabs"), "beta review must not add broad t
 expect(!manifest.permissions.includes("downloads"), "beta review must not add downloads permission");
 expect(/<script src="beta-review\.js"><\/script>/.test(html), "beta review script missing");
 expect(!/https?:\/\//i.test(html), "beta review HTML must not load remote resources");
-expect(js.includes('crypto.subtle.digest("SHA-256"'), "hostnames must be hashed locally with SHA-256");
+expect(html.includes('id="sourceCommit"') && html.includes('id="packageFile"') && html.includes('id="candidateStatus"'), "tested candidate binding UI missing");
+expect(js.includes('crypto.subtle.digest("SHA-256"'), "hostnames/package must be hashed locally with SHA-256");
 expect(js.includes("host_hash"), "witness must store a host hash");
-expect(js.includes('source_commit:"unbound"') && js.includes('package_sha256:"unbound"'), "local witness must not invent candidate provenance");
+expect(js.includes("file.arrayBuffer()"), "tested ZIP must be hashed from local bytes");
+expect(js.includes("MAX_PACKAGE_BYTES = 100 * 1024 * 1024"), "tested ZIP size bound drifted");
+expect(js.includes("FEED_V2_RUNTIME_FRESH_MS = 30 * 60 * 1000"), "feed-v2 evidence freshness bound drifted");
+expect(js.includes('integrity === "git-blob-sha1"'), "manual beta gate must require exact-byte v2 integrity evidence");
+expect(js.includes("validation_ready:active && validatedFeeds === 3"), "manual beta gate must require all three pinned-v2 feeds");
+expect(js.includes("manual_beta_review_ready:manualBetaReviewReady"), "export must expose combined manual beta readiness");
+expect(js.includes("candidate.bound"), "manual beta readiness must require bound candidate provenance");
+expect(js.includes("source_commit") && js.includes("package_sha256"), "candidate provenance fields missing");
 expect(js.includes("release_gate_closed:false"), "local witness must never close the release gate");
 expect(js.includes("minObservations: 8") && js.includes("minUniqueHosts: 6") && js.includes("minPageTypes: 4") && js.includes("minPerMode: 2"), "manual beta coverage thresholds drifted");
 expect(!js.includes("chrome.tabs"), "beta helper must not inspect browser tab URLs");
@@ -43,4 +51,4 @@ expect(js.includes("FEED_V2_MAX_SESSION_MS = 6 * 60 * 60 * 1000"), "pinned-v2 be
 expect(js.includes("feed_v2_beta:feedV2"), "exported witness must include sanitized feed-v2 beta state");
 expect(!js.includes("raw.githubusercontent.com") && !js.includes("github.com/"), "beta review UI must not own remote feed URLs");
 
-console.log(`Chrome local beta review contract: PASS (v2 pin synchronized at ${reviewPin.slice(0, 12)})`);
+console.log(`Chrome local beta review contract: PASS (bound ZIP + fresh 3/3 exact-byte v2 evidence, pin ${reviewPin.slice(0, 12)})`);

@@ -13,7 +13,7 @@
     label{display:grid;gap:6px;color:var(--muted);font-weight:650}input,select,button{font:inherit}input,select{width:100%;padding:11px 12px;border:1px solid #24465b;border-radius:10px;background:#030b12;color:var(--text)}
     .checks{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px}.checks label{display:flex;align-items:center;gap:8px;color:var(--text);font-weight:500}.checks input{width:auto}
     .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}button{border:0;border-radius:11px;padding:11px 15px;font-weight:750;cursor:pointer;background:linear-gradient(90deg,var(--blue),var(--cyan));color:#00111c}button.secondary{background:#102434;color:var(--text);border:1px solid #2a526d}button.danger{background:#2b151b;color:#ffdfe5;border:1px solid #69313d}
-    #status{min-height:22px;margin-top:12px;color:var(--cyan)}#summary,#feedV2Status{font-size:15px}.ready{color:var(--good)}.blocked{color:#ffd38c}.bad{color:var(--bad)}
+    #status{min-height:22px;margin-top:12px;color:var(--cyan)}#summary,#feedV2Status,#candidateStatus{font-size:15px}.ready{color:var(--good)}.blocked{color:#ffd38c}.bad{color:var(--bad)}
     code{color:var(--cyan)}.privacy{border-left:3px solid var(--blue);padding-left:12px}.small{font-size:12px}
   </style>
 </head>
@@ -47,15 +47,25 @@
   </section>
 
   <section class="card">
+    <h2 data-en="Tested candidate binding" data-pl="Powiązanie testowanego kandydata">Tested candidate binding</h2>
+    <div class="grid">
+      <label><span data-en="Exact source commit (40 hex)" data-pl="Dokładny commit źródłowy (40 hex)">Exact source commit (40 hex)</span><input id="sourceCommit" autocomplete="off" spellcheck="false" maxlength="40" placeholder="0123456789abcdef..."></label>
+      <label><span data-en="Tested beta ZIP (hashed locally)" data-pl="Testowany ZIP beta (haszowany lokalnie)">Tested beta ZIP (hashed locally)</span><input id="packageFile" type="file" accept=".zip,application/zip"></label>
+    </div>
+    <div id="candidateStatus"></div>
+    <p class="note small" data-en="The ZIP bytes are read only in this page to compute SHA-256 and are never uploaded or stored. Only the digest is exported." data-pl="Bajty ZIP są odczytywane wyłącznie na tej stronie do obliczenia SHA-256 i nigdy nie są wysyłane ani zapisywane. Eksportowany jest tylko skrót.">The ZIP bytes are read only in this page to compute SHA-256 and are never uploaded or stored. Only the digest is exported.</p>
+  </section>
+
+  <section class="card">
     <h2 data-en="Local evidence" data-pl="Lokalne dowody">Local evidence</h2>
     <div id="summary"></div>
     <div class="actions"><button id="export" class="secondary" data-en="Export privacy-safe witness" data-pl="Eksportuj bezpieczny witness">Export privacy-safe witness</button><button id="reset" class="danger" data-en="Reset local evidence" data-pl="Wyczyść lokalne dowody">Reset local evidence</button></div>
-    <p class="note small" data-en="Coverage readiness is not Release readiness. Exported evidence remains unbound to the final ZIP SHA-256 and cannot close the release gate by itself." data-pl="Gotowość pokrycia nie oznacza gotowości Release. Eksportowane dowody nie są powiązane z końcowym SHA-256 ZIP i same nie mogą zamknąć bramki wydania.">Coverage readiness is not Release readiness. Exported evidence remains unbound to the final ZIP SHA-256 and cannot close the release gate by itself.</p>
+    <p class="note small" data-en="Manual beta review readiness now requires coverage, fresh exact-byte pinned-v2 evidence and a bound source commit + tested ZIP SHA-256. It still cannot close the Release gate by itself." data-pl="Gotowość ręcznego przeglądu beta wymaga teraz pokrycia, świeżego dowodu dokładnych bajtów przypiętych v2 oraz powiązanego commita źródłowego + SHA-256 testowanego ZIP. Nadal nie może sama zamknąć bramki Release.">Manual beta review readiness now requires coverage, fresh exact-byte pinned-v2 evidence and a bound source commit + tested ZIP SHA-256. It still cannot close the Release gate by itself.</p>
   </section>
 
   <section class="card privacy">
     <strong data-en="Privacy contract" data-pl="Kontrakt prywatności">Privacy contract</strong>
-    <p class="note" data-en="Only a 16-hex SHA-256 prefix of the entered hostname plus test flags is stored locally. Feed-v2 beta runtime evidence contains only feed kind, status/fallback state and the pinned source commit. No telemetry, no network upload, no page URL, path, query, fragment, title or note text is retained." data-pl="Lokalnie zapisywany jest wyłącznie 16-znakowy prefiks SHA-256 wpisanego hosta oraz flagi testu. Dowody runtime beta feed-v2 zawierają tylko typ feedu, stan powodzenia/fallback i przypięty commit źródłowy. Brak telemetrii i wysyłania; nie są zachowywane URL, ścieżka, query, fragment, tytuł ani treść notatek.">Only a 16-hex SHA-256 prefix of the entered hostname plus test flags is stored locally. Feed-v2 beta runtime evidence contains only feed kind, status/fallback state and the pinned source commit. No telemetry, no network upload, no page URL, path, query, fragment, title or note text is retained.</p>
+    <p class="note" data-en="Only a 16-hex SHA-256 prefix of the entered hostname plus test flags is stored locally. Feed-v2 evidence contains only feed kind, validation/fallback state, exact-byte integrity digest and pinned source commit. Candidate binding exports only the entered source commit and locally computed ZIP SHA-256. No telemetry, network upload, page URL, path, query, fragment, title or ZIP bytes are retained." data-pl="Lokalnie zapisywany jest wyłącznie 16-znakowy prefiks SHA-256 wpisanego hosta oraz flagi testu. Dowody feed-v2 zawierają tylko typ feedu, stan walidacji/fallback, skrót integralności dokładnych bajtów i przypięty commit źródłowy. Powiązanie kandydata eksportuje tylko wpisany commit i lokalnie obliczone SHA-256 ZIP. Brak telemetrii i wysyłania; nie są zachowywane URL, ścieżka, query, fragment, tytuł ani bajty ZIP.">Only a 16-hex SHA-256 prefix of the entered hostname plus test flags is stored locally. Feed-v2 evidence contains only feed kind, validation/fallback state, exact-byte integrity digest and pinned source commit. Candidate binding exports only the entered source commit and locally computed ZIP SHA-256. No telemetry, network upload, page URL, path, query, fragment, title or ZIP bytes are retained.</p>
   </section>
 </main>
 <script src="beta-review.js"></script>
