@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -17,8 +18,11 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -29,8 +33,8 @@ import java.util.Locale;
 /**
  * v1.6 launcher shell.
  *
- * Keeps the mature v1.4 dashboard implementation while adding the v1.6 system-health
- * and context-aware recovery surface required by the v1.6 roadmap. The health panel
+ * Keeps the mature v1.4 dashboard implementation while adding the v1.6 system-health,
+ * context-aware recovery and the release-quality premium surface pass. The health panel
  * is intentionally read-only except for one explicit recovery action; it never turns
  * protection off, deletes user rules or silently changes Private DNS/Accessibility.
  */
@@ -59,17 +63,20 @@ public class MainActivityV121 extends MainActivityV140 {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         installHealthPanel();
+        applyPremiumSurfacePass();
         refreshDevelopmentLabels();
         refreshHealthPanel();
     }
 
     @Override protected void onStart() {
         super.onStart();
+        applyPremiumSurfacePass();
         refreshHealthPanel();
     }
 
     @Override protected void onResume() {
         super.onResume();
+        applyPremiumSurfacePass();
         healthHandler.removeCallbacks(healthRefresh);
         healthHandler.post(healthRefresh);
     }
@@ -87,34 +94,27 @@ public class MainActivityV121 extends MainActivityV140 {
     }
 
     private void installHealthPanel() {
-        View content = findViewById(android.R.id.content);
-        if (!(content instanceof ViewGroup)) return;
-        ViewGroup contentGroup = (ViewGroup) content;
-        if (contentGroup.getChildCount() == 0) return;
+        LinearLayout root = dashboardRoot();
+        if (root == null) return;
 
-        View first = contentGroup.getChildAt(0);
-        if (!(first instanceof ScrollView)) return;
-        ScrollView scroll = (ScrollView) first;
-        if (scroll.getChildCount() == 0 || !(scroll.getChildAt(0) instanceof LinearLayout)) return;
-        LinearLayout root = (LinearLayout) scroll.getChildAt(0);
-
-        int surface = getColor(R.color.swir_surface);
         int blue = getColor(R.color.swir_blue);
+        int cyan = getColor(R.color.swir_cyan);
         int text = getColor(R.color.swir_text);
         int muted = getColor(R.color.swir_muted);
 
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp16(14), dp16(12), dp16(14), dp16(12));
-        panel.setBackground(roundRect(surface, 18));
+        panel.setPadding(dp16(16), dp16(14), dp16(16), dp16(14));
+        panel.setBackground(premiumSurface(true));
+        if (Build.VERSION.SDK_INT >= 21) panel.setElevation(dp16(3));
 
-        TextView title = statusText(tr("STAN SYSTEMU • v1.6", "SYSTEM HEALTH • v1.6"), 11, muted, true);
-        title.setLetterSpacing(.09f);
+        TextView title = statusText(tr("STAN SYSTEMU • v1.6", "SYSTEM HEALTH • v1.6"), 10, cyan, true);
+        title.setLetterSpacing(.12f);
         panel.addView(title);
 
-        healthSummary = statusText(tr("Sprawdzanie…", "Checking…"), 17, blue, true);
+        healthSummary = statusText(tr("Sprawdzanie…", "Checking…"), 18, blue, true);
         panel.addView(healthSummary);
-        addGap(panel, 6);
+        addGap(panel, 7);
 
         healthVpn = statusText("", 12, text, true);
         healthDns = statusText("", 12, text, false);
@@ -126,32 +126,170 @@ public class MainActivityV121 extends MainActivityV140 {
         panel.addView(healthBlocklist);
         panel.addView(healthSmart);
         panel.addView(healthUpdate);
-        addGap(panel, 8);
+        addGap(panel, 10);
 
         recoveryButton = new Button(this);
         recoveryButton.setAllCaps(false);
         recoveryButton.setTextSize(12);
         recoveryButton.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        recoveryButton.setTextColor(Color.BLACK);
-        recoveryButton.setBackground(roundRect(blue, 12));
+        recoveryButton.setTextColor(Color.rgb(2, 17, 26));
+        recoveryButton.setBackground(premiumGradient(blue, cyan, 13, Color.parseColor("#6DDFFF")));
         recoveryButton.setOnClickListener(v -> performRecovery());
         panel.addView(recoveryButton, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp16(46)));
+                ViewGroup.LayoutParams.MATCH_PARENT, dp16(48)));
 
         TextView note = statusText(
                 tr("Recovery nie usuwa własnych reguł i nie zmienia ustawień systemowych bez potwierdzenia.",
                    "Recovery never deletes custom rules or changes system settings without confirmation."),
                 10, muted, false);
         note.setGravity(Gravity.CENTER_HORIZONTAL);
-        addGap(panel, 5);
+        addGap(panel, 6);
         panel.addView(note);
 
         LinearLayout.LayoutParams panelParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        panelParams.setMargins(0, 0, 0, dp16(9));
+        panelParams.setMargins(0, 0, 0, dp16(10));
 
         int insertAt = Math.min(2, root.getChildCount());
         root.addView(panel, insertAt, panelParams);
+    }
+
+    /**
+     * Applies the v1.6 visual system over the mature v1.4 programmatic dashboard without
+     * duplicating its business logic. Direct dashboard sections become premium glass-like
+     * surfaces while interactive controls keep strong focus/state contrast and system-scale text.
+     */
+    private void applyPremiumSurfacePass() {
+        LinearLayout root = dashboardRoot();
+        if (root == null) return;
+
+        View parent = (View) root.getParent();
+        if (parent instanceof ScrollView) {
+            ((ScrollView) parent).setBackgroundColor(getColor(R.color.swir_bg));
+        }
+        root.setPadding(dp16(16), dp16(16), dp16(16), dp16(30));
+
+        int panelIndex = 0;
+        for (int i = 0; i < root.getChildCount(); i++) {
+            View child = root.getChildAt(i);
+            if (child instanceof LinearLayout) {
+                child.setBackground(premiumSurface(panelIndex == 0));
+                if (Build.VERSION.SDK_INT >= 21) child.setElevation(dp16(panelIndex == 0 ? 4 : 2));
+                panelIndex++;
+            }
+        }
+        styleInteractiveTree(root);
+    }
+
+    private LinearLayout dashboardRoot() {
+        View content = findViewById(android.R.id.content);
+        if (!(content instanceof ViewGroup)) return null;
+        ViewGroup contentGroup = (ViewGroup) content;
+        if (contentGroup.getChildCount() == 0) return null;
+        View first = contentGroup.getChildAt(0);
+        if (!(first instanceof ScrollView)) return null;
+        ScrollView scroll = (ScrollView) first;
+        if (scroll.getChildCount() == 0 || !(scroll.getChildAt(0) instanceof LinearLayout)) return null;
+        return (LinearLayout) scroll.getChildAt(0);
+    }
+
+    private void styleInteractiveTree(View view) {
+        if (view instanceof Button) {
+            styleActionButton((Button) view);
+        } else if (view instanceof EditText) {
+            EditText input = (EditText) view;
+            input.setTextColor(getColor(R.color.swir_text));
+            input.setHintTextColor(getColor(R.color.swir_muted));
+            input.setBackground(premiumGradient(
+                    Color.parseColor("#071421"), Color.parseColor("#06101A"), 12,
+                    Color.parseColor("#315B73")));
+        } else if (view instanceof Switch) {
+            styleSwitch((Switch) view);
+        } else if (view instanceof ImageView) {
+            ImageView icon = (ImageView) view;
+            icon.setPadding(dp16(5), dp16(5), dp16(5), dp16(5));
+            icon.setBackground(premiumGradient(
+                    Color.parseColor("#0E2638"), Color.parseColor("#07111C"), 18,
+                    Color.parseColor("#2D6B88")));
+        }
+
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                styleInteractiveTree(group.getChildAt(i));
+            }
+        }
+    }
+
+    private void styleActionButton(Button button) {
+        CharSequence raw = button.getText();
+        String label = raw == null ? "" : raw.toString().toUpperCase(Locale.ROOT);
+        int start;
+        int end;
+        int stroke;
+        int foreground;
+
+        if (label.contains("RESET") || label.contains("BLOKUJ") || label.contains("BLOCK")
+                || label.contains("WYŁĄCZ") || label.contains("STOP")) {
+            start = Color.parseColor("#A6324B");
+            end = getColor(R.color.swir_red);
+            stroke = Color.parseColor("#FF8DA0");
+            foreground = Color.WHITE;
+        } else if (label.contains("ZEZWÓL") || label.contains("ALLOW")) {
+            start = Color.parseColor("#1AA876");
+            end = getColor(R.color.swir_green);
+            stroke = Color.parseColor("#83F5C7");
+            foreground = Color.rgb(2, 17, 26);
+        } else if (label.contains("GITHUB") || label.contains("USTAWIENIA")
+                || label.contains("SETTINGS") || label.contains("CACHE")) {
+            start = Color.parseColor("#10283A");
+            end = Color.parseColor("#0A1926");
+            stroke = Color.parseColor("#315E79");
+            foreground = getColor(R.color.swir_text);
+        } else {
+            start = getColor(R.color.swir_blue);
+            end = getColor(R.color.swir_cyan);
+            stroke = Color.parseColor("#78E9FF");
+            foreground = Color.rgb(2, 17, 26);
+        }
+
+        button.setTextColor(foreground);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setAllCaps(false);
+        button.setBackground(premiumGradient(start, end, 13, stroke));
+        if (Build.VERSION.SDK_INT >= 21) {
+            button.setElevation(dp16(2));
+            button.setStateListAnimator(null);
+        }
+    }
+
+    private void styleSwitch(Switch control) {
+        int[][] states = new int[][]{
+                new int[]{android.R.attr.state_checked},
+                new int[]{-android.R.attr.state_checked}
+        };
+        control.setThumbTintList(new ColorStateList(states, new int[]{
+                Color.rgb(2, 17, 26), Color.parseColor("#C8D8E2")
+        }));
+        control.setTrackTintList(new ColorStateList(states, new int[]{
+                getColor(R.color.swir_cyan), Color.parseColor("#314557")
+        }));
+        control.setTextColor(getColor(R.color.swir_text));
+    }
+
+    private GradientDrawable premiumSurface(boolean hero) {
+        int start = hero ? Color.parseColor("#102B40") : getColor(R.color.swir_surface_2);
+        int end = getColor(R.color.swir_surface);
+        int stroke = hero ? Color.parseColor("#337C9C") : Color.parseColor("#203F55");
+        return premiumGradient(start, end, hero ? 22 : 20, stroke);
+    }
+
+    private GradientDrawable premiumGradient(int start, int end, int radiusDp, int strokeColor) {
+        GradientDrawable drawable = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR, new int[]{start, end});
+        drawable.setCornerRadius(dp16(radiusDp));
+        drawable.setStroke(Math.max(1, dp16(1)), strokeColor);
+        return drawable;
     }
 
     private void refreshHealthPanel() {
@@ -254,6 +392,7 @@ public class MainActivityV121 extends MainActivityV140 {
         recoveryButton.setText(recoveryLabel(currentHealth.recovery));
         recoveryButton.setEnabled(true);
         recoveryButton.setAlpha(1.0f);
+        styleActionButton(recoveryButton);
     }
 
     private void performRecovery() {
@@ -401,16 +540,9 @@ public class MainActivityV121 extends MainActivityV140 {
         view.setText(text);
         view.setTextSize(sp);
         view.setTextColor(color);
-        view.setLineSpacing(0, 1.08f);
+        view.setLineSpacing(0, 1.12f);
         if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return view;
-    }
-
-    private GradientDrawable roundRect(int color, int radiusDp) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(color);
-        drawable.setCornerRadius(dp16(radiusDp));
-        return drawable;
     }
 
     private void addGap(LinearLayout parent, int dp) {

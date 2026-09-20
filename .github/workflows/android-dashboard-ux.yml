@@ -8,6 +8,7 @@ on:
       - "app/src/main/java/com/swir/xadkiller/DashboardStatusModel.java"
       - "app/src/main/java/com/swir/xadkiller/MainActivityV121.java"
       - "app/src/main/java/com/swir/xadkiller/SmartEngineAccessGuide.java"
+      - "app/src/main/res/values/colors.xml"
       - "app/src/test/java/com/swir/xadkiller/DashboardStatusModelTest.java"
       - "app/src/test/java/com/swir/xadkiller/SmartEngineAccessGuideTest.java"
       - ".github/workflows/android-dashboard-ux.yml"
@@ -48,7 +49,7 @@ jobs:
           gradle-version: '8.9'
       - name: Dashboard state and recovery priority regression
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.DashboardStatusModelTest
-      - name: Dashboard PL EN and safe-recovery contract
+      - name: Dashboard PL EN safe-recovery and premium UI contract
         shell: bash
         run: |
           set -euo pipefail
@@ -59,6 +60,8 @@ jobs:
           text = path.read_text(encoding="utf-8")
           access_path = Path("app/src/main/java/com/swir/xadkiller/SmartEngineAccessGuide.java")
           access = access_path.read_text(encoding="utf-8")
+          colors = Path("app/src/main/res/values/colors.xml").read_text(encoding="utf-8").upper()
+
           required_pairs = [
               ("STAN SYSTEMU • v1.6", "SYSTEM HEALTH • v1.6"),
               ("Zdrowe moduły: ", "Healthy modules: "),
@@ -86,6 +89,22 @@ jobs:
           for token in required_safe_actions:
               assert token in text, f"dashboard safe-recovery contract missing: {token}"
 
+          premium_ui_contract = [
+              "applyPremiumSurfacePass()",
+              "styleInteractiveTree",
+              "GradientDrawable.Orientation.TL_BR",
+              "setStroke",
+              "setThumbTintList",
+              "setTrackTintList",
+              "R.color.swir_cyan",
+              "setElevation",
+          ]
+          for token in premium_ui_contract:
+              assert token in text, f"premium Android UI contract missing: {token}"
+
+          for color in ("#02050A", "#07111C", "#0B1A29", "#0088FF", "#62E5FF"):
+              assert color in colors, f"premium SWIR palette missing: {color}"
+
           restricted_access_contract = [
               "Settings.ACTION_ACCESSIBILITY_SETTINGS",
               "Settings.ACTION_APPLICATION_DETAILS_SETTINGS",
@@ -98,5 +117,5 @@ jobs:
 
           assert "delete" not in text.lower() or "custom rules" in text.lower(), "dashboard recovery must not introduce silent destructive flow"
           assert "WRITE_SECURE_SETTINGS" not in access, "Smart Engine helper must not bypass Android restricted settings"
-          print("Android v1.6 dashboard PL/EN + safe-recovery contract: PASS")
+          print("Android v1.6 dashboard PL/EN + safe recovery + premium UI contract: PASS")
           PY
