@@ -11,6 +11,7 @@ DO_IDLE=0
 DO_PACKAGE_REPLACE=0
 SOAK_MINUTES=0
 OUT=""
+MAX_HEARTBEAT_AGE_MS=30000
 
 usage() {
   cat <<'USAGE'
@@ -74,6 +75,28 @@ fi
 
 "${ADB[@]}" get-state | grep -qx device || { echo "adb device is not online: $SERIAL" >&2; exit 3; }
 
+sha256_file() {
+  local path="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$path" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$path" | awk '{print $1}'
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - "$path" <<'PY'
+import hashlib, pathlib, sys
+p = pathlib.Path(sys.argv[1])
+h = hashlib.sha256()
+with p.open('rb') as f:
+    for chunk in iter(lambda: f.read(1024 * 1024), b''):
+        h.update(chunk)
+print(h.hexdigest())
+PY
+  else
+    echo "Need sha256sum, shasum, or python3 to fingerprint the APK" >&2
+    return 127
+  fi
+}
+
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT="${OUT:-artifacts/android-v160-physical-$STAMP}"
 mkdir -p "$OUT/snapshots"
@@ -83,6 +106,16 @@ TIMELINE="$OUT/timeline.tsv"
 WIFI_BEFORE=""
 DATA_BEFORE=""
 IDLE_FORCED=0
+APK_SHA256=""
+APK_BASENAME=""
+if [[ -n "$APK" ]]; then
+  APK_SHA256="$(sha256_file "$APK")"
+  [[ "$APK_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || { echo "Failed to compute APK SHA-256" >&2; exit 4; }
+  APK_SHA256="${APK_SHA256,,}"
+  APK_BASENAME="$(basename "$APK")"
+fi
+SOURCE_COMMIT="$(git rev-parse HEAD 2>/dev/null || true)"
+[[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || SOURCE_COMMIT="unknown"
 
 adb_shell() { "${ADB[@]}" shell "$@"; }
 restore_device_state() {
@@ -98,8 +131,11 @@ trap restore_device_state EXIT INT TERM
 snapshot() {
   local label="$1"
   local dir="$OUT/snapshots/$label"
+  local epoch
+  epoch="$(date -u +%s)"
   mkdir -p "$dir"
-  printf '%s\t%s\n' "$(date -u +%s)" "$label" >> "$TIMELINE"
+  printf '%s\t%s\n' "$epoch" "$label" >> "$TIMELINE"
+  printf '%s\n' "$epoch" > "$dir/snapshot_epoch_seconds.txt"
   adb_shell getprop > "$dir/getprop.txt" 2>&1 || true
   adb_shell dumpsys connectivity > "$dir/connectivity.txt" 2>&1 || true
   adb_shell dumpsys power > "$dir/power.txt" 2>&1 || true
@@ -111,17 +147,21 @@ snapshot() {
 }
 
 cat > "$OUT/metadata.env" <<EOF_META
-schema=1
+schema=2
 package=$PACKAGE
 activity=$ACTIVITY
 serial=$SERIAL
 started_utc=$STAMP
+source_commit=$SOURCE_COMMIT
 requested_handover=$DO_HANDOVER
 requested_sleep_wake=$DO_SLEEP_WAKE
 requested_idle=$DO_IDLE
 requested_package_replace=$DO_PACKAGE_REPLACE
 requested_soak_minutes=$SOAK_MINUTES
 apk_supplied=$([[ -n "$APK" ]] && echo 1 || echo 0)
+apk_basename=$APK_BASENAME
+apk_sha256=$APK_SHA256
+max_heartbeat_age_ms=$MAX_HEARTBEAT_AGE_MS
 EOF_META
 
 if [[ -n "$APK" ]]; then
@@ -133,8 +173,8 @@ sleep 2
 snapshot baseline
 
 # The debug build is debuggable, so a fresh VPN heartbeat can be inspected locally without
-# network upload. A missing heartbeat is a truthful blocker: the user must grant VPN consent
-# and start protection in the app before the physical lifecycle sequence can be accepted.
+# network upload. A missing/stale heartbeat is a truthful blocker: the user must grant VPN
+# consent and start protection in the app before the physical lifecycle sequence can be accepted.
 if ! grep -Eq 'name="running" value="true"|<boolean name="running" value="true"' "$OUT/snapshots/baseline/prefs.xml" 2>/dev/null; then
   echo "WARNING: baseline does not prove an active VPN. Grant VPN consent/start protection, then rerun for gate-quality evidence." | tee "$OUT/baseline-warning.txt"
 fi
@@ -203,7 +243,9 @@ restore_device_state
 trap - EXIT INT TERM
 
 if command -v python3 >/dev/null 2>&1 && [[ -f "ci/validate_android_physical_witness.py" ]]; then
-  python3 ci/validate_android_physical_witness.py "$OUT" | tee "$OUT/validator.txt"
+  VALIDATOR_ARGS=("$OUT")
+  if [[ -n "$APK" ]]; then VALIDATOR_ARGS+=(--apk "$APK"); fi
+  python3 ci/validate_android_physical_witness.py "${VALIDATOR_ARGS[@]}" | tee "$OUT/validator.txt"
 else
-  echo "Evidence collected at $OUT; run: python3 ci/validate_android_physical_witness.py '$OUT'"
+  echo "Evidence collected at $OUT; run: python3 ci/validate_android_physical_witness.py '$OUT'${APK:+ --apk '$APK'}"
 fi

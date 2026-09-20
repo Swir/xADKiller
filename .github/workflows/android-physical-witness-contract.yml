@@ -23,19 +23,27 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-      - name: Shell syntax
-        run: bash -n tools/android-v160-physical-validation.sh
-      - name: Physical witness parser tamper regression
+      - name: Shell and Python syntax
+        run: |
+          bash -n tools/android-v160-physical-validation.sh
+          python3 -m py_compile ci/validate_android_physical_witness.py
+      - name: Physical witness provenance/freshness tamper regression
         run: python3 ci/validate_android_physical_witness.py --self-test
       - name: Safety contract
         shell: bash
         run: |
           set -euo pipefail
           SCRIPT=tools/android-v160-physical-validation.sh
-          grep -q 'release_gate_closed' ci/validate_android_physical_witness.py
+          VALIDATOR=ci/validate_android_physical_witness.py
+          grep -q 'schema=2' "$SCRIPT"
+          grep -q 'sha256_file' "$SCRIPT"
+          grep -q 'max_heartbeat_age_ms' "$SCRIPT"
+          grep -q 'release_gate_closed' "$VALIDATOR"
+          grep -q 'APK SHA-256 mismatch' "$VALIDATOR"
+          grep -q 'heartbeat is stale' "$VALIDATOR"
           grep -q 'requested_handover' "$SCRIPT"
           grep -q 'requested_package_replace' "$SCRIPT"
           grep -q 'cmd deviceidle unforce' "$SCRIPT"
           grep -q 'restore_device_state' "$SCRIPT"
           ! grep -Eq 'curl|wget|scp|rsync|http://|https://' "$SCRIPT"
-          echo "Android physical witness safety contract: PASS"
+          echo "Android physical witness schema-2 safety contract: PASS"
