@@ -8,9 +8,12 @@ on:
       - "browser-extension/tools/feed-v2-migration-preflight.mjs"
       - "browser-extension/tools/feed-v2-network-contract.mjs"
       - "browser-extension/tools/build-feed-v2-parallel-staging.mjs"
+      - "browser-extension/tools/verify-feed-v2-parallel-endpoints.mjs"
       - "browser-extension/tests/feed-v2-parallel-staging-contract.mjs"
+      - "browser-extension/tests/feed-v2-parallel-endpoints-contract.mjs"
       - "browser-intelligence/feed-checksums.json"
       - "browser-intelligence/feed-v2-migration-plan.json"
+      - "browser-intelligence/v2/*.json"
       - ".github/workflows/feed-v2-staging-bundle.yml"
 
 concurrency:
@@ -34,15 +37,20 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "24"
-      - name: Syntax and target-isolation contract
+      - name: Syntax and target-isolation contracts
         run: |
           node --check tools/build-feed-v2-parallel-staging.mjs
+          node --check tools/verify-feed-v2-parallel-endpoints.mjs
           node --check tests/feed-v2-parallel-staging-contract.mjs
+          node --check tests/feed-v2-parallel-endpoints-contract.mjs
           node tests/feed-v2-parallel-staging-contract.mjs
+          node tests/feed-v2-parallel-endpoints-contract.mjs
       - name: Regenerate candidates from exact pinned production data
         run: node tools/feed-v2-migration-preflight.mjs --write
       - name: Build artifact-only parallel-v2 repository tree
         run: node tools/build-feed-v2-parallel-staging.mjs
+      - name: Verify committed development endpoints match regenerated candidates
+        run: node tools/verify-feed-v2-parallel-endpoints.mjs
       - name: Prove bundle remains data-only and non-authorizing
         run: |
           node - <<'NODE'
