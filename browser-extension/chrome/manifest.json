@@ -24,6 +24,10 @@
       "128": "icons/icon128.png"
     }
   },
+  "options_ui": {
+    "page": "beta-review.html",
+    "open_in_tab": true
+  },
   "icons": {
     "128": "icons/icon128.png"
   },
