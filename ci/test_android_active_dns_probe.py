@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import importlib.util
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 
@@ -9,6 +10,8 @@ TOOL = ROOT / "tools" / "android-v160-active-dns-probe.py"
 spec = importlib.util.spec_from_file_location("xad_android_dns_probe", TOOL)
 probe = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
+# dataclasses resolves postponed annotations through sys.modules on newer Python releases.
+sys.modules[spec.name] = probe
 spec.loader.exec_module(probe)
 
 
