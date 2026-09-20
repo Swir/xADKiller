@@ -21,7 +21,7 @@ async function findWorker(browser, timeout = 22000) {
       if (!worker) continue;
       try {
         const manifest = await worker.evaluate(() => chrome.runtime.getManifest());
-        if (manifest.version === "1.4.0" && manifest.name.includes("xADKiller")) return worker;
+        if (manifest.version === "1.5.0" && manifest.name.includes("xADKiller")) return worker;
       } catch (_) {}
     }
     await delay(200);

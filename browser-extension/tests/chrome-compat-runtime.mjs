@@ -28,7 +28,7 @@ async function findWorker(browser, timeout = 22000) {
       if (!worker) continue;
       try {
         const m = await worker.evaluate(() => chrome.runtime.getManifest());
-        if (m.version === "1.4.0" && m.name.includes("xADKiller")) return worker;
+        if (m.version === "1.5.0" && m.name.includes("xADKiller")) return worker;
       } catch (_) {}
     }
     await delay(200);
@@ -52,9 +52,6 @@ async function launchWithWorker() {
   for (let attempt = 1; attempt <= 2; attempt++) {
     const candidate = await launchBrowser();
     try {
-      // A cold Chromium profile can very occasionally delay the MV3 worker target even
-      // though the same extension package is healthy. Retry only this startup discovery
-      // failure in a fresh browser; all no-COMPAT/mode assertions below remain strict.
       const worker = await findWorker(candidate, attempt === 1 ? 14000 : 22000);
       if (attempt > 1) log("Worker startup recovered", "fresh Chromium retry");
       return { browser:candidate, worker };
