@@ -22,9 +22,10 @@ final class BlocklistCacheRecovery {
     // Application.onCreate(), so it must never rescan the entire 750k-entry ceiling on every
     // normal process start. We only need enough parser-valid unique domains to prove that a
     // rollback file is a meaningful protection source; fail closed if that evidence is not
-    // reached inside this bounded scan window.
+    // reached inside these bounded scan windows.
     private static final int MIN_RECOVERY_DOMAINS = 1_000;
     static final int MAX_RECOVERY_SCAN_DOMAINS = 10_000;
+    static final long MAX_RECOVERY_SCAN_BYTES = 4L * 1024L * 1024L;
 
     private BlocklistCacheRecovery() {}
 
@@ -84,8 +85,8 @@ final class BlocklistCacheRecovery {
             // candidate. The older rollback copy is stale and can be discarded.
             if (backup.exists()) backup.delete();
         } else if (backup.exists()) {
-            // Empty, malformed, duplicate-inflated or tiny backups cannot be a known-good
-            // protection source and should not be retried forever on every process start.
+            // Empty, malformed, duplicate-inflated, tiny or scan-budget-exhausting backups
+            // cannot be a known-good protection source and should not be retried forever.
             backup.delete();
         }
 
@@ -93,14 +94,17 @@ final class BlocklistCacheRecovery {
     }
 
     /**
-     * Recovery validation deliberately reuses the production domain parser. This prevents a
-     * non-empty HTML/error/truncated file or duplicate-inflated payload from being restored as
-     * known-good protection after a crash while keeping cold-start work strictly bounded.
+     * Recovery validation deliberately reuses the production domain parser. Both accepted-domain
+     * count and bytes read are bounded. The byte ceiling is important because an interrupted or
+     * corrupted backup can contain a very long prefix of comments/garbage before any valid domain;
+     * without it, Application.onCreate() could spend unbounded time scanning a huge file even though
+     * the semantic domain cap is only 10k. Exhausting the byte budget fails closed.
      */
     static boolean cacheLooksPlausible(File file) {
         if (file == null || !file.isFile() || file.length() <= 0L) return false;
-        try (InputStream input = new FileInputStream(file)) {
-            return BlocklistManager.countUniqueNormalized(input, MAX_RECOVERY_SCAN_DOMAINS)
+        try (InputStream raw = new FileInputStream(file);
+             InputStream bounded = BlocklistManager.boundedRemoteInput(raw, MAX_RECOVERY_SCAN_BYTES)) {
+            return BlocklistManager.countUniqueNormalized(bounded, MAX_RECOVERY_SCAN_DOMAINS)
                     >= MIN_RECOVERY_DOMAINS;
         } catch (IOException | RuntimeException error) {
             return false;
