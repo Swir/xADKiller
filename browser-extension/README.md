@@ -14,8 +14,8 @@
 
 <img width="100%" src="../assets/readme/chrome/progress-card.svg" alt="xADKiller Chrome v1.5.0 development progress" />
 
-**Development progress:** **80.8% — 21/26 verified v1.5.0 roadmap items.**  
-**Release readiness:** **BLOCKED** — manual browser/beta validation and the remaining hardening items are not complete.
+**Development progress:** **88.5% — 23/26 verified v1.5.0 roadmap items.**  
+**Release readiness:** **BLOCKED** — refreshed normal-browsing/manual beta validation, merge approval and the Chrome Web Store gate are not complete.
 
 | Item | Status |
 |---|---|
@@ -54,10 +54,11 @@ The extension intentionally separates executable logic from remotely refreshed p
 - approved GitHub endpoints provide only domains, URL signatures, cosmetic selectors and regex/rule metadata;
 - Feed Guard validates schema/age/shape before data can replace a known-good cache;
 - `browser-intelligence/feed-checksums.json` pins the exact Git blob hashes and metadata of the production Live Shield, Live Matrix and TITAN feeds, and CI re-fetches and verifies those payloads;
+- schema-v2 Live Shield, Live Matrix and TITAN data is now published side-by-side on the isolated `protection-feed-v2` branch with explicit expiry and rollback metadata; the stable schema-v1 store/main endpoints remain unchanged until the manual beta and release gates pass;
 - a network outage or bad feed must not require remote code or disable the last valid cached protection;
 - the development CI contains explicit no-remote-code and no-COMPAT safety gates.
 
-The feed checksum manifest is an integrity/audit gate, not a remote-code loader and not a claim of signed distribution.
+The feed checksum and production-channel manifests are integrity/audit gates, not remote-code loaders and not claims of signed distribution.
 
 ## Build
 
@@ -92,6 +93,7 @@ The v1.5 branch runs Chromium and integrity gates for:
 - two-stage Breakage Guard: heuristic-only recovery keeps core DNR active, restores normal/open/closed Shadow DOM elements, preserves login/checkout/media UI, records only bounded local recovery events and still verifies full temporary pause/resume as the escalation path;
 - GitHub Feed Guard validation and local health diagnostics;
 - deterministic production-feed checksum/metadata verification against the exact GitHub payloads;
+- deterministic schema-v2 publication/rollback metadata contract while keeping stable schema-v1 endpoints unchanged;
 - deterministic blocking effectiveness;
 - ZIP integrity and SHA-256 checks.
 

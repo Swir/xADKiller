@@ -28,8 +28,8 @@ xADKiller is a privacy-focused Chrome Manifest V3 blocker maintained by **SWIR**
 | Development branch | `chrome-v150-adaptive-memory` |
 | Stable store baseline | v1.4.0 TITAN on `main` |
 | Chrome requirement | Chrome 121+ |
-| Verified development progress | **80.8% — 21/26 roadmap items** |
-| Release readiness | **BLOCKED** — remaining hardening + manual browser validation |
+| Verified development progress | **88.5% — 23/26 roadmap items** |
+| Release readiness | **BLOCKED** — refreshed manual browser validation + merge/store gates |
 
 The roadmap percentage measures implemented development work. It is **not** ad-blocking effectiveness and it does not mean the release gate has passed.
 
@@ -43,6 +43,7 @@ The roadmap percentage measures implemented development work. It is **not** ad-b
 | Cross-layer rule dedupe | Deterministically removes equivalent protection rules across STANDARD/ULTRA static layers, packaged dynamic intelligence and TITAN session rules, with a CI regression gate. |
 | Feed Guard | Validates approved GitHub protection feeds, schema, age, size, anti-shrink and anti-replay/downgrade invariants before new data can replace a known-good cache. |
 | Data-only updates | Live Shield, Live Matrix and TITAN feeds contain rules/signatures only; executable logic stays inside the packaged extension. |
+| Parallel v2 feed channel | Publishes expiry + rollback metadata on the isolated `protection-feed-v2` data branch without silently switching the stable store/main schema-v1 consumer. |
 | Offline fallback | A failed, malformed or unavailable live feed falls back to the last validated cached protection data; transient GitHub/network failures use bounded local retry backoff instead of repeated fetches. |
 | PL / EN UI | Maintained popup controls and diagnostics are available in Polish and English. |
 | No-COMPAT active line | The development build does not enable the legacy COMPAT allow-rules layer. |
@@ -104,13 +105,13 @@ Approved GitHub feeds
 validated cache / safe fallback
 ```
 
-The live feed path is intentionally separated from executable logic. Remote JavaScript, Wasm or other executable payloads are not part of the feed update model.
+The live feed path is intentionally separated from executable logic. Remote JavaScript, Wasm or other executable payloads are not part of the feed update model. Schema-v2 feed data is published in parallel on `protection-feed-v2`; promotion of the packaged/store consumer remains part of the manual beta and release gate.
 
 ## 🗺 Roadmap & progress
 
 The authoritative Chrome roadmap is [`browser-extension/ROADMAP_CHROME.md`](browser-extension/ROADMAP_CHROME.md).
 
-Current verified scope: **21 / 26 = 80.8%**. Release readiness remains **BLOCKED** until all remaining functional/performance work and manual browser regression testing are satisfactory.
+Current verified scope: **23 / 26 = 88.5%**. Release readiness remains **BLOCKED** until refreshed normal-browsing/manual beta validation, user-approved integration to `main`, and the Chrome Web Store update gate are satisfactory.
 
 ## 📦 Releases
 
