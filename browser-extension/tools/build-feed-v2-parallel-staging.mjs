@@ -11,6 +11,7 @@ const stagingRoot = resolve(extensionRoot, "packages/feed-v2-staging");
 const migrationPlanPath = resolve(repoRoot, "browser-intelligence/feed-v2-migration-plan.json");
 const candidateManifestPath = resolve(candidateDir, "manifest.json");
 const PARALLEL_PREFIX = "browser-intelligence/v2/";
+const IMMUTABLE_REF_RE = /^[0-9a-f]{40}$/;
 
 function fail(message) {
   throw new Error(`feed_v2_parallel_staging: ${message}`);
@@ -27,8 +28,8 @@ export function validateParallelTarget(target, production, id = "feed") {
   const productionRef = String(production?.source_ref || "").trim();
   const productionPath = String(production?.source_path || "").trim();
 
-  if (!targetRef || !/^[A-Za-z0-9._/-]+$/.test(targetRef) || targetRef.includes("..")) {
-    fail(`${id}: unsafe parallel-v2 ref`);
+  if (!IMMUTABLE_REF_RE.test(targetRef)) {
+    fail(`${id}: parallel-v2 ref must be an immutable 40-hex Git commit`);
   }
   if (targetRef === productionRef && targetPath === productionPath) {
     fail(`${id}: parallel-v2 path aliases production v1`);
@@ -101,11 +102,11 @@ async function main() {
     });
   }
 
-  if (targetRefs.size !== 1) fail(`parallel-v2 staging must use one reviewed development ref; got ${[...targetRefs].join(",")}`);
+  if (targetRefs.size !== 1) fail(`parallel-v2 staging must use one reviewed immutable commit; got ${[...targetRefs].join(",")}`);
 
   const bundleManifest = {
     schema: 1,
-    purpose: "Artifact-only parallel schema-v2 staging bundle. It performs no remote write, does not alter production schema-v1 paths and does not authorize publication.",
+    purpose: "Artifact-only parallel schema-v2 staging bundle pinned to an immutable staging commit. It performs no remote write, does not alter production schema-v1 paths and does not authorize publication.",
     publication_authorized: false,
     remote_executable_code: false,
     target_ref: [...targetRefs][0],
@@ -113,7 +114,7 @@ async function main() {
     files: stagedFiles,
   };
   await writeFile(resolve(stagingRoot, "staging-manifest.json"), `${JSON.stringify(bundleManifest, null, 2)}\n`, "utf8");
-  console.log(`Feed v2 parallel staging bundle OK (${stagedFiles.map((file) => file.target_path).join(", ")}); publication_authorized=false`);
+  console.log(`Feed v2 parallel staging bundle OK (${stagedFiles.map((file) => file.target_path).join(", ")}); immutable target=${bundleManifest.target_ref}; publication_authorized=false`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

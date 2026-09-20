@@ -9,6 +9,7 @@ const repoRoot = resolve(extensionRoot, "..");
 const stagingRoot = resolve(extensionRoot, "packages/feed-v2-staging");
 const stagingManifestPath = resolve(stagingRoot, "staging-manifest.json");
 const PARALLEL_PREFIX = "browser-intelligence/v2/";
+const STAGING_PIN = "0930f563b4a4bfdef67885988485bfa8c7646784";
 const suspiciousKeys = new Set([
   "code", "script", "scripts", "javascript", "js", "wasm", "executable",
   "eval", "function", "module", "import", "imports", "remote_code"
@@ -80,7 +81,8 @@ async function main() {
   if (manifest.publication_authorized !== false || manifest.remote_executable_code !== false) {
     fail("staging safety flags drifted");
   }
-  if (manifest.target_ref !== "chrome-v150-adaptive-memory") fail("unexpected parallel-v2 target ref");
+  if (!/^[0-9a-f]{40}$/.test(String(manifest.target_ref || ""))) fail("parallel-v2 target must be an immutable Git commit");
+  if (manifest.target_ref !== STAGING_PIN) fail("unexpected parallel-v2 staging commit");
   if (manifest.files.length !== 3) fail(`expected three parallel endpoints; got ${manifest.files.length}`);
 
   const seen = new Set();
@@ -102,7 +104,7 @@ async function main() {
     verified.push(`${id}@${result.digest.slice(0, 12)}`);
   }
 
-  console.log(`Committed parallel-v2 endpoints: PASS (${verified.join(", ")}); production-v1 paths untouched`);
+  console.log(`Committed parallel-v2 endpoints: PASS (${verified.join(", ")}); immutable staging=${STAGING_PIN}; production-v1 paths untouched`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

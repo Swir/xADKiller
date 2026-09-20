@@ -5,13 +5,14 @@ const production = {
   source_ref: "main",
   source_path: "browser-intelligence/xadkiller-live-shield.json",
 };
+const STAGING_PIN = "0930f563b4a4bfdef67885988485bfa8c7646784";
 
 const good = {
-  parallel_v2_ref: "chrome-v150-adaptive-memory",
+  parallel_v2_ref: STAGING_PIN,
   parallel_v2_path: "browser-intelligence/v2/xadkiller-live-shield.json",
 };
 assert.deepEqual(validateParallelTarget(good, production, "live-matrix"), {
-  targetRef: "chrome-v150-adaptive-memory",
+  targetRef: STAGING_PIN,
   targetPath: "browser-intelligence/v2/xadkiller-live-shield.json",
 });
 
@@ -25,11 +26,15 @@ assert.throws(
 );
 assert.throws(
   () => validateParallelTarget({ parallel_v2_ref: "main", parallel_v2_path: production.source_path }, production, "alias"),
-  /aliases production v1/
+  /immutable 40-hex Git commit/
+);
+assert.throws(
+  () => validateParallelTarget({ ...good, parallel_v2_ref: "chrome-v150-adaptive-memory" }, production, "mutable-branch"),
+  /immutable 40-hex Git commit/
 );
 assert.throws(
   () => validateParallelTarget({ ...good, parallel_v2_ref: "../main" }, production, "ref"),
-  /unsafe parallel-v2 ref/
+  /immutable 40-hex Git commit/
 );
 
-console.log("Feed v2 parallel staging target contract: PASS");
+console.log("Feed v2 parallel staging target contract: PASS (immutable staging commit required)");

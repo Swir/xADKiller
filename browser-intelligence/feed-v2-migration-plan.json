@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "purpose": "Development-only migration plan for converting the pinned production data-only feeds to schema v2. Parallel v2 targets are isolated on the Chrome development branch so the current schema-v1 store/main consumer cannot be broken. This file is not fetched by the extension at runtime and does not authorize production publication.",
+  "purpose": "Development-only migration plan for converting the pinned production data-only feeds to schema v2. Parallel v2 targets are pinned to an isolated immutable staging commit so the current schema-v1 store/main consumer cannot be broken. This file is not fetched by the extension at runtime and does not authorize production publication.",
   "feeds": [
     {
       "id": "live-shield",
       "target_version": "2026.09.18.1",
       "target_updated_at": "2026-09-18T01:30:00Z",
       "target_expires_at": "2026-10-18T01:30:00Z",
-      "parallel_v2_ref": "chrome-v150-adaptive-memory",
+      "parallel_v2_ref": "0930f563b4a4bfdef67885988485bfa8c7646784",
       "parallel_v2_path": "browser-intelligence/v2/xadkiller-live-shield.json"
     },
     {
@@ -15,7 +15,7 @@
       "target_version": "2026.09.18.1",
       "target_updated_at": "2026-09-18T01:30:00Z",
       "target_expires_at": "2026-10-18T01:30:00Z",
-      "parallel_v2_ref": "chrome-v150-adaptive-memory",
+      "parallel_v2_ref": "0930f563b4a4bfdef67885988485bfa8c7646784",
       "parallel_v2_path": "browser-intelligence/v2/xadkiller-live-matrix.json"
     },
     {
@@ -23,7 +23,7 @@
       "target_version": "2026.09.18.1",
       "target_updated_at": "2026-09-18T01:30:00Z",
       "target_expires_at": "2026-10-18T01:30:00Z",
-      "parallel_v2_ref": "chrome-v150-adaptive-memory",
+      "parallel_v2_ref": "0930f563b4a4bfdef67885988485bfa8c7646784",
       "parallel_v2_path": "browser-intelligence/v2/xadkiller-titan-feed.json"
     }
   ]

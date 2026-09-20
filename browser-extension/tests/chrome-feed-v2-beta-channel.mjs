@@ -11,7 +11,7 @@ const PROD = Object.freeze({
   matrix:"https://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json",
   titan:"https://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-titan-feed.json"
 });
-const PIN = "824982ab9654539ff55a70a27a4993b90b8d2e2b";
+const PIN = "0930f563b4a4bfdef67885988485bfa8c7646784";
 
 function responseFor(url) {
   const body = JSON.stringify({ schema:2, feed_version:"2026.09.18.1", updated_at:"2026-09-18T01:30:00Z", expires_at:"2026-10-18T01:30:00Z", rollback:{ previous_version:"2026.09.13.1", previous_ref:"main/browser-intelligence/test.json" } });
@@ -112,7 +112,8 @@ for (const [name, productionUrl] of Object.entries(PROD)) {
   const { context } = makeContext(active);
   const api = context.XAD_FEED_V2_BETA_CHANNEL;
   assert.equal(api.PINNED_REF, PIN);
+  assert.match(api.PINNED_REF, /^[0-9a-f]{40}$/, "beta channel must pin an immutable Git commit");
   assert.equal(api.normalizeState({ schema:1, enabled:true, activated_at:now, expires_at:now + api.MAX_SESSION_MS + 1, pinned_ref:PIN }, now), null, "overlong opt-in must be rejected");
 }
 
-console.log("Chrome pinned feed-v2 beta channel: PASS (default-off, 3 feeds, bounded opt-in, safe v1 fallback)");
+console.log("Chrome pinned feed-v2 beta channel: PASS (isolated immutable staging commit, default-off, 3 feeds, bounded opt-in, safe v1 fallback)");

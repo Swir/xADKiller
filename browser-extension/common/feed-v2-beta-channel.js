@@ -10,7 +10,7 @@
   const SCHEMA = 1;
   const MAX_SESSION_MS = 6 * 60 * 60 * 1000;
   const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
-  const PINNED_REF = "824982ab9654539ff55a70a27a4993b90b8d2e2b";
+  const PINNED_REF = "0930f563b4a4bfdef67885988485bfa8c7646784";
   const RAW_PREFIX = `https://raw.githubusercontent.com/Swir/xADKiller/${PINNED_REF}/browser-intelligence/v2/`;
   const TARGETS = Object.freeze({
     "https://raw.githubusercontent.com/Swir/xADKiller/live-shield-feed/browser-intelligence/xadkiller-live-shield.json": Object.freeze({
