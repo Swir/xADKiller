@@ -6,7 +6,9 @@ on:
     branches: [ android-v160-mega ]
     paths:
       - "tools/android-v160-physical-validation.sh"
+      - "tools/android-v160-realapp-witness-template.json"
       - "ci/validate_android_physical_witness.py"
+      - "ci/validate_android_realapp_witness.py"
       - ".github/workflows/android-physical-witness-contract.yml"
 
 concurrency:
@@ -26,15 +28,19 @@ jobs:
       - name: Shell and Python syntax
         run: |
           bash -n tools/android-v160-physical-validation.sh
-          python3 -m py_compile ci/validate_android_physical_witness.py
-      - name: Physical witness provenance radio-state soak and freshness tamper regression
+          python3 -m py_compile ci/validate_android_physical_witness.py ci/validate_android_realapp_witness.py
+      - name: Physical lifecycle witness provenance radio-state soak and freshness tamper regression
         run: python3 ci/validate_android_physical_witness.py --self-test
+      - name: Real-app stability and false-positive recovery witness regression
+        run: python3 ci/validate_android_realapp_witness.py --self-test
       - name: Safety contract
         shell: bash
         run: |
           set -euo pipefail
           SCRIPT=tools/android-v160-physical-validation.sh
           VALIDATOR=ci/validate_android_physical_witness.py
+          REALAPP=ci/validate_android_realapp_witness.py
+          TEMPLATE=tools/android-v160-realapp-witness-template.json
           grep -q 'schema=3' "$SCRIPT"
           grep -q 'sha256_file' "$SCRIPT"
           grep -q 'max_heartbeat_age_ms' "$SCRIPT"
@@ -49,4 +55,11 @@ jobs:
           grep -q 'cmd deviceidle unforce' "$SCRIPT"
           grep -q 'restore_device_state' "$SCRIPT"
           ! grep -Eq 'curl|wget|scp|rsync|http://|https://' "$SCRIPT"
-          echo "Android physical witness schema-3 safety contract: PASS"
+          grep -q 'MIN_OBSERVATIONS = 12' "$REALAPP"
+          grep -q 'MIN_TOTAL_MINUTES = 60' "$REALAPP"
+          grep -q 'both wifi and mobile observations are required' "$REALAPP"
+          grep -q 'privacy-sensitive fields are forbidden' "$REALAPP"
+          grep -q 'release_gate_closed' "$REALAPP"
+          grep -q '"template": true' "$TEMPLATE"
+          ! grep -Eq 'requests|urllib|socket|http://|https://' "$REALAPP"
+          echo "Android physical + real-app witness safety contracts: PASS"

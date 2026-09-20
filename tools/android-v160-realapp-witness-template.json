@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "scope": "xADKiller Android v1.6 physical real-app stability witness",
+  "template": true,
+  "candidate": {
+    "source_commit": "REPLACE_WITH_40_HEX_COMMIT",
+    "apk_sha256": "REPLACE_WITH_64_HEX_APK_SHA256"
+  },
+  "device": {
+    "model": "REPLACE_WITH_PHYSICAL_DEVICE_MODEL",
+    "android_sdk": 35
+  },
+  "release_gate_closed": false,
+  "observations": []
+}
