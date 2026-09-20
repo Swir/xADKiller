@@ -1,0 +1,54 @@
+name: xADKiller Chrome pinned-v2 beta channel
+
+on:
+  push:
+    branches: [ chrome-v150-adaptive-memory ]
+    paths:
+      - "browser-extension/common/feed-v2-beta-channel.js"
+      - "browser-extension/common/beta-review.html"
+      - "browser-extension/common/beta-review.js"
+      - "browser-extension/common/service-worker.js"
+      - "browser-extension/tests/chrome-feed-v2-beta-channel.mjs"
+      - "browser-extension/tests/chrome-beta-review-contract.mjs"
+      - ".github/workflows/chrome-v2-beta-channel.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: xadkiller-chrome-v2-beta-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Node 24
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: SWIR progress SVG consistency
+        run: python3 ../ci/progress_svg.py chrome --check
+      - name: JavaScript syntax
+        run: |
+          node --check common/feed-v2-beta-channel.js
+          node --check common/beta-review.js
+          node --check tests/chrome-feed-v2-beta-channel.mjs
+          node --check tests/chrome-beta-review-contract.mjs
+      - name: Pinned feed-v2 beta routing contract
+        run: node tests/chrome-feed-v2-beta-channel.mjs
+      - name: Local beta review privacy and PL-EN contract
+        run: node tests/chrome-beta-review-contract.mjs
+      - name: No remote executable code in beta channel
+        run: |
+          ! grep -Eq '\beval\s*\(|new[[:space:]]+Function|WebAssembly|importScripts\([^"[:space:]]' common/feed-v2-beta-channel.js
+          grep -q 'release_gate_closed:false' common/beta-review.js
+          grep -q 'production v1 route' common/beta-review.html
+          echo "Pinned-v2 beta channel safety contract: PASS"

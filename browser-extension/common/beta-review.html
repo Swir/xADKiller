@@ -13,7 +13,7 @@
     label{display:grid;gap:6px;color:var(--muted);font-weight:650}input,select,button{font:inherit}input,select{width:100%;padding:11px 12px;border:1px solid #24465b;border-radius:10px;background:#030b12;color:var(--text)}
     .checks{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px}.checks label{display:flex;align-items:center;gap:8px;color:var(--text);font-weight:500}.checks input{width:auto}
     .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}button{border:0;border-radius:11px;padding:11px 15px;font-weight:750;cursor:pointer;background:linear-gradient(90deg,var(--blue),var(--cyan));color:#00111c}button.secondary{background:#102434;color:var(--text);border:1px solid #2a526d}button.danger{background:#2b151b;color:#ffdfe5;border:1px solid #69313d}
-    #status{min-height:22px;margin-top:12px;color:var(--cyan)}#summary{font-size:15px}.ready{color:var(--good)}.blocked{color:#ffd38c}.bad{color:var(--bad)}
+    #status{min-height:22px;margin-top:12px;color:var(--cyan)}#summary,#feedV2Status{font-size:15px}.ready{color:var(--good)}.blocked{color:#ffd38c}.bad{color:var(--bad)}
     code{color:var(--cyan)}.privacy{border-left:3px solid var(--blue);padding-left:12px}.small{font-size:12px}
   </style>
 </head>
@@ -39,6 +39,14 @@
   </section>
 
   <section class="card">
+    <h2 data-en="Pinned v2 feed beta" data-pl="Beta przypiętych feedów v2">Pinned v2 feed beta</h2>
+    <p class="note" data-en="Optional development-only channel: for at most 6 hours, production feed requests are locally redirected to the exact commit-pinned schema-v2 JSON candidates. Any transport failure falls back to the normal schema-v1 production route." data-pl="Opcjonalny kanał wyłącznie rozwojowy: maksymalnie przez 6 godzin żądania feedów są lokalnie kierowane do kandydatów JSON schema-v2 przypiętych do dokładnego commita. Każdy błąd transportu wraca do normalnej produkcyjnej ścieżki schema-v1.">Optional development-only channel: for at most 6 hours, production feed requests are locally redirected to the exact commit-pinned schema-v2 JSON candidates. Any transport failure falls back to the normal schema-v1 production route.</p>
+    <div id="feedV2Status"></div>
+    <div class="actions"><button id="feedV2Enable" data-en="Enable pinned v2 for 6 hours" data-pl="Włącz przypięte v2 na 6 godzin">Enable pinned v2 for 6 hours</button><button id="feedV2Disable" class="secondary" data-en="Return to production v1" data-pl="Wróć do produkcyjnego v1">Return to production v1</button></div>
+    <p class="note small" data-en="This switch never publishes feeds and never changes main/store endpoints. It only affects this local development extension profile." data-pl="Ten przełącznik nigdy nie publikuje feedów ani nie zmienia endpointów main/store. Działa tylko w lokalnym profilu rozszerzenia rozwojowego.">This switch never publishes feeds and never changes main/store endpoints. It only affects this local development extension profile.</p>
+  </section>
+
+  <section class="card">
     <h2 data-en="Local evidence" data-pl="Lokalne dowody">Local evidence</h2>
     <div id="summary"></div>
     <div class="actions"><button id="export" class="secondary" data-en="Export privacy-safe witness" data-pl="Eksportuj bezpieczny witness">Export privacy-safe witness</button><button id="reset" class="danger" data-en="Reset local evidence" data-pl="Wyczyść lokalne dowody">Reset local evidence</button></div>
@@ -47,7 +55,7 @@
 
   <section class="card privacy">
     <strong data-en="Privacy contract" data-pl="Kontrakt prywatności">Privacy contract</strong>
-    <p class="note" data-en="Only a 16-hex SHA-256 prefix of the entered hostname plus test flags is stored locally. No telemetry, no network upload, no page URL, path, query, fragment, title or note text is retained." data-pl="Lokalnie zapisywany jest wyłącznie 16-znakowy prefiks SHA-256 wpisanego hosta oraz flagi testu. Brak telemetrii i wysyłania do sieci; nie są zachowywane URL, ścieżka, query, fragment, tytuł ani treść notatek.">Only a 16-hex SHA-256 prefix of the entered hostname plus test flags is stored locally. No telemetry, no network upload, no page URL, path, query, fragment, title or note text is retained.</p>
+    <p class="note" data-en="Only a 16-hex SHA-256 prefix of the entered hostname plus test flags is stored locally. Feed-v2 beta runtime evidence contains only feed kind, status/fallback state and the pinned source commit. No telemetry, no network upload, no page URL, path, query, fragment, title or note text is retained." data-pl="Lokalnie zapisywany jest wyłącznie 16-znakowy prefiks SHA-256 wpisanego hosta oraz flagi testu. Dowody runtime beta feed-v2 zawierają tylko typ feedu, stan powodzenia/fallback i przypięty commit źródłowy. Brak telemetrii i wysyłania; nie są zachowywane URL, ścieżka, query, fragment, tytuł ani treść notatek.">Only a 16-hex SHA-256 prefix of the entered hostname plus test flags is stored locally. Feed-v2 beta runtime evidence contains only feed kind, status/fallback state and the pinned source commit. No telemetry, no network upload, no page URL, path, query, fragment, title or note text is retained.</p>
   </section>
 </main>
 <script src="beta-review.js"></script>
