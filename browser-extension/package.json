@@ -25,6 +25,8 @@
     "test:shadow-soak": "node tests/chrome-shadow-mutation-soak.mjs",
     "test:real-page": "node tests/chrome-real-page-soak.mjs",
     "test:performance": "node tests/chrome-performance-budget.mjs",
+    "test:beta-witness": "node tests/normal-browsing-beta-witness.mjs",
+    "beta:witness": "node tools/normal-browsing-beta-witness.mjs",
     "build:feed-v2-candidates": "node tools/feed-v2-migration-preflight.mjs --write",
     "build:legacy": "node tools/build.mjs"
   },
