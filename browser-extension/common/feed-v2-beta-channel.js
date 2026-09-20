@@ -34,6 +34,7 @@
       blobSize:2085
     })
   });
+  const BUNDLE_KINDS = Object.freeze(["live-shield", "live-matrix", "titan"]);
   const ALLOWED_TYPES = new Set(["application/json", "text/plain", "application/octet-stream"]);
 
   function getLocal(defaults) {
@@ -93,14 +94,31 @@
       || value === "xad_v2_beta_http_403"
       || value === "xad_v2_beta_http_404";
   }
-  async function runtimeFeed(kind) {
+  async function runtimeState() {
     try {
       const stored = await getLocal({ [RUNTIME_KEY]:null });
       const runtime = stored?.[RUNTIME_KEY];
       if (!runtime || typeof runtime !== "object" || runtime.pinned_ref !== PINNED_REF) return null;
-      const feed = runtime.feeds?.[kind];
-      return feed && typeof feed === "object" ? feed : null;
+      return runtime;
     } catch (_) { return null; }
+  }
+  async function runtimeFeed(kind) {
+    const runtime = await runtimeState();
+    const feed = runtime?.feeds?.[kind];
+    return feed && typeof feed === "object" ? feed : null;
+  }
+  function feedWarmForState(feed, state, now = Date.now()) {
+    if (!feed || !state) return false;
+    const verifiedAt = Number(feed.verified_at || 0);
+    return feed.ok === true
+      && feed.integrity === "git-blob-sha1"
+      && Number.isFinite(verifiedAt)
+      && verifiedAt >= state.activated_at
+      && verifiedAt <= now + MAX_CLOCK_SKEW_MS;
+  }
+  function bundleReady(runtime, state, now = Date.now()) {
+    if (!runtime || runtime.pinned_ref !== PINNED_REF || !state) return false;
+    return BUNDLE_KINDS.every((kind) => feedWarmForState(runtime.feeds?.[kind], state, now));
   }
   async function canAttemptPinned(kind, now = Date.now()) {
     const feed = await runtimeFeed(kind);
@@ -139,6 +157,7 @@
       ok:false,
       status:0,
       fallback:true,
+      warmup:false,
       error:reason,
       failure_count:failureCount,
       retry_after:hardFailure ? 0 : Date.now() + retryDelayMs(failureCount),
@@ -236,6 +255,22 @@
       return await verifyPinnedBody(target, buffered);
     } finally { safe.cleanup(); }
   }
+  async function recordPinnedSuccess(target, warmup) {
+    await recordRuntime(target.kind, {
+      transport:warmup ? "pinned-v2-warmup" : "pinned-v2",
+      integrity:"git-blob-sha1",
+      blob_sha1:target.blobSha1,
+      ok:true,
+      status:200,
+      fallback:!!warmup,
+      warmup:!!warmup,
+      verified_at:Date.now(),
+      error:"",
+      failure_count:0,
+      retry_after:0,
+      channel_disabled:false
+    });
+  }
 
   globalThis.fetch = async (input, init) => {
     const canonical = canonicalOriginal(input);
@@ -245,33 +280,44 @@
 
     const state = await activeState();
     if (!state) return guardedFetch(input, init);
-    if (!(await canAttemptPinned(target.kind))) return guardedFetch(input, init);
 
+    const runtime = await runtimeState();
+    if (!bundleReady(runtime, state)) {
+      const currentFeed = runtime?.feeds?.[target.kind];
+      if (feedWarmForState(currentFeed, state)) {
+        // Never mix feed generations. A feed already verified for this session remains on v1
+        // until every pinned candidate has passed exact-byte verification.
+        return guardedFetch(input, init);
+      }
+      if (!(await canAttemptPinned(target.kind))) return guardedFetch(input, init);
+      try {
+        await fetchPinned(target, input, init);
+        await recordPinnedSuccess(target, true);
+      } catch (error) {
+        await recordPinnedFailure(target.kind, error);
+      }
+      // Warm-up is verification only. The request that proves the final candidate still uses
+      // production v1; the next request enters v2 only after the whole bundle is coherent.
+      return guardedFetch(input, init);
+    }
+
+    if (!(await canAttemptPinned(target.kind))) return guardedFetch(input, init);
     try {
       const response = await fetchPinned(target, input, init);
-      await recordRuntime(target.kind, {
-        transport:"pinned-v2",
-        integrity:"git-blob-sha1",
-        blob_sha1:target.blobSha1,
-        ok:true,
-        status:200,
-        fallback:false,
-        error:"",
-        failure_count:0,
-        retry_after:0,
-        channel_disabled:false
-      });
+      await recordPinnedSuccess(target, false);
       return response;
     } catch (error) {
+      // Marking one member unhealthy immediately makes bundleReady() false for all feeds,
+      // so subsequent requests fail closed to production v1 until the bundle is re-verified.
       await recordPinnedFailure(target.kind, error);
       return guardedFetch(input, init);
     }
   };
 
   globalThis.XAD_FEED_V2_BETA_CHANNEL = Object.freeze({
-    STATE_KEY, RUNTIME_KEY, SCHEMA, MAX_SESSION_MS, PINNED_REF, TARGETS,
+    STATE_KEY, RUNTIME_KEY, SCHEMA, MAX_SESSION_MS, PINNED_REF, TARGETS, BUNDLE_KINDS,
     RETRY_BASE_MS, RETRY_MAX_MS,
     canonicalOriginal, normalizeState, activeState, validatePinnedResponse, verifyPinnedBody,
-    retryDelayMs, isHardFailureReason, canAttemptPinned
+    retryDelayMs, isHardFailureReason, canAttemptPinned, feedWarmForState, bundleReady
   });
 })();
