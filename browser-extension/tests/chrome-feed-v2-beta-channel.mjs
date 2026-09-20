@@ -20,12 +20,13 @@ function responseFor(url) {
   return response;
 }
 
-function makeContext(state) {
+function makeContext(state, { failPinned = false } = {}) {
   const calls = [];
   const storage = new Map(Object.entries(state || {}));
   const mockFetch = async (input, init) => {
     const url = String(input?.url || input || "");
     calls.push({ url, init });
+    if (failPinned && url.includes(`/${PIN}/`)) throw new TypeError("simulated pinned-v2 transport failure");
     return responseFor(url);
   };
   const canonicalFeedUrl = (value) => {
@@ -93,6 +94,16 @@ for (const [name, productionUrl] of Object.entries(PROD)) {
   assert.equal(calls[0].url, PROD.matrix, "expired opt-in must fall back to production v1 route");
 }
 {
+  const { context, calls, storage } = makeContext(active, { failPinned:true });
+  await context.fetch(PROD.shield);
+  assert.equal(calls.length, 2, "pinned-v2 transport failure must perform one safe production fallback");
+  assert.match(calls[0].url, new RegExp(`/${PIN}/browser-intelligence/v2/xadkiller-live-shield\\.json$`));
+  assert.equal(calls[1].url, PROD.shield, "fallback must restore the exact normal production-v1 request");
+  const runtime = storage.get("xadFeedV2BetaRuntimeV1");
+  assert.equal(runtime?.feeds?.["live-shield"]?.fallback, true, "local runtime evidence must record v1 fallback");
+  assert.equal(runtime?.feeds?.["live-shield"]?.ok, false, "failed pinned transport must not be recorded as success");
+}
+{
   const { context, calls } = makeContext(active);
   await context.fetch("https://example.com/data.json");
   assert.equal(calls[0].url, "https://example.com/data.json", "unrelated fetch must remain untouched");
@@ -104,4 +115,4 @@ for (const [name, productionUrl] of Object.entries(PROD)) {
   assert.equal(api.normalizeState({ schema:1, enabled:true, activated_at:now, expires_at:now + api.MAX_SESSION_MS + 1, pinned_ref:PIN }, now), null, "overlong opt-in must be rejected");
 }
 
-console.log("Chrome pinned feed-v2 beta channel: PASS (default-off, 3 feeds, local opt-in, fail-safe production route)");
+console.log("Chrome pinned feed-v2 beta channel: PASS (default-off, 3 feeds, bounded opt-in, safe v1 fallback)");
