@@ -57,10 +57,20 @@ final class DnsPrivacyDiagnostics {
                         ? "Prywatny DNS aktywny • szyfrowany DNS może ominąć lokalny filtr DNS • DoH aplikacji: niewykrywalny"
                         : "Private DNS active • encrypted DNS may bypass the local DNS filter • app DoH: not detectable";
             }
+            if ("captive_portal".equals(code)) {
+                return polish
+                        ? "Portal logowania sieci wykryty • DNS może być tymczasowo ograniczony do czasu zalogowania • DoH aplikacji: niewykrywalny"
+                        : "Captive portal detected • DNS may be temporarily restricted until sign-in completes • app DoH: not detectable";
+            }
             if ("no_dns_servers".equals(code)) {
                 return polish
                         ? "Android nie raportuje obecnie serwerów DNS • możliwe przełączenie sieci lub portal logowania • DoH aplikacji: niewykrywalny"
                         : "Android currently reports no DNS servers • network handover or captive portal may be in progress • app DoH: not detectable";
+            }
+            if ("unvalidated_network".equals(code)) {
+                return polish
+                        ? "Sieć nie ma jeszcze potwierdzonego dostępu do Internetu • DNS może działać tylko częściowo • DoH aplikacji: niewykrywalny"
+                        : "Network does not yet have validated Internet access • DNS may work only partially • app DoH: not detectable";
             }
             if ("private_dns_off".equals(code)) {
                 return polish
@@ -78,6 +88,13 @@ final class DnsPrivacyDiagnostics {
     static Assessment assess(boolean networkAvailable, String mode, String specifier,
                              boolean privateDnsActive, String privateDnsServerName,
                              int dnsServerCount) {
+        return assess(networkAvailable, mode, specifier, privateDnsActive, privateDnsServerName,
+                dnsServerCount, false, true);
+    }
+
+    static Assessment assess(boolean networkAvailable, String mode, String specifier,
+                             boolean privateDnsActive, String privateDnsServerName,
+                             int dnsServerCount, boolean captivePortal, boolean validatedInternet) {
         String normalizedMode = normalize(mode);
         String normalizedSpecifier = normalizeHostname(specifier);
         String normalizedServer = normalizeHostname(privateDnsServerName);
@@ -92,16 +109,11 @@ final class DnsPrivacyDiagnostics {
         boolean encryptedEstablished = privateDnsActive || !normalizedServer.isEmpty();
         if (strict) {
             if (!encryptedEstablished) {
-                // A configured STRICT resolver that Android has not established is more actionable
-                // than a generic conflict warning: DNS may be unavailable until the resolver works.
                 return assessment(Severity.WARNING, "strict_private_dns_pending", true, false, false);
             }
             if (!normalizedSpecifier.isEmpty()
                     && !normalizedServer.isEmpty()
                     && !normalizedSpecifier.equals(normalizedServer)) {
-                // During network handover or on buggy OEM builds the Settings provider and
-                // LinkProperties can temporarily disagree. Do not silently claim that STRICT DNS
-                // is healthy when Android says a different resolver is actually active.
                 return assessment(Severity.WARNING, "strict_private_dns_mismatch", true, true, true);
             }
             return assessment(Severity.WARNING, "strict_private_dns", true, true, false);
@@ -111,11 +123,16 @@ final class DnsPrivacyDiagnostics {
             return assessment(Severity.NOTICE, "encrypted_system_dns", false, true, false);
         }
 
-        // OEMs and transient handovers can briefly expose an empty LinkProperties DNS list.
-        // Treat it as a notice rather than a hard failure, but surface it instead of claiming the
-        // local DNS path is healthy when Android currently reports no resolver at all.
+        if (captivePortal) {
+            return assessment(Severity.NOTICE, "captive_portal", false, false, false);
+        }
+
         if (dnsServerCount <= 0) {
             return assessment(Severity.NOTICE, "no_dns_servers", false, false, false);
+        }
+
+        if (!validatedInternet) {
+            return assessment(Severity.NOTICE, "unvalidated_network", false, false, false);
         }
 
         if ("off".equals(normalizedMode)) {

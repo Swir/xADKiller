@@ -82,6 +82,36 @@ public class DnsPrivacyDiagnosticsTest {
     }
 
     @Test
+    public void captivePortalIsSurfacedBeforeGenericUnvalidatedNetworkState() {
+        DnsPrivacyDiagnostics.Assessment a = DnsPrivacyDiagnostics.assess(
+                true, "off", "", false, "", 2, true, false);
+        assertEquals(DnsPrivacyDiagnostics.Severity.NOTICE, a.severity);
+        assertEquals("captive_portal", a.code);
+        assertFalse(a.localDnsConflict);
+        assertTrue(a.summary(false).contains("Captive portal detected"));
+        assertTrue(a.summary(true).contains("Portal logowania sieci wykryty"));
+    }
+
+    @Test
+    public void unvalidatedNetworkWithResolversDoesNotPretendDnsPathIsHealthy() {
+        DnsPrivacyDiagnostics.Assessment a = DnsPrivacyDiagnostics.assess(
+                true, "off", "", false, "", 2, false, false);
+        assertEquals(DnsPrivacyDiagnostics.Severity.NOTICE, a.severity);
+        assertEquals("unvalidated_network", a.code);
+        assertFalse(a.localDnsConflict);
+        assertTrue(a.summary(false).contains("validated Internet access"));
+        assertTrue(a.summary(true).contains("potwierdzonego dostępu do Internetu"));
+    }
+
+    @Test
+    public void strictPrivateDnsStillTakesPriorityOnCaptivePortal() {
+        DnsPrivacyDiagnostics.Assessment a = DnsPrivacyDiagnostics.assess(
+                true, "hostname", "dns.example", true, "dns.example", 2, true, false);
+        assertEquals("strict_private_dns", a.code);
+        assertTrue(a.localDnsConflict);
+    }
+
+    @Test
     public void privateDnsOffIsHealthySystemDnsPathWhenResolversExist() {
         DnsPrivacyDiagnostics.Assessment a = DnsPrivacyDiagnostics.assess(
                 true, "off", "", false, "", 2);
@@ -114,7 +144,7 @@ public class DnsPrivacyDiagnosticsTest {
     @Test
     public void noNetworkDoesNotPretendToDiagnoseDns() {
         DnsPrivacyDiagnostics.Assessment a = DnsPrivacyDiagnostics.assess(
-                false, "off", "", false, "", 0);
+                false, "off", "", false, "", 0, false, false);
         assertEquals(DnsPrivacyDiagnostics.Severity.NOTICE, a.severity);
         assertEquals("no_network", a.code);
         assertFalse(a.localDnsConflict);
