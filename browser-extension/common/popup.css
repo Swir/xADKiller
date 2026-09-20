@@ -194,3 +194,14 @@ button:disabled{opacity:.42;cursor:default;filter:saturate(.6)}
 footer{text-align:center;color:#607f93;font-size:9px;margin-top:13px;letter-spacing:.055em;padding:9px 4px 1px;border-top:1px solid rgba(98,229,255,.08)}
 ::-webkit-scrollbar{width:8px}::-webkit-scrollbar-track{background:#040a11}::-webkit-scrollbar-thumb{background:#17384e;border-radius:99px;border:2px solid #040a11}::-webkit-scrollbar-thumb:hover{background:#20516f}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+@media (forced-colors:active){
+  html,body{background:Canvas;color:CanvasText}
+  body:before,main:after,.card:before,.card:after{display:none!important}
+  header,.card,.primaryCard,.stats div,.budgetGrid div,select,input[type=text]{background:Canvas!important;color:CanvasText!important;border-color:ButtonText!important;box-shadow:none!important;backdrop-filter:none!important}
+  .brand p,.host,.stats b,.budgetGrid b,small,footer,.languageBox span,.modeRow label{color:CanvasText!important;text-shadow:none!important}
+  button,button.secondary,.warningButton,.warningButton.active{forced-color-adjust:auto;background:ButtonFace!important;color:ButtonText!important;border:1px solid ButtonText!important;box-shadow:none!important}
+  .pauseBadge,.memoryBadge,.pauseBadge.paused,.pauseBadge.off,.pauseBadge.waiting,.memoryBadge.hot,.memoryBadge.off{background:Canvas!important;color:CanvasText!important;border-color:ButtonText!important;box-shadow:none!important}
+  .switch span,.switch input:checked+span{background:ButtonFace!important;border-color:ButtonText!important;box-shadow:none!important}
+  .switch span:before,.switch input:checked+span:before{background:ButtonText!important}
+  button:focus-visible,select:focus-visible,input[type=text]:focus-visible,.switch input:focus-visible+span{outline:2px solid Highlight!important;outline-offset:2px;box-shadow:none!important}
+}
