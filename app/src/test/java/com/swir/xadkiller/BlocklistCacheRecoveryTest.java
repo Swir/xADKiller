@@ -4,7 +4,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 
@@ -27,8 +30,22 @@ public class BlocklistCacheRecoveryTest {
         return out.toString();
     }
 
+    private static void writeOversizedInvalidPrefixThenHealthy(File file) throws Exception {
+        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
+                new FileOutputStream(file), StandardCharsets.UTF_8), 64 * 1024)) {
+            long written = 0L;
+            String garbage = "# interrupted-upstream-garbage-padding-0123456789abcdef\n";
+            while (written <= BlocklistCacheRecovery.MAX_RECOVERY_SCAN_BYTES + 64 * 1024L) {
+                writer.write(garbage);
+                written += garbage.getBytes(StandardCharsets.UTF_8).length;
+            }
+            writer.write(healthyList("late"));
+        }
+    }
+
     @Test public void recoverySemanticScanIsBoundedForColdStart() {
         assertEquals(10_000, BlocklistCacheRecovery.MAX_RECOVERY_SCAN_DOMAINS);
+        assertEquals(4L * 1024L * 1024L, BlocklistCacheRecovery.MAX_RECOVERY_SCAN_BYTES);
     }
 
     @Test public void normalStartupWithoutRollbackSkipsRecoveryAndCleansTemporaryFile() throws Exception {
@@ -128,6 +145,19 @@ public class BlocklistCacheRecoveryTest {
         for (int i = 0; i < 2_500; i++) duplicate.append("same.example.net\n");
         write(backup, duplicate.toString());
 
+        assertFalse(BlocklistCacheRecovery.recoverFiles(primary, backup, temporary));
+        assertFalse(primary.exists());
+        assertFalse(backup.exists());
+    }
+
+    @Test public void oversizedInvalidPrefixCannotStallOrBecomeRecoveryData() throws Exception {
+        File dir = Files.createTempDirectory("xad-cache-byte-budget").toFile();
+        File primary = new File(dir, "remote_blocklist.txt");
+        File backup = new File(dir, "remote_blocklist.txt.bak");
+        File temporary = new File(dir, "remote_blocklist.txt.tmp");
+        writeOversizedInvalidPrefixThenHealthy(backup);
+
+        assertFalse(BlocklistCacheRecovery.cacheLooksPlausible(backup));
         assertFalse(BlocklistCacheRecovery.recoverFiles(primary, backup, temporary));
         assertFalse(primary.exists());
         assertFalse(backup.exists());
