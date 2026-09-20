@@ -4,7 +4,7 @@
   const STORAGE_KEY = "xadBetaReviewWitnessV1";
   const FEED_V2_STATE_KEY = "xadFeedV2BetaChannelV1";
   const FEED_V2_RUNTIME_KEY = "xadFeedV2BetaRuntimeV1";
-  const FEED_V2_PINNED_REF = "824982ab9654539ff55a70a27a4993b90b8d2e2b";
+  const FEED_V2_PINNED_REF = "0930f563b4a4bfdef67885988485bfa8c7646784";
   const FEED_V2_MAX_SESSION_MS = 6 * 60 * 60 * 1000;
   const MAX_RECORDS = 200;
   const REQUIREMENTS = Object.freeze({

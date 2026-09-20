@@ -7,9 +7,16 @@ const root = path.resolve(here, "..");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "chrome", "manifest.json"), "utf8"));
 const html = fs.readFileSync(path.join(root, "common", "beta-review.html"), "utf8");
 const js = fs.readFileSync(path.join(root, "common", "beta-review.js"), "utf8");
+const betaChannel = fs.readFileSync(path.join(root, "common", "feed-v2-beta-channel.js"), "utf8");
 
 function expect(value, message) {
   if (!value) throw new Error(message);
+}
+
+function pinnedRef(source, label) {
+  const match = source.match(/const\s+(?:FEED_V2_)?PINNED_REF\s*=\s*"([0-9a-f]{40})"/);
+  expect(match, `${label} must expose one immutable 40-hex pinned v2 commit`);
+  return match[1];
 }
 
 expect(manifest.options_ui?.page === "beta-review.html", "Chrome manifest must expose beta-review.html as development options UI");
@@ -28,9 +35,12 @@ expect(!/\bfetch\s*\(/.test(js) && !js.includes("XMLHttpRequest"), "beta helper 
 expect(js.includes('urls:"omitted"') && js.includes("paths_queries_fragments"), "privacy declaration missing URL/path omission");
 expect(html.includes("data-pl=") && html.includes("data-en="), "PL/EN copy must remain present");
 expect(html.includes('id="feedV2Enable"') && html.includes('id="feedV2Disable"'), "pinned-v2 beta controls missing");
-expect(js.includes('FEED_V2_PINNED_REF = "824982ab9654539ff55a70a27a4993b90b8d2e2b"'), "beta review must show the exact reviewed v2 source commit");
+
+const reviewPin = pinnedRef(js, "beta review UI");
+const runtimePin = pinnedRef(betaChannel, "feed-v2 runtime channel");
+expect(reviewPin === runtimePin, `beta review/runtime pinned-ref drift: ${reviewPin} != ${runtimePin}`);
 expect(js.includes("FEED_V2_MAX_SESSION_MS = 6 * 60 * 60 * 1000"), "pinned-v2 beta session must remain short-lived");
 expect(js.includes("feed_v2_beta:feedV2"), "exported witness must include sanitized feed-v2 beta state");
 expect(!js.includes("raw.githubusercontent.com") && !js.includes("github.com/"), "beta review UI must not own remote feed URLs");
 
-console.log("Chrome local beta review contract: PASS");
+console.log(`Chrome local beta review contract: PASS (v2 pin synchronized at ${reviewPin.slice(0, 12)})`);
