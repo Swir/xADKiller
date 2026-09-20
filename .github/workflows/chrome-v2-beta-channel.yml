@@ -29,7 +29,7 @@ permissions:
 jobs:
   contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: browser-extension
@@ -41,7 +41,7 @@ jobs:
         with:
           node-version: "24"
       - name: Install pinned test dependencies
-        run: npm install --no-audit --no-fund --ignore-scripts
+        run: npm install --no-audit --no-fund
       - name: SWIR progress SVG consistency
         run: python3 ../ci/progress_svg.py chrome --check
       - name: JavaScript syntax
@@ -58,8 +58,14 @@ jobs:
         run: node tests/feed-v2-consumer-compat.mjs
       - name: Local beta review privacy and PL-EN contract
         run: node tests/chrome-beta-review-contract.mjs
+      - name: Build and validate Chrome development package
+        run: |
+          npm run build
+          npm run validate
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
       - name: Deterministic STANDARD ULTRA and benign blocking benchmark
-        run: node tests/chrome-blocking-benchmark.mjs
+        run: timeout --signal=TERM --kill-after=10s 180s npm run test:benchmark
       - name: Pinned candidate integrity metadata contract
         run: |
           grep -q 'blobSha1:"1e2931556cd6d888fd50da92d04266512a213fc7"' common/feed-v2-beta-channel.js
