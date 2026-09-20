@@ -6,6 +6,7 @@ on:
     branches: [ android-v160-mega ]
     paths:
       - "tools/android-v160-physical-validation.sh"
+      - "tools/android-v160-physical-validation.ps1"
       - "tools/android-v160-realapp-witness-template.json"
       - "ci/validate_android_physical_witness.py"
       - "ci/validate_android_realapp_witness.py"
@@ -25,19 +26,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-      - name: Shell and Python syntax
+      - name: Shell PowerShell and Python syntax
+        shell: bash
         run: |
+          set -euo pipefail
           bash -n tools/android-v160-physical-validation.sh
+          command -v pwsh >/dev/null
+          pwsh -NoLogo -NoProfile -Command '$tokens=$null;$errors=$null;[System.Management.Automation.Language.Parser]::ParseFile("tools/android-v160-physical-validation.ps1",[ref]$tokens,[ref]$errors) | Out-Null; if($errors.Count){$errors | ForEach-Object { Write-Error $_.Message }; exit 1}'
           python3 -m py_compile ci/validate_android_physical_witness.py ci/validate_android_realapp_witness.py
       - name: Physical lifecycle witness provenance radio-state soak and freshness tamper regression
         run: python3 ci/validate_android_physical_witness.py --self-test
       - name: Real-app stability and false-positive recovery witness regression
         run: python3 ci/validate_android_realapp_witness.py --self-test
-      - name: Safety contract
+      - name: Cross-platform collector parity and safety contract
         shell: bash
         run: |
           set -euo pipefail
           SCRIPT=tools/android-v160-physical-validation.sh
+          WIN=tools/android-v160-physical-validation.ps1
           VALIDATOR=ci/validate_android_physical_witness.py
           REALAPP=ci/validate_android_realapp_witness.py
           TEMPLATE=tools/android-v160-realapp-witness-template.json
@@ -45,6 +51,14 @@ jobs:
           grep -q 'sha256_file' "$SCRIPT"
           grep -q 'max_heartbeat_age_ms' "$SCRIPT"
           grep -q 'radio-state.env' "$SCRIPT"
+          grep -q 'schema=3' "$WIN"
+          grep -q 'Get-FileHash' "$WIN"
+          grep -q 'max_heartbeat_age_ms=30000' "$WIN"
+          grep -q 'radio-state.env' "$WIN"
+          grep -q 'Save-Snapshot -Label "mobile_only"' "$WIN"
+          grep -q 'Save-Snapshot -Label "post_wake"' "$WIN"
+          grep -q 'Save-Snapshot -Label "post_package_replace"' "$WIN"
+          grep -q 'validate_android_physical_witness.py' "$WIN"
           grep -q 'release_gate_closed' "$VALIDATOR"
           grep -q 'APK SHA-256 mismatch' "$VALIDATOR"
           grep -q 'heartbeat is stale' "$VALIDATOR"
@@ -55,6 +69,7 @@ jobs:
           grep -q 'cmd deviceidle unforce' "$SCRIPT"
           grep -q 'restore_device_state' "$SCRIPT"
           ! grep -Eq 'curl|wget|scp|rsync|http://|https://' "$SCRIPT"
+          ! grep -Eqi 'Invoke-WebRequest|Invoke-RestMethod|Start-BitsTransfer|curl|wget|scp|rsync|http://|https://' "$WIN"
           grep -q 'MIN_OBSERVATIONS = 12' "$REALAPP"
           grep -q 'MIN_TOTAL_MINUTES = 60' "$REALAPP"
           grep -q 'both wifi and mobile observations are required' "$REALAPP"
@@ -62,4 +77,4 @@ jobs:
           grep -q 'release_gate_closed' "$REALAPP"
           grep -q '"template": true' "$TEMPLATE"
           ! grep -Eq '(^|[[:space:]])(import|from)[[:space:]]+(requests|urllib|socket)([[:space:].]|$)|\b(requests|urllib|socket)\.' "$REALAPP"
-          echo "Android physical + real-app witness safety contracts: PASS"
+          echo "Android Linux + Windows physical and real-app witness safety contracts: PASS"
