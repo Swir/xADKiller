@@ -10,6 +10,8 @@
   const SCHEMA = 1;
   const MAX_SESSION_MS = 6 * 60 * 60 * 1000;
   const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+  const RETRY_BASE_MS = 30 * 1000;
+  const RETRY_MAX_MS = 15 * 60 * 1000;
   const PINNED_REF = "0930f563b4a4bfdef67885988485bfa8c7646784";
   const RAW_PREFIX = `https://raw.githubusercontent.com/Swir/xADKiller/${PINNED_REF}/browser-intelligence/v2/`;
   const TARGETS = Object.freeze({
@@ -76,6 +78,35 @@
     return String(error?.message || error || "unknown")
       .toLowerCase().replace(/[^a-z0-9_.:-]+/g, "_").slice(0, 96) || "unknown";
   }
+  function retryDelayMs(failureCount) {
+    const count = Math.max(1, Math.min(16, Number(failureCount) || 1));
+    return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * (2 ** Math.min(10, count - 1)));
+  }
+  function isHardFailureReason(reason) {
+    const value = String(reason || "");
+    return value.startsWith("xad_v2_beta_integrity_")
+      || value === "xad_v2_beta_transport_provenance"
+      || value === "xad_v2_beta_content_type"
+      || value === "xad_v2_beta_payload_size"
+      || value === "xad_v2_beta_http_400"
+      || value === "xad_v2_beta_http_401"
+      || value === "xad_v2_beta_http_403"
+      || value === "xad_v2_beta_http_404";
+  }
+  async function runtimeFeed(kind) {
+    try {
+      const stored = await getLocal({ [RUNTIME_KEY]:null });
+      const runtime = stored?.[RUNTIME_KEY];
+      if (!runtime || typeof runtime !== "object" || runtime.pinned_ref !== PINNED_REF) return null;
+      const feed = runtime.feeds?.[kind];
+      return feed && typeof feed === "object" ? feed : null;
+    } catch (_) { return null; }
+  }
+  async function canAttemptPinned(kind, now = Date.now()) {
+    const feed = await runtimeFeed(kind);
+    const retryAfter = Number(feed?.retry_after || 0);
+    return !Number.isFinite(retryAfter) || retryAfter <= 0 || retryAfter <= now;
+  }
   async function recordRuntime(kind, patch) {
     try {
       const stored = await getLocal({ [RUNTIME_KEY]:{ schema:1, pinned_ref:PINNED_REF, feeds:{} } });
@@ -91,6 +122,29 @@
     } catch (_) {
       // Local diagnostics must never interfere with protection or fallback.
     }
+  }
+  async function recordPinnedFailure(kind, error) {
+    const reason = safeReason(error);
+    const previous = await runtimeFeed(kind);
+    const failureCount = Math.min(16, Math.max(0, Number(previous?.failure_count || 0)) + 1);
+    const hardFailure = isHardFailureReason(reason);
+    if (hardFailure) {
+      // A deterministic integrity/provenance mismatch means this exact opt-in is unsafe.
+      // Disable it locally instead of retrying the same bad immutable candidate for hours.
+      await setLocal({ [STATE_KEY]:null });
+    }
+    await recordRuntime(kind, {
+      transport:"production-v1-fallback",
+      integrity:"failed",
+      ok:false,
+      status:0,
+      fallback:true,
+      error:reason,
+      failure_count:failureCount,
+      retry_after:hardFailure ? 0 : Date.now() + retryDelayMs(failureCount),
+      channel_disabled:hardFailure
+    });
+    return reason;
   }
   function validatePinnedResponse(target, response) {
     if (!response || typeof response !== "object") throw new TypeError("xad_v2_beta_transport_response");
@@ -191,6 +245,7 @@
 
     const state = await activeState();
     if (!state) return guardedFetch(input, init);
+    if (!(await canAttemptPinned(target.kind))) return guardedFetch(input, init);
 
     try {
       const response = await fetchPinned(target, input, init);
@@ -201,24 +256,22 @@
         ok:true,
         status:200,
         fallback:false,
-        error:""
+        error:"",
+        failure_count:0,
+        retry_after:0,
+        channel_disabled:false
       });
       return response;
     } catch (error) {
-      await recordRuntime(target.kind, {
-        transport:"production-v1-fallback",
-        integrity:"failed",
-        ok:false,
-        status:0,
-        fallback:true,
-        error:safeReason(error)
-      });
+      await recordPinnedFailure(target.kind, error);
       return guardedFetch(input, init);
     }
   };
 
   globalThis.XAD_FEED_V2_BETA_CHANNEL = Object.freeze({
     STATE_KEY, RUNTIME_KEY, SCHEMA, MAX_SESSION_MS, PINNED_REF, TARGETS,
-    canonicalOriginal, normalizeState, activeState, validatePinnedResponse, verifyPinnedBody
+    RETRY_BASE_MS, RETRY_MAX_MS,
+    canonicalOriginal, normalizeState, activeState, validatePinnedResponse, verifyPinnedBody,
+    retryDelayMs, isHardFailureReason, canAttemptPinned
   });
 })();

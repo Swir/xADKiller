@@ -104,6 +104,9 @@ for (const [name, productionUrl] of Object.entries(PROD)) {
   const kind = name === "shield" ? "live-shield" : name === "matrix" ? "live-matrix" : "titan";
   assert.equal(runtime?.feeds?.[kind]?.integrity, "git-blob-sha1", `${name}: exact-byte integrity evidence must be recorded`);
   assert.match(runtime?.feeds?.[kind]?.blob_sha1 || "", /^[0-9a-f]{40}$/);
+  assert.equal(runtime?.feeds?.[kind]?.failure_count, 0, `${name}: successful pinned fetch must clear backoff state`);
+  assert.equal(runtime?.feeds?.[kind]?.retry_after, 0, `${name}: successful pinned fetch must clear retry deadline`);
+  assert.equal(runtime?.feeds?.[kind]?.channel_disabled, false, `${name}: successful pinned fetch must keep opt-in active`);
 }
 
 {
@@ -127,6 +130,12 @@ for (const [name, productionUrl] of Object.entries(PROD)) {
   const runtime = storage.get("xadFeedV2BetaRuntimeV1");
   assert.equal(runtime?.feeds?.["live-shield"]?.fallback, true, "local runtime evidence must record v1 fallback");
   assert.equal(runtime?.feeds?.["live-shield"]?.ok, false, "failed pinned transport must not be recorded as success");
+  assert.equal(runtime?.feeds?.["live-shield"]?.failure_count, 1, "first transient failure must arm failure counter");
+  assert.ok(runtime?.feeds?.["live-shield"]?.retry_after > now, "transient failure must arm a bounded local retry cooldown");
+  assert.equal(runtime?.feeds?.["live-shield"]?.channel_disabled, false, "transient network failure must not permanently disable beta opt-in");
+  await context.fetch(PROD.shield);
+  assert.equal(calls.length, 3, "cooldown must bypass repeated pinned-v2 network work and use production v1 directly");
+  assert.equal(calls[2].url, PROD.shield, "cooldown path must preserve exact production-v1 route");
 }
 {
   const { context, calls, storage } = makeContext(active, { corruptPinned:true });
@@ -137,6 +146,11 @@ for (const [name, productionUrl] of Object.entries(PROD)) {
   const runtime = storage.get("xadFeedV2BetaRuntimeV1");
   assert.equal(runtime?.feeds?.titan?.integrity, "failed");
   assert.match(runtime?.feeds?.titan?.error || "", /xad_v2_beta_integrity_(size|sha1)/);
+  assert.equal(runtime?.feeds?.titan?.channel_disabled, true, "deterministic integrity failure must disable this local beta opt-in");
+  assert.equal(storage.get("xadFeedV2BetaChannelV1"), null, "hard failure must clear active beta state");
+  await context.fetch(PROD.titan);
+  assert.equal(calls.length, 3, "disabled channel must not retry the same bad immutable candidate");
+  assert.equal(calls[2].url, PROD.titan, "disabled channel must remain on production v1");
 }
 {
   const { context, calls } = makeContext(active);
@@ -148,6 +162,13 @@ for (const [name, productionUrl] of Object.entries(PROD)) {
   const api = context.XAD_FEED_V2_BETA_CHANNEL;
   assert.equal(api.PINNED_REF, PIN);
   assert.match(api.PINNED_REF, /^[0-9a-f]{40}$/, "beta channel must pin an immutable Git commit");
+  assert.equal(api.RETRY_BASE_MS, 30_000, "transient retry must start with a short bounded delay");
+  assert.equal(api.RETRY_MAX_MS, 15 * 60_000, "transient retry must remain bounded");
+  assert.equal(api.retryDelayMs(1), 30_000);
+  assert.equal(api.retryDelayMs(2), 60_000);
+  assert.equal(api.retryDelayMs(99), api.RETRY_MAX_MS);
+  assert.equal(api.isHardFailureReason("xad_v2_beta_integrity_sha1"), true);
+  assert.equal(api.isHardFailureReason("simulated_pinned-v2_transport_failure"), false);
   for (const target of Object.values(api.TARGETS)) {
     assert.match(target.blobSha1, /^[0-9a-f]{40}$/, "each v2 target must pin its exact Git blob");
     assert.ok(Number.isSafeInteger(target.blobSize) && target.blobSize > 0, "each v2 target must pin its exact byte size");
@@ -155,4 +176,4 @@ for (const [name, productionUrl] of Object.entries(PROD)) {
   assert.equal(api.normalizeState({ schema:1, enabled:true, activated_at:now, expires_at:now + api.MAX_SESSION_MS + 1, pinned_ref:PIN }, now), null, "overlong opt-in must be rejected");
 }
 
-console.log("Chrome pinned feed-v2 beta channel: PASS (immutable commit + exact Git-blob integrity, default-off, 3 feeds, bounded opt-in, safe v1 fallback)");
+console.log("Chrome pinned feed-v2 beta channel: PASS (immutable commit + exact Git-blob integrity, transient cooldown, hard-failure circuit breaker, default-off, safe v1 fallback)");
