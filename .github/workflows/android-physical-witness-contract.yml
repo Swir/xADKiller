@@ -7,6 +7,7 @@ on:
     paths:
       - "tools/android-v160-physical-validation.sh"
       - "tools/android-v160-physical-validation.ps1"
+      - "tools/android-v160-realapp-witness.ps1"
       - "tools/android-v160-realapp-witness-template.json"
       - "ci/validate_android_physical_witness.py"
       - "ci/validate_android_realapp_witness.py"
@@ -33,6 +34,7 @@ jobs:
           bash -n tools/android-v160-physical-validation.sh
           command -v pwsh >/dev/null
           pwsh -NoLogo -NoProfile -Command '$tokens=$null;$errors=$null;[System.Management.Automation.Language.Parser]::ParseFile("tools/android-v160-physical-validation.ps1",[ref]$tokens,[ref]$errors) | Out-Null; if($errors.Count){$errors | ForEach-Object { Write-Error $_.Message }; exit 1}'
+          pwsh -NoLogo -NoProfile -Command '$tokens=$null;$errors=$null;[System.Management.Automation.Language.Parser]::ParseFile("tools/android-v160-realapp-witness.ps1",[ref]$tokens,[ref]$errors) | Out-Null; if($errors.Count){$errors | ForEach-Object { Write-Error $_.Message }; exit 1}'
           python3 -m py_compile ci/validate_android_physical_witness.py ci/validate_android_realapp_witness.py
       - name: Physical lifecycle witness provenance radio-state soak and freshness tamper regression
         run: python3 ci/validate_android_physical_witness.py --self-test
@@ -44,6 +46,7 @@ jobs:
           set -euo pipefail
           SCRIPT=tools/android-v160-physical-validation.sh
           WIN=tools/android-v160-physical-validation.ps1
+          REALAPP_WIN=tools/android-v160-realapp-witness.ps1
           VALIDATOR=ci/validate_android_physical_witness.py
           REALAPP=ci/validate_android_realapp_witness.py
           TEMPLATE=tools/android-v160-realapp-witness-template.json
@@ -77,4 +80,12 @@ jobs:
           grep -q 'release_gate_closed' "$REALAPP"
           grep -q '"template": true' "$TEMPLATE"
           ! grep -Eq '(^|[[:space:]])(import|from)[[:space:]]+(requests|urllib|socket)([[:space:].]|$)|\b(requests|urllib|socket)\.' "$REALAPP"
+          grep -q 'Get-FileHash' "$REALAPP_WIN"
+          grep -q 'release_gate_closed = $false' "$REALAPP_WIN"
+          grep -q 'SourceCommit' "$REALAPP_WIN"
+          grep -q 'vpn_heartbeat_age_ms' "$REALAPP_WIN"
+          grep -q 'expected_content_ok' "$REALAPP_WIN"
+          grep -q 'run-as' "$REALAPP_WIN"
+          grep -q 'validate_android_realapp_witness.py' "$REALAPP_WIN"
+          ! grep -Eqi 'Invoke-WebRequest|Invoke-RestMethod|Start-BitsTransfer|curl|wget|scp|rsync|http://|https://' "$REALAPP_WIN"
           echo "Android Linux + Windows physical and real-app witness safety contracts: PASS"
