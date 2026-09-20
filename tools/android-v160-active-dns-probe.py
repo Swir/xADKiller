@@ -4,7 +4,10 @@
 The tool never contacts a web service itself. It drives a locally connected adb device,
 binds evidence to the tested APK when supplied, stores only a short SHA-256 of the adb
 serial, and verifies repeated benign/blocking DNS behavior while the local VPN heartbeat
-remains fresh and advances across the probe window.
+remains fresh and advances across the probe window. Schema 3 also records and gates the
+underlying Android network on VALIDATED/non-captive Wi-Fi, cellular or Ethernet evidence
+so a DNS pass behind a captive portal or an ambiguous VPN-only snapshot cannot be counted
+as release-quality handover evidence.
 """
 
 from __future__ import annotations
@@ -21,7 +24,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
 
-SCHEMA = 2
+SCHEMA = 3
 DEFAULT_ALLOWED = ("example.com",)
 DEFAULT_BLOCKED = (
     "doubleclick.net",
@@ -43,6 +46,7 @@ RESOLVER_FAILURE_TOKENS = (
     "not found",
     "nxdomain",
 )
+KNOWN_TRANSPORTS = ("WIFI", "CELLULAR", "ETHERNET")
 
 
 @dataclass(frozen=True)
@@ -68,6 +72,15 @@ class VpnSample:
     vpn_running: bool | None
     heartbeat_at_ms: int | None
     heartbeat_age_ms: int | None
+
+
+@dataclass(frozen=True)
+class NetworkSample:
+    round_index: int
+    transport: str
+    validated: bool | None
+    captive_portal: bool | None
+    output_excerpt: str
 
 
 def run(command: list[str], timeout: int = 20) -> CommandResult:
@@ -177,14 +190,72 @@ def read_vpn_sample(serial: str, package: str, round_index: int, now_ms: int | N
     return VpnSample(round_index, vpn_running, heartbeat_at, heartbeat_age_ms)
 
 
+def _transport_from_block(block: str) -> str:
+    upper = block.upper()
+    if re.search(r"\b(?:TRANSPORT_)?WIFI\b", upper):
+        return "wifi"
+    if re.search(r"\b(?:TRANSPORT_)?ETHERNET\b", upper):
+        return "ethernet"
+    if re.search(r"\b(?:TRANSPORT_)?CELLULAR\b", upper):
+        return "cellular"
+    return "unknown"
+
+
+def classify_network_state(text: str) -> tuple[str, bool | None, bool | None, str]:
+    """Pick the best non-VPN Android network candidate from dumpsys connectivity.
+
+    NetworkAgentInfo blocks are preferred because Android normally keeps transport and
+    capabilities for one network together there. The fallback line scan is intentionally
+    conservative: unknown formatting yields unknown/None instead of inventing a pass.
+    """
+    raw = str(text or "")
+    if not raw.strip():
+        return "unknown", None, None, ""
+
+    split = re.split(r"(?=NetworkAgentInfo\{)", raw)
+    blocks = [part for part in split if "NetworkAgentInfo{" in part]
+    if not blocks:
+        blocks = [line for line in raw.splitlines() if "CAPABILIT" in line.upper() or "TRANSPORT" in line.upper()]
+
+    candidates: list[tuple[int, str, bool, bool, str]] = []
+    for block in blocks:
+        upper = block.upper()
+        if re.search(r"\bTRANSPORT_VPN\b", upper) or re.search(r"TRANSPORTS?:\s*VPN\b", upper):
+            continue
+        transport = _transport_from_block(block)
+        if transport == "unknown":
+            continue
+        validated = bool(re.search(r"\bVALIDATED\b", upper))
+        captive = bool(re.search(r"\bCAPTIVE_PORTAL\b", upper))
+        transport_rank = {"wifi": 3, "ethernet": 2, "cellular": 1}.get(transport, 0)
+        score = (100 if validated else 0) + (0 if captive else 20) + transport_rank
+        candidates.append((score, transport, validated, captive, normalize_excerpt(block)))
+
+    if not candidates:
+        return "unknown", None, None, normalize_excerpt(raw)
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    _, transport, validated, captive, excerpt = candidates[0]
+    return transport, validated, captive, excerpt
+
+
+def read_network_sample(serial: str, round_index: int) -> NetworkSample:
+    result = adb(serial, "shell", "dumpsys", "connectivity", timeout=20)
+    if result.code != 0:
+        return NetworkSample(round_index, "unknown", None, None, normalize_excerpt(result.output))
+    transport, validated, captive, excerpt = classify_network_state(result.output)
+    return NetworkSample(round_index, transport, validated, captive, excerpt)
+
+
 def gate_quality(
     probes: Iterable[ProbeResult],
     vpn_samples: Iterable[VpnSample],
+    network_samples: Iterable[NetworkSample],
     artifact_sha256: str,
     expected_rounds: int,
 ) -> tuple[bool, list[str]]:
     probes = list(probes)
     samples = list(vpn_samples)
+    networks = list(network_samples)
     reasons: list[str] = []
     allowed = [p for p in probes if p.expected == "allow"]
     blocked = [p for p in probes if p.expected == "block"]
@@ -210,6 +281,14 @@ def gate_quality(
     heartbeats = [sample.heartbeat_at_ms for sample in samples if sample.heartbeat_at_ms and sample.heartbeat_at_ms > 0]
     if len(heartbeats) != len(samples) or len(heartbeats) < MIN_REPEAT or heartbeats[-1] <= heartbeats[0]:
         reasons.append("heartbeat_not_advancing")
+
+    if len(networks) != expected_rounds or {n.round_index for n in networks} != set(range(1, expected_rounds + 1)):
+        reasons.append("network_round_coverage_incomplete")
+    if any(n.transport not in {"wifi", "cellular", "ethernet"} or n.validated is not True for n in networks):
+        reasons.append("validated_underlying_network_not_proven")
+    if any(n.captive_portal is True for n in networks):
+        reasons.append("captive_portal_detected")
+
     if not re.fullmatch(r"[0-9a-f]{64}", artifact_sha256 or ""):
         reasons.append("apk_sha256_not_bound")
     return not reasons, reasons
@@ -270,6 +349,7 @@ def main() -> int:
     blocked_domains = tuple(args.blocked_domain) or DEFAULT_BLOCKED
     probes: list[ProbeResult] = []
     vpn_samples: list[VpnSample] = []
+    network_samples: list[NetworkSample] = []
 
     for round_index in range(1, args.repeat + 1):
         for expected, domains in (("allow", allowed_domains), ("block", blocked_domains)):
@@ -284,12 +364,13 @@ def main() -> int:
                     output_excerpt=normalize_excerpt(result.output),
                     round_index=round_index,
                 ))
+        network_samples.append(read_network_sample(serial, round_index))
         vpn_samples.append(read_vpn_sample(serial, args.package, round_index))
         if round_index != args.repeat:
             time.sleep(args.interval_seconds)
 
     digest = apk_sha256(apk_path)
-    quality, blockers = gate_quality(probes, vpn_samples, digest, args.repeat)
+    quality, blockers = gate_quality(probes, vpn_samples, network_samples, digest, args.repeat)
     now_ms = int(time.time() * 1000)
 
     witness = {
@@ -303,11 +384,12 @@ def main() -> int:
         "probe_rounds": args.repeat,
         "probe_interval_seconds": args.interval_seconds,
         "vpn_samples": [asdict(sample) for sample in vpn_samples],
+        "network_samples": [asdict(sample) for sample in network_samples],
         "probes": [asdict(p) for p in probes],
         "gate_quality": quality,
         "blockers": blockers,
         "release_gate_closed": False,
-        "note": "This repeated active-DNS probe supplements, but never replaces, the full physical lifecycle and real-app stability witness.",
+        "note": "This repeated active-DNS + validated-underlying-network probe supplements, but never replaces, the full physical lifecycle and real-app stability witness.",
     }
 
     out = Path(args.out).resolve() if args.out else Path("artifacts") / f"android-v160-active-dns-{int(time.time())}.json"
