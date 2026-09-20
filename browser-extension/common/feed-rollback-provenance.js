@@ -14,6 +14,15 @@
     "live-matrix":"main/browser-intelligence/xadkiller-live-shield.json",
     "titan":"main/browser-intelligence/xadkiller-titan-feed.json"
   });
+  // Rollback metadata is part of the migration safety contract, not advisory text. Pin the
+  // exact last-known production generation as well as its approved path so a v2 candidate
+  // cannot silently point at an older/mismatched generation that happens to live at the same
+  // mutable branch path. Exact byte integrity of fetched feed payloads is enforced separately.
+  const APPROVED_ROLLBACK_VERSIONS = Object.freeze({
+    "live-shield":"2026.09.13.1",
+    "live-matrix":"2026.09.13.2",
+    "titan":"2026.09.13.1"
+  });
 
   function fail(reason) {
     throw new TypeError(`xad_feed_guard_${reason}`);
@@ -36,9 +45,12 @@
     if (!data || data.schema !== 2) return true;
     const rollback = data.rollback;
     if (!rollback || typeof rollback !== "object" || Array.isArray(rollback)) fail("rollback");
-    const expected = APPROVED_ROLLBACK_REFS[kind] || "";
-    const actual = String(rollback.previous_ref || "").trim();
-    if (!expected || actual !== expected) fail("rollback_provenance");
+    const expectedRef = APPROVED_ROLLBACK_REFS[kind] || "";
+    const expectedVersion = APPROVED_ROLLBACK_VERSIONS[kind] || "";
+    const actualRef = String(rollback.previous_ref || "").trim();
+    const actualVersion = String(rollback.previous_version || "").trim();
+    if (!expectedRef || actualRef !== expectedRef) fail("rollback_provenance");
+    if (!expectedVersion || actualVersion !== expectedVersion) fail("rollback_version");
     return true;
   }
 
@@ -61,6 +73,7 @@
 
   globalThis.XAD_FEED_ROLLBACK_PROVENANCE = Object.freeze({
     APPROVED_ROLLBACK_REFS,
+    APPROVED_ROLLBACK_VERSIONS,
     guardedKind,
     validateRollbackProvenance
   });
