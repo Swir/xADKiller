@@ -118,7 +118,6 @@ browser-extension/dist/chrome
 git clone https://github.com/Swir/xADKiller.git
 cd xADKiller
 git switch android-v160-mega
-cd android
 gradle --no-daemon lintDebug
 gradle --no-daemon testDebugUnitTest
 gradle --no-daemon assembleDebug
