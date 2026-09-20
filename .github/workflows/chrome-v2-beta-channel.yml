@@ -8,6 +8,7 @@ on:
       - "browser-extension/common/beta-review.html"
       - "browser-extension/common/beta-review.js"
       - "browser-extension/common/service-worker.js"
+      - "browser-extension/package.json"
       - "browser-extension/tests/chrome-feed-v2-beta-channel.mjs"
       - "browser-extension/tests/chrome-beta-review-contract.mjs"
       - "browser-extension/tests/chrome-blocking-benchmark.mjs"
@@ -28,7 +29,7 @@ permissions:
 jobs:
   contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: browser-extension
@@ -39,6 +40,8 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "24"
+      - name: Install pinned test dependencies
+        run: npm install --no-audit --no-fund --ignore-scripts
       - name: SWIR progress SVG consistency
         run: python3 ../ci/progress_svg.py chrome --check
       - name: JavaScript syntax
