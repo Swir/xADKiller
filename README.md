@@ -2,56 +2,100 @@
 
 <div align="center">
 
-<img width="100%" src="assets/readme/hero.svg" alt="xADKiller — Chrome Manifest V3 ad and tracker blocker" />
+# xADKiller
 
-<br>
+### Android APK + Chrome Manifest V3 protection by SWIR
 
-![Chrome MV3](https://img.shields.io/badge/Chrome-Manifest_V3-02050A?style=for-the-badge&logo=googlechrome&logoColor=62E5FF)
-![Stage](https://img.shields.io/badge/v1.5-Development-02050A?style=for-the-badge&logoColor=62E5FF)
-![CI](https://github.com/Swir/xADKiller/actions/workflows/chrome-ultra-ci.yml/badge.svg?branch=chrome-v150-adaptive-memory)
+![Chrome Stable](https://img.shields.io/badge/Chrome_stable-v1.4.0-02050A?style=for-the-badge&logo=googlechrome&logoColor=62E5FF)
+![Android Stable](https://img.shields.io/badge/Android_stable-v1.5.1-02050A?style=for-the-badge&logo=android&logoColor=62E5FF)
+![Chrome Dev](https://img.shields.io/badge/Chrome_dev-v1.5.0-07111C?style=for-the-badge)
+![Android Dev](https://img.shields.io/badge/Android_dev-v1.6.0-07111C?style=for-the-badge)
+
+**Privacy-first ad/tracker blocking on Android and Chrome — no remote executable feed code.**
 
 </div>
 
-# xADKiller — Chrome development line
+## 📌 Current project status
 
-xADKiller is a privacy-focused Chrome Manifest V3 blocker maintained by **SWIR**. The current `chrome-v150-adaptive-memory` branch develops the next Chrome line while the Chrome Web Store baseline remains isolated on `main`.
+`main` remains the stable/public baseline. Active Android and Chrome development is intentionally isolated on dedicated branches and open PRs so store/release code is not overwritten by unfinished work.
 
-[**Highlights**](#-highlights) · [**Quick Start**](#-quick-start) · [**Architecture**](#-architecture) · [**Roadmap**](#-roadmap--progress) · [**Security**](#-security--limitations)
+### Chrome — v1.5.0 development
 
-## 📌 Project status
-
-<img width="100%" src="assets/readme/chrome/progress-card.svg" alt="xADKiller Chrome v1.5.0 verified development progress" />
+<img width="100%" src="assets/readme/chrome/progress-card.svg" alt="xADKiller Chrome v1.5.0 development progress" />
 
 | Item | Status |
 |---|---|
-| Current stage | Development / hardening |
-| Development branch | `chrome-v150-adaptive-memory` |
-| Stable store baseline | v1.4.0 TITAN on `main` |
-| Chrome requirement | Chrome 121+ |
-| Verified development progress | **88.5% — 23/26 roadmap items** |
-| Release readiness | **BLOCKED** — refreshed manual browser validation + merge/store gates |
+| Stable public release | **chrome-v1.4.0 — TITAN** |
+| Development branch | [`chrome-v150-adaptive-memory`](https://github.com/Swir/xADKiller/tree/chrome-v150-adaptive-memory) |
+| Open PR | [#5 — Chrome v150 adaptive memory](https://github.com/Swir/xADKiller/pull/5) |
+| Verified development progress | **23/26 = 88.5%** |
+| Latest validated snapshot before main sync | `474f78837271b5916354ab42cce89710206b50f4` |
+| Exact-head CI after main sync | **PENDING** |
+| Release readiness | **BLOCKED** — refreshed normal-browsing/manual beta validation + merge/store gates still required |
 
-The roadmap percentage measures implemented development work. It is **not** ad-blocking effectiveness and it does not mean the release gate has passed.
+### Android — v1.6.0 development
 
-## ⚡ Highlights
+<img width="100%" src="assets/readme/android/progress-card.svg" alt="xADKiller Android v1.6.0 development progress" />
 
-| Feature | What it does |
+| Item | Status |
 |---|---|
-| Declarative blocking | Uses Manifest V3 DNR rule sets for fast STANDARD, ULTRA and TITAN protection layers. |
-| Adaptive Memory | Learns only high-confidence tracker/ad hosts locally, with bounded storage, TTL cleanup and reset control. |
-| Breakage Guard | Provides temporary per-site recovery without immediately disabling the core protection stack. |
-| Cross-layer rule dedupe | Deterministically removes equivalent protection rules across STANDARD/ULTRA static layers, packaged dynamic intelligence and TITAN session rules, with a CI regression gate. |
-| Feed Guard | Validates approved GitHub protection feeds, schema, age, size, anti-shrink and anti-replay/downgrade invariants before new data can replace a known-good cache. |
-| Data-only updates | Live Shield, Live Matrix and TITAN feeds contain rules/signatures only; executable logic stays inside the packaged extension. |
-| Parallel v2 feed channel | Publishes expiry + rollback metadata on the isolated `protection-feed-v2` data branch without silently switching the stable store/main schema-v1 consumer. |
-| Offline fallback | A failed, malformed or unavailable live feed falls back to the last validated cached protection data; transient GitHub/network failures use bounded local retry backoff instead of repeated fetches. |
-| PL / EN UI | Maintained popup controls and diagnostics are available in Polish and English. |
-| No-COMPAT active line | The development build does not enable the legacy COMPAT allow-rules layer. |
-| Reproducible gates | CI exercises Chromium runtime, cross-layer dedupe, Shadow DOM, real-page soak, performance, feed integrity/offline fallback, breakage and blocking benchmarks. |
+| Latest public Android release | **v1.5.1 — Adaptive AI Hotfix** |
+| Development branch | [`android-v160-mega`](https://github.com/Swir/xADKiller/tree/android-v160-mega) |
+| Open PR | [#4 — Android v160 mega](https://github.com/Swir/xADKiller/pull/4) |
+| Verified development progress | **9/12 = 75.0%** |
+| Latest validated snapshot before main sync | `cface98c1b65a52581728c5b4812d91ea08f3c43` |
+| Exact-head CI after main sync | **PENDING** |
+| Release readiness | **BLOCKED** — physical-device lifecycle, Wi-Fi/mobile handover and long stability/real-app soak still required |
 
-## 🚀 Quick Start
+> Development progress measures verified roadmap completion. It is **not** the same thing as blocking effectiveness and it does not authorize a Release.
 
-Development build from source:
+## ⚡ What xADKiller does
+
+### Chrome
+
+- Manifest V3 Declarative Net Request blocking with STANDARD / ULTRA / TITAN protection layers.
+- Adaptive Memory for high-confidence ad/tracker hosts with bounded local storage and cleanup.
+- Breakage Guard and recovery controls instead of blindly disabling protection.
+- Live Shield, Live Matrix and TITAN protection feeds with schema validation, cache/fallback and anti-replay/downgrade checks.
+- PL / EN maintained UI and a no-COMPAT active development line.
+- No remote JavaScript/Wasm execution from protection feeds.
+
+### Android
+
+- Rootless, device-wide DNS blocking through Android `VpnService`.
+- DNS traffic is handled locally; xADKiller does **not** operate a remote VPN relay.
+- Local block/allow rules, known-good blocklist cache and safe recovery.
+- VPN liveness heartbeat, resolver failover/cooldown and Private DNS diagnostics.
+- v1.6 health dashboard for VPN, DNS, blocklists, Smart Engine and update state.
+- Local diagnostics; no xADKiller cloud log upload is required.
+
+## 🧪 Verified test snapshots
+
+These numbers describe fixed repository fixtures, not every site/app on the Internet.
+
+| Scope | Current verified fixture |
+|---|---|
+| Chrome STANDARD | **49/49 blocked** |
+| Chrome ULTRA | **49/49 blocked** |
+| Chrome benign controls | **0/16 false positives** |
+| Android DNS corpus | **127/127 blocked** |
+| Android benign controls | **0/20 false positives** |
+
+The Android v1.6 branch also carries the large-list/ANR qualification gate for **750,000 domains** under a constrained heap. Physical-device evidence remains a separate release requirement.
+
+## 🔐 Feed security model
+
+The production protection paths stay **data-only**. Live Shield, Live Matrix and TITAN may provide verified domains/rules/signatures, but executable application logic stays inside the shipped extension/app.
+
+- production feed baseline remains **schema v1**;
+- development schema-v2 work is isolated from the store baseline;
+- malformed, stale or failed feeds must not replace a known-good cache;
+- cache/fallback behavior is tested;
+- no remote executable code is part of the feed model.
+
+## 🚀 Quick start
+
+### Chrome development build
 
 ```bash
 git clone https://github.com/Swir/xADKiller.git
@@ -62,85 +106,49 @@ npm install --no-audit --no-fund
 npm run build
 ```
 
-Then open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select:
+Open `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select:
 
 ```text
 browser-extension/dist/chrome
 ```
 
-The development branch is for testing. Do not treat it as the Chrome Web Store release until the release gate is explicitly completed.
-
-## ✅ Verification
-
-Useful local gates:
+### Android development build
 
 ```bash
-cd browser-extension
-npm run validate
-npm run test:layer-dedupe
-npm run test:feeds
-npm run test:feed-v2-consumers
-npm run test:feed-checksums
-npm run test:benchmark
+git clone https://github.com/Swir/xADKiller.git
+cd xADKiller
+git switch android-v160-mega
+gradle --no-daemon lintDebug
+gradle --no-daemon testDebugUnitTest
+gradle --no-daemon assembleDebug
 ```
 
-The GitHub workflow additionally installs Chromium and runs the full runtime, Shadow DOM, real-page, performance, PL/EN, Adaptive Memory and Breakage Guard suite before producing the tested development ZIP.
+Use the public Android **Releases** page when you want the released APK rather than a development build.
 
-## 🧩 Architecture
+## 🗺 Roadmaps
 
-```text
-Packaged extension code
-├── DNR static rules: STANDARD / ULTRA / TITAN Boost
-├── deterministic static ↔ dynamic ↔ session dedupe
-├── session + dynamic protection
-├── Adaptive Memory
-├── Breakage Guard
-└── Feed Guard
-      ↓ validates data only
-Approved GitHub feeds
-├── Live Shield
-├── Live Matrix
-└── TITAN signatures
-      ↓
-validated cache / safe fallback
-```
+- **Chrome v1.5:** [ROADMAP_CHROME.md](https://github.com/Swir/xADKiller/blob/chrome-v150-adaptive-memory/browser-extension/ROADMAP_CHROME.md)
+- **Android v1.6:** [ANDROID_V160_ROADMAP.md](https://github.com/Swir/xADKiller/blob/android-v160-mega/ANDROID_V160_ROADMAP.md)
 
-The live feed path is intentionally separated from executable logic. Remote JavaScript, Wasm or other executable payloads are not part of the feed update model. Schema-v2 feed data is published in parallel on `protection-feed-v2`; promotion of the packaged/store consumer remains part of the manual beta and release gate.
-
-## 🗺 Roadmap & progress
-
-The authoritative Chrome roadmap is [`browser-extension/ROADMAP_CHROME.md`](browser-extension/ROADMAP_CHROME.md).
-
-Current verified scope: **23 / 26 = 88.5%**. Release readiness remains **BLOCKED** until refreshed normal-browsing/manual beta validation, user-approved integration to `main`, and the Chrome Web Store update gate are satisfactory.
+The progress cards above mirror the verified development-branch roadmap states. Authoritative roadmap/checklist updates remain on their owning development branches.
 
 ## 📦 Releases
 
-- **Chrome Web Store baseline:** v1.4.0 TITAN is the stable store line represented on `main`.
-- **v1.5.0:** not released. The development branch may generate tested CI artifacts, but they are not a public release.
+- Chrome stable: [`chrome-v1.4.0`](https://github.com/Swir/xADKiller/releases/tag/chrome-v1.4.0)
+- Android stable: [`v1.5.1`](https://github.com/Swir/xADKiller/releases/tag/v1.5.1)
 
-No merge to `main` or store update is justified by a green build alone.
-
-## 🔐 Security & limitations
-
-- No remote executable code in the live protection-feed mechanism.
-- No telemetry backend is required for Adaptive Memory or Breakage Guard.
-- Feed corruption/network failure must not replace the last validated cache.
-- Transient feed transport failures use bounded local backoff, while schema/data validation failures remain immediately retryable so corrected protection data is not artificially delayed.
-- Cross-layer dedupe removes semantically equivalent generated rules but does not replace functional browsing/regression testing.
-- DNS/URL/content heuristics can produce false positives, so recovery controls and regression fixtures are part of the release gate.
-- Deterministic benchmark scores describe the repository's fixed fixtures, not every advertisement or website on the Internet.
-- Chrome platform limits and site behavior can change; support claims are kept to behavior verified by the current tests and manifest.
+A green CI run alone does not justify merging development code or publishing a Release.
 
 ## 🔎 Search Keywords
 
-`chrome ad blocker` • `manifest v3 ad blocker` • `privacy chrome extension` • `tracker blocker chrome` • `declarative net request` • `MV3 content blocker` • `adaptive ad blocking` • `anti tracking extension` • `Chrome Web Store extension` • `adblock PL EN` • `privacy protection extension` • `data only filter updates` • `GitHub filter feeds` • `xADKiller` • `SWIR`
+`xADKiller` • `Chrome ad blocker` • `Manifest V3 ad blocker` • `Android ad blocker` • `Android DNS blocker` • `local VPN ad blocker` • `tracker blocker` • `privacy Chrome extension` • `no root ad blocker` • `declarative net request` • `MV3 content blocker` • `DNS filtering Android` • `Private DNS diagnostics` • `data-only filter feeds` • `Live Shield` • `TITAN ad blocker` • `SWIR`
 
 <div align="center">
 
 ### `BLOCK • VERIFY • HARDEN • EVOLVE`
 
-⭐ **If this project is useful, consider leaving a star.**
+⭐ **If xADKiller is useful, consider leaving a star.**
 
-[**← SWIR profile**](https://github.com/Swir) · [**All projects →**](https://github.com/Swir?tab=repositories)
+[**SWIR profile**](https://github.com/Swir) · [**Releases**](https://github.com/Swir/xADKiller/releases) · [**Issues**](https://github.com/Swir/xADKiller/issues)
 
 </div>
