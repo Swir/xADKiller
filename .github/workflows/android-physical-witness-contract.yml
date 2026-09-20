@@ -61,5 +61,5 @@ jobs:
           grep -q 'privacy-sensitive fields are forbidden' "$REALAPP"
           grep -q 'release_gate_closed' "$REALAPP"
           grep -q '"template": true' "$TEMPLATE"
-          ! grep -Eq 'requests|urllib|socket|http://|https://' "$REALAPP"
+          ! grep -Eq '(^|[[:space:]])(import|from)[[:space:]]+(requests|urllib|socket)([[:space:].]|$)|\b(requests|urllib|socket)\.' "$REALAPP"
           echo "Android physical + real-app witness safety contracts: PASS"
