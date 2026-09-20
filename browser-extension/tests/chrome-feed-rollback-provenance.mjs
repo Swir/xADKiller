@@ -15,15 +15,20 @@ const REFS = Object.freeze({
   "live-matrix":"main/browser-intelligence/xadkiller-live-shield.json",
   "titan":"main/browser-intelligence/xadkiller-titan-feed.json"
 });
+const VERSIONS = Object.freeze({
+  "live-shield":"2026.09.13.1",
+  "live-matrix":"2026.09.13.2",
+  "titan":"2026.09.13.1"
+});
 
-function makePayload(kind, overrideRef = null) {
+function makePayload(kind, overrideRef = null, overrideVersion = null) {
   return {
     schema:2,
     feed_version:"2026.09.18.1",
     updated_at:"2026-09-18T01:30:00Z",
     expires_at:"2026-10-18T01:30:00Z",
     rollback:{
-      previous_version:"2026.09.13.1",
+      previous_version:overrideVersion ?? VERSIONS[kind],
       previous_ref:overrideRef ?? REFS[kind]
     }
   };
@@ -84,6 +89,14 @@ async function expectReject(promise, label, reason) {
 }
 
 {
+  for (const [kind, url] of Object.entries(URLS)) {
+    const wrongVersion = kind === "live-matrix" ? "2026.09.13.1" : "2026.09.12.9";
+    const guard = await makeGuard({ [url]:makePayload(kind, null, wrongVersion) });
+    await expectReject(guard.fetch(url), `${kind}: stale or mismatched rollback generation`, "rollback_version");
+  }
+}
+
+{
   const url = URLS["live-shield"];
   const guard = await makeGuard({
     [url]:{ schema:1, feed_version:"2026.09.13.1", updated_at:"2026-09-13T15:05:00Z" }
@@ -108,4 +121,4 @@ async function expectReject(promise, label, reason) {
   if (!response.ok) throw new Error("approved legacy numeric cache-buster compatibility regressed");
 }
 
-console.log("Chrome feed rollback provenance regression: PASS");
+console.log("Chrome feed rollback provenance regression: PASS (path + exact previous generation pinned)");
