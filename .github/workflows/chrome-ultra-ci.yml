@@ -1,6 +1,15 @@
 name: Test xADKiller Chrome TITAN
 
 on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "README.md"
+      - "browser-extension/**"
+      - "browser-intelligence/**"
+      - "assets/readme/chrome/**"
+      - "ci/progress_svg.py"
+      - ".github/workflows/chrome-ultra-ci.yml"
   push:
     branches: [ main, chrome-titan-v140, chrome-v141-pl-en, chrome-v150-adaptive-memory ]
     paths:
