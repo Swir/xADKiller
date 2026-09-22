@@ -171,7 +171,7 @@ jobs:
           unzip -tq packages/xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip
           (cd packages && sha256sum -c SHA256SUMS.txt)
       - name: Upload tested Chrome TITAN Adaptive Memory package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory-tested
           path: |
@@ -180,7 +180,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Upload verified feed v2 migration candidates
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: xADKiller-feed-v2-migration-candidates-verified
           path: browser-extension/packages/feed-v2-candidates/*
