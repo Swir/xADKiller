@@ -1,1 +1,1 @@
-importScripts("background.js", "live-signatures.js", "titan-engine.js", "static-boost.js");
+importScripts("feed-transport-guard.js", "feed-v2-beta-channel.js", "feed-data-contract.js", "feed-rollback-provenance.js", "feed-guard.js", "feed-requestinfo-guard.js", "feed-v2-compat.js", "feed-cache-integrity.js", "background.js", "live-signatures.js", "titan-engine.js", "static-boost.js", "standard-core-boost.js", "temporary-site-guard.js", "heuristic-recovery.js");

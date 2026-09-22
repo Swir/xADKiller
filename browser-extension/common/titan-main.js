@@ -4,16 +4,78 @@
 
   let active = true;
   let ultra = false;
-  const shadowRoots = new WeakSet();
+  const shadowRoots = new Set();
+  const shadowStyles = new Set();
+  const shadowHidden = new Map();
+  const scheduledShadowScans = new WeakSet();
   const AD_SELECTOR = ".adsbygoogle,.adbox.banner_ads.adsbox,.textads,[data-ad-client],[data-ad-slot],[data-ad-unit],[data-sponsored='true'],[aria-label='Advertisement'],[aria-label='Sponsored'],[id^='google_ads_'],[id^='ad-container'],[id^='ad-slot'],[class~='ad-container'],[class~='ad-wrapper'],[class~='ad-slot']";
   const SHADOW_CSS = `${AD_SELECTOR}{display:none!important;visibility:hidden!important;max-height:0!important;min-height:0!important}`;
   const STRONG_URL = /(doubleclick\.net|googlesyndication\.com|googleadservices\.com|amazon-adsystem\.com|adnxs\.com|adsrvr\.org|pubmatic\.com|rubiconproject\.com|criteo\.(?:com|net)|taboola\.com|outbrain\.com|smartadserver\.com|adform\.net|\/ads?(?:[._\/-]|$)|\/adserver|\/adservice|\/adrequest|\/pagead|\/gampad|\/securepubads|\/prebid|\/vast|\/vmap|\/ima3|[?&](?:ad_unit|adunit|ad_slot|adslot|gdfp_req|iu)=)/i;
   const STRONG_MARKUP = /<(?:script|iframe|img|link)[^>]+(?:doubleclick|googlesyndication|googleadservices|amazon-adsystem|adnxs|adsrvr|pubmatic|rubicon|criteo|taboola|outbrain|pagead|gampad|securepubads|prebid|ads?\.js|adserver|adservice)/i;
 
-  window.addEventListener("xadkiller:preflight-config", (event) => {
-    if (typeof event?.detail?.active === "boolean") active = event.detail.active;
-    ultra = event?.detail?.mode === "ultra";
-  }, true);
+  function rememberAndHide(el) {
+    if (!(el instanceof Element)) return;
+    if (!shadowHidden.has(el)) {
+      shadowHidden.set(el, {
+        display:el.style.getPropertyValue("display"),
+        displayPriority:el.style.getPropertyPriority("display"),
+        visibility:el.style.getPropertyValue("visibility"),
+        visibilityPriority:el.style.getPropertyPriority("visibility")
+      });
+    }
+    try {
+      el.dataset.xadkillerTitanShadowHidden = "1";
+      el.style.setProperty("display", "none", "important");
+      el.style.setProperty("visibility", "hidden", "important");
+    } catch (_) {}
+  }
+
+  function restoreShadowHidden() {
+    for (const [el, previous] of [...shadowHidden.entries()]) {
+      try {
+        if (previous.display) el.style.setProperty("display", previous.display, previous.displayPriority || "");
+        else el.style.removeProperty("display");
+        if (previous.visibility) el.style.setProperty("visibility", previous.visibility, previous.visibilityPriority || "");
+        else el.style.removeProperty("visibility");
+        delete el.dataset.xadkillerTitanShadowHidden;
+      } catch (_) {}
+      shadowHidden.delete(el);
+    }
+  }
+
+  function setShadowStyle(style, css) {
+    if (!style) return;
+    try {
+      if (style.textContent !== css) style.textContent = css;
+    } catch (_) {}
+  }
+
+  function installShadowStyle(root) {
+    if (!root) return null;
+    let existing = null;
+    try { existing = root.querySelector?.("style[data-xadkiller-titan-shadow='1']") || null; } catch (_) {}
+    if (existing) {
+      shadowStyles.add(existing);
+      setShadowStyle(existing, active ? SHADOW_CSS : "");
+      return existing;
+    }
+    try {
+      const style = document.createElement("style");
+      style.dataset.xadkillerTitanShadow = "1";
+      style.textContent = active ? SHADOW_CSS : "";
+      root.appendChild(style);
+      shadowStyles.add(style);
+      return style;
+    } catch (_) { return null; }
+  }
+
+  function updateShadowStyles() {
+    const css = active ? SHADOW_CSS : "";
+    for (const style of [...shadowStyles]) {
+      if (!style?.isConnected) { shadowStyles.delete(style); continue; }
+      setShadowStyle(style, css);
+    }
+  }
 
   function asUrl(value) {
     try { return new URL(String(value || ""), location.href); } catch (_) { return null; }
@@ -26,20 +88,51 @@
   }
   function hideShadow(root) {
     if (!active || !root?.querySelectorAll) return;
-    try { root.querySelectorAll(AD_SELECTOR).forEach((el) => { try { el.style.setProperty("display","none","important"); el.style.setProperty("visibility","hidden","important"); } catch (_) {} }); } catch (_) {}
+    try { root.querySelectorAll(AD_SELECTOR).forEach(rememberAndHide); } catch (_) {}
   }
+  function scheduleShadowScan(root) {
+    if (!active || !root?.querySelectorAll || scheduledShadowScans.has(root)) return;
+    scheduledShadowScans.add(root);
+    setTimeout(() => {
+      scheduledShadowScans.delete(root);
+      if (active) hideShadow(root);
+    }, 0);
+  }
+  function reconcileShadowProtection() {
+    if (!active) restoreShadowHidden();
+    for (const root of [...shadowRoots]) {
+      if (!root?.host?.isConnected) {
+        shadowRoots.delete(root);
+        continue;
+      }
+      installShadowStyle(root);
+      if (active) hideShadow(root);
+    }
+    updateShadowStyles();
+  }
+
+  window.addEventListener("xadkiller:preflight-config", (event) => {
+    if (typeof event?.detail?.active === "boolean") active = event.detail.active;
+    ultra = event?.detail?.mode === "ultra";
+    reconcileShadowProtection();
+  }, true);
+
   function guardShadow(root) {
     if (!root || shadowRoots.has(root)) return;
     shadowRoots.add(root);
-    try {
-      const style = document.createElement("style");
-      style.dataset.xadkillerTitanShadow = "1";
-      style.textContent = SHADOW_CSS;
-      root.appendChild(style);
-    } catch (_) {}
+    installShadowStyle(root);
     hideShadow(root);
     try {
-      const observer = new MutationObserver(() => queueMicrotask(() => hideShadow(root)));
+      const observer = new MutationObserver((mutations) => {
+        if (!active) return;
+        for (const mutation of mutations) {
+          if (!mutation.addedNodes?.length) continue;
+          const target = mutation.target;
+          if (target instanceof Element && target.matches?.("style[data-xadkiller-titan-shadow='1']")) continue;
+          scheduleShadowScan(root);
+          break;
+        }
+      });
       observer.observe(root, { childList:true, subtree:true });
     } catch (_) {}
   }
@@ -48,7 +141,7 @@
   if (typeof nativeAttachShadow === "function") {
     Element.prototype.attachShadow = function(init) {
       const root = Reflect.apply(nativeAttachShadow, this, arguments);
-      guardShadow(root); // works for both open and closed roots at creation time
+      guardShadow(root);
       return root;
     };
   }

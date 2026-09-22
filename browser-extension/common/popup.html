@@ -44,6 +44,17 @@
       <small id="rulesInfo">—</small>
     </section>
 
+    <section class="card compactCard budgetCard">
+      <strong data-i18n="ruleBudget">Rule Budget</strong>
+      <div class="budgetGrid">
+        <div><b id="ruleBudgetStandard">0</b><span data-i18n="ruleBudgetStandard">STANDARD static</span></div>
+        <div><b id="ruleBudgetUltra">0</b><span data-i18n="ruleBudgetUltra">ULTRA add-on</span></div>
+        <div><b id="ruleBudgetBoost">0</b><span data-i18n="ruleBudgetBoost">TITAN Boost</span></div>
+        <div><b id="ruleBudgetRuntime">0</b><span data-i18n="ruleBudgetRuntime">runtime rules</span></div>
+      </div>
+      <small data-i18n="ruleBudgetHint">Live diagnostics show packaged and runtime rule buckets without inventing a browser-limit percentage.</small>
+    </section>
+
     <section class="card compactCard">
       <div class="row">
         <div>
@@ -52,18 +63,45 @@
         </div>
         <button id="liveRefresh" class="secondary smallButton" data-i18n="updateNow">Update</button>
       </div>
-      <small data-i18n="liveShieldHint">Own SWIR intelligence updates from GitHub without remote executable code.</small>
+      <small data-i18n="liveShieldHint">SWIR protection data updates from GitHub without remote executable code.</small>
+    </section>
+
+    <section class="card compactCard feedHealthCard">
+      <div class="row">
+        <div>
+          <strong data-i18n="feedIntegrity">GitHub Feed Guard</strong>
+          <small id="feedHealthInfo" data-i18n="feedHealthWaiting">Waiting for verified feed checks…</small>
+        </div>
+        <span id="feedHealthBadge" class="pauseBadge waiting">…</span>
+      </div>
+      <small data-i18n="feedIntegrityHint">Validates schema, size and anti-shrink rules before new protection data is accepted.</small>
     </section>
 
     <section class="card compactCard titanCard">
-      <strong data-i18n="titanEngine">XAD TITAN Engine</strong>
-      <small id="titanInfo" data-i18n="titanHint">Session Guard • Regex Brain • Adaptive Network Learner • Closed Shadow Shield</small>
+      <div class="row">
+        <div>
+          <strong data-i18n="titanEngine">XAD TITAN Engine</strong>
+          <small id="titanInfo" data-i18n="titanHint">Session Guard • Regex Brain • Adaptive Network Learner • Closed Shadow Shield</small>
+        </div>
+        <span id="memoryBadge" class="memoryBadge" title="Adaptive Memory">0</span>
+      </div>
     </section>
 
-    <section class="card compactCard">
-      <strong data-i18n="currentSite">Current site</strong>
-      <div id="host" class="host">—</div>
-      <button id="siteToggle" class="secondary" disabled>—</button>
+    <section class="card compactCard siteCard">
+      <div class="row">
+        <div>
+          <strong data-i18n="currentSite">Current site</strong>
+          <div id="host" class="host">—</div>
+        </div>
+        <span id="pauseBadge" class="pauseBadge off" data-i18n="siteProtected">PROTECTED</span>
+      </div>
+      <div class="siteActions">
+        <button id="siteToggle" class="secondary" disabled>—</button>
+        <button id="tempPauseBtn" class="secondary warningButton" data-i18n="pauseSite15" disabled>Pause 15 min</button>
+      </div>
+      <button id="heuristicRecoveryBtn" class="secondary memoryAction" data-i18n="heuristicRecovery15" disabled>Try safe recovery 15 min</button>
+      <small id="heuristicRecoveryInfo" data-i18n="heuristicRecoveryHint">Safe recovery pauses local heuristic layers first while core network rules stay enabled.</small>
+      <small id="tempPauseInfo" data-i18n="pauseSiteHint">Temporary pause is for fixing a broken site and resumes automatically.</small>
     </section>
 
     <section class="card">
@@ -103,7 +141,10 @@
         <button id="pickerBtn" data-i18n="pickElement">Block / teach element</button>
         <button id="falseBtn" class="secondary" data-i18n="falsePositive">False positive</button>
       </div>
-      <small data-i18n="adaptiveHint">Everything is learned locally in this browser profile.</small>
+      <button id="resetMemoryBtn" class="secondary memoryAction" data-i18n="resetMemory">Reset network memory</button>
+      <button id="clearRecoveryHistoryBtn" class="secondary memoryAction" data-i18n="clearRecoveryHistory">Clear recovery history</button>
+      <small id="recoveryHistoryInfo" data-i18n="recoveryHistoryHint">Breakage Guard history stays local and contains only bounded recovery events.</small>
+      <small id="memoryInfo" data-i18n="adaptiveHint">Everything is learned locally in this browser profile.</small>
     </section>
 
     <section class="card">
@@ -119,8 +160,10 @@
       <button id="testBtn" data-i18n="testButton">Test blocking</button>
       <button id="githubBtn" class="secondary">GitHub</button>
     </div>
-    <footer>v1.4.0 • PL / EN • TITAN + Live Matrix • BY SWIR</footer>
+    <footer>v1.5.0-dev • PL / EN • Adaptive Memory + Breakage Guard + Feed Guard • BY SWIR</footer>
   </main>
   <script src="popup.js"></script>
+  <script src="feed-health-ui.js"></script>
+  <script src="rule-budget-ui.js"></script>
 </body>
 </html>

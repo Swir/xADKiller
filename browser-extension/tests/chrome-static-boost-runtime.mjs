@@ -20,7 +20,7 @@ async function workerFor(browser,timeout=20000){
       const w=await target.worker();if(!w)continue;
       try{
         const m=await w.evaluate(()=>chrome.runtime.getManifest());
-        if(m.version==="1.4.0"&&m.name.includes("xADKiller"))return w;
+        if(m.version==="1.5.0"&&m.name.includes("xADKiller"))return w;
       }catch(_){}
     }
     await delay(200);

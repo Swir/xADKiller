@@ -1,0 +1,40 @@
+name: xADKiller Chrome beta pin contract
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ chrome-v150-adaptive-memory ]
+    paths:
+      - "browser-extension/common/beta-review.js"
+      - "browser-extension/common/feed-v2-beta-channel.js"
+      - "browser-extension/tests/chrome-beta-review-contract.mjs"
+      - ".github/workflows/chrome-beta-pin-contract.yml"
+
+concurrency:
+  group: xadkiller-chrome-beta-pin-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  beta-pin-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Node 24
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: Syntax
+        run: |
+          node --check common/beta-review.js
+          node --check common/feed-v2-beta-channel.js
+          node --check tests/chrome-beta-review-contract.mjs
+      - name: Beta review/runtime immutable-v2 pin agreement and privacy contract
+        run: node tests/chrome-beta-review-contract.mjs
