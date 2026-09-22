@@ -2,6 +2,22 @@ name: Build xADKiller APK
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "app/**"
+      - "build.gradle"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "ci/**"
+      - "tools/android-v160-physical-validation.sh"
+      - "tools/android-v160-physical-validation.ps1"
+      - "tools/android-v160-restart-validation.sh"
+      - "tools/android-v160-realapp-witness-template.json"
+      - "assets/readme/android/**"
+      - "README.md"
+      - "ANDROID_V160_ROADMAP.md"
+      - ".github/workflows/build-apk.yml"
   push:
     branches: [ main, android-v160-mega ]
     paths:
