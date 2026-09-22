@@ -5,6 +5,10 @@ import java.util.Arrays;
 
 final class DnsPacket {
     static final int DNS_PORT = 53;
+    private static final int MAX_RESPONSE_RR_COUNT = 512;
+    private static final int MAX_EDNS_UDP_PAYLOAD = 1232;
+    private static final int EDNS_OPTION_CLIENT_SUBNET = 8;
+    private static final int EDNS_OPTION_COOKIE = 10;
 
     static final class Query {
         final byte[] dnsPayload;
@@ -25,33 +29,91 @@ final class DnsPacket {
     private DnsPacket() {}
 
     static Query parseIpv4UdpQuery(byte[] packet, int length) {
-        if (packet == null || length < 40) return null;
+        if (packet == null || length < 40 || length > packet.length) return null;
         int version = (packet[0] >> 4) & 0x0F;
         if (version != 4) return null;
         int ihl = (packet[0] & 0x0F) * 4;
         if (ihl < 20 || length < ihl + 8 + 12) return null;
+
+        int ipTotalLength = u16(packet, 2);
+        if (ipTotalLength < ihl + 8 + 12 || ipTotalLength > length) return null;
+
         int protocol = packet[9] & 0xFF;
         if (protocol != 17) return null;
 
+        // Reject every fragmented DNS datagram, including the first fragment with MF=1.
+        // The local filter intentionally handles only complete UDP DNS messages.
         int frag = ((packet[6] & 0xFF) << 8) | (packet[7] & 0xFF);
-        if ((frag & 0x1FFF) != 0) return null;
+        if ((frag & 0x3FFF) != 0) return null;
 
         int srcPort = u16(packet, ihl);
         int dstPort = u16(packet, ihl + 2);
-        if (dstPort != DNS_PORT) return null;
+        if (srcPort == 0 || dstPort != DNS_PORT) return null;
 
         int udpLen = u16(packet, ihl + 4);
-        if (udpLen < 20) return null;
-        int dnsLen = Math.min(udpLen - 8, length - ihl - 8);
+        // For packets read from the TUN interface there is no Ethernet padding: the
+        // IPv4 payload must be exactly one complete UDP datagram. Accepting a shorter
+        // UDP length would make the DNS parser ignore unexplained trailing IP payload,
+        // creating two different interpretations of the same packet.
+        if (udpLen < 20 || udpLen != ipTotalLength - ihl || ihl + udpLen > length) return null;
+
+        // IPv4 permits UDP checksum 0 (not supplied). When a checksum is present,
+        // verify it before parsing DNS so corrupted or tampered TUN payloads cannot
+        // influence the local blocking decision or be forwarded upstream.
+        int wireUdpChecksum = u16(packet, ihl + 6);
+        if (wireUdpChecksum != 0 && udpIpv4Checksum(packet, ihl, udpLen) != 0) return null;
+
+        int dnsLen = udpLen - 8;
         if (dnsLen < 12) return null;
 
         byte[] dns = Arrays.copyOfRange(packet, ihl + 8, ihl + 8 + dnsLen);
+        int flags = u16(dns, 2);
+        int qdCount = u16(dns, 4);
+        int anCount = u16(dns, 6);
+        int nsCount = u16(dns, 8);
+        int arCount = u16(dns, 10);
+        // Only standard single-question queries are supported. Query packets must not
+        // smuggle answer/authority records, and at most one additional record is allowed:
+        // a well-formed EDNS(0) OPT pseudo-record. This keeps the local blocking decision
+        // tied to one exact question while remaining compatible with modern Android DNS.
+        if ((flags & 0x8000) != 0 || (flags & 0x7800) != 0 || qdCount != 1
+                || anCount != 0 || nsCount != 0 || arCount > 1) return null;
+
+        // Normal DNS clients emit an uncompressed QNAME in the question section. With one
+        // question there is no earlier owner name to reference legitimately, so accepting a
+        // compression pointer would only permit ambiguous/header-referencing encodings that
+        // can make the block decision disagree with other DNS parsers. Fail closed here.
+        if (!hasUncompressedQuestionName(dns)) return null;
+
         String host = extractQueryName(dns);
-        if (host == null || host.isEmpty()) return null;
+        if (host == null || host.isEmpty() || host.length() > 253) return null;
+        int qEnd = questionEnd(dns);
+        if (qEnd < 0 || !hasWellFormedQueryTail(dns, qEnd, arCount)) return null;
+
+        // The local VPN may forward the query to a different public resolver than the
+        // application/OS originally targeted. Do not leak EDNS Client Subnet (option 8)
+        // or a resolver-specific EDNS COOKIE (option 10) across that privacy boundary.
+        // Also cap oversized advertised EDNS UDP payloads at 1232 bytes to reduce the
+        // chance of large UDP replies/fragmentation across changing mobile paths. The
+        // DO flag and all other structurally valid EDNS options are preserved.
+        byte[] upstreamDns = sanitizeEdnsPrivacy(dns, qEnd, arCount);
 
         byte[] srcIp = Arrays.copyOfRange(packet, 12, 16);
         byte[] dstIp = Arrays.copyOfRange(packet, 16, 20);
-        return new Query(dns, host, srcPort, srcIp, dstIp);
+        return new Query(upstreamDns, host, srcPort, srcIp, dstIp);
+    }
+
+    private static boolean hasUncompressedQuestionName(byte[] dns) {
+        if (dns == null || dns.length < 17) return false;
+        int pos = 12;
+        int guard = 0;
+        while (pos < dns.length && guard++ < 128) {
+            int len = dns[pos] & 0xFF;
+            if (len == 0) return pos + 5 <= dns.length;
+            if ((len & 0xC0) != 0 || len > 63 || pos + 1 + len > dns.length) return false;
+            pos += 1 + len;
+        }
+        return false;
     }
 
     static String extractQueryName(byte[] dns) {
@@ -108,6 +170,176 @@ final class DnsPacket {
         return null;
     }
 
+    /**
+     * Validate bytes after the single DNS question. Plain queries must end exactly at the
+     * question. Modern EDNS queries may carry one OPT pseudo-record (TYPE 41) with a root
+     * owner, EDNS version 0, only defined request flags and a structurally valid generic
+     * option TLV list. Unknown option codes remain allowed; malformed option framing does
+     * not. Any undeclared trailing bytes or other additional RR types are rejected.
+     */
+    private static boolean hasWellFormedQueryTail(byte[] dns, int qEnd, int arCount) {
+        if (dns == null || qEnd < 12 || qEnd > dns.length) return false;
+        if (arCount == 0) return qEnd == dns.length;
+        if (arCount != 1) return false;
+
+        // OPT owner name MUST be the root label. Fixed fields after it are:
+        // TYPE(2), UDP payload size/class(2), extended RCODE(1), version(1), flags(2), RDLEN(2).
+        if (qEnd + 11 > dns.length || dns[qEnd] != 0) return false;
+        if (u16(dns, qEnd + 1) != 41) return false;
+
+        int extendedRcode = dns[qEnd + 5] & 0xFF;
+        int ednsVersion = dns[qEnd + 6] & 0xFF;
+        int ednsFlags = u16(dns, qEnd + 7);
+        // Requests use EDNS(0). The DO bit (0x8000) is the only currently defined
+        // request flag; all remaining Z bits must be zero. Extended RCODE belongs to
+        // responses and must not be smuggled in a query.
+        if (extendedRcode != 0 || ednsVersion != 0 || (ednsFlags & 0x7FFF) != 0) return false;
+
+        int rdLength = u16(dns, qEnd + 9);
+        int optionPos = qEnd + 11;
+        int optionEnd = optionPos + rdLength;
+        if (optionEnd != dns.length) return false;
+
+        // EDNS options are generic CODE(2), LENGTH(2), DATA(LENGTH) TLVs. Keep option
+        // codes opaque for forward compatibility, but reject truncated headers/data.
+        while (optionPos < optionEnd) {
+            if (optionPos + 4 > optionEnd) return false;
+            int optionLength = u16(dns, optionPos + 2);
+            optionPos += 4;
+            if (optionLength > optionEnd - optionPos) return false;
+            optionPos += optionLength;
+        }
+        return optionPos == optionEnd;
+    }
+
+    /**
+     * Remove EDNS options that disclose client network identity or carry state scoped to
+     * another resolver, and cap oversized advertised UDP payloads at the conservative
+     * 1232-byte size used to reduce fragmentation risk on modern Internet paths. Input has
+     * already passed hasWellFormedQueryTail(); unknown options and smaller payload sizes
+     * remain intact for forward compatibility.
+     */
+    private static byte[] sanitizeEdnsPrivacy(byte[] dns, int qEnd, int arCount) {
+        if (dns == null || arCount != 1) return dns;
+        int optionStart = qEnd + 11;
+        int optionEnd = optionStart + u16(dns, qEnd + 9);
+        int advertisedUdpSize = u16(dns, qEnd + 3);
+        boolean clampUdpSize = advertisedUdpSize > MAX_EDNS_UDP_PAYLOAD;
+        int pos = optionStart;
+        int keptBytes = 0;
+        boolean changed = clampUdpSize;
+
+        while (pos < optionEnd) {
+            int code = u16(dns, pos);
+            int optionLength = u16(dns, pos + 2);
+            int totalLength = 4 + optionLength;
+            if (code == EDNS_OPTION_CLIENT_SUBNET || code == EDNS_OPTION_COOKIE) {
+                changed = true;
+            } else {
+                keptBytes += totalLength;
+            }
+            pos += totalLength;
+        }
+        if (!changed) return dns;
+
+        byte[] sanitized = Arrays.copyOf(dns, optionStart + keptBytes);
+        if (clampUdpSize) put16(sanitized, qEnd + 3, MAX_EDNS_UDP_PAYLOAD);
+        put16(sanitized, qEnd + 9, keptBytes);
+        int source = optionStart;
+        int dest = optionStart;
+        while (source < optionEnd) {
+            int code = u16(dns, source);
+            int optionLength = u16(dns, source + 2);
+            int totalLength = 4 + optionLength;
+            if (code != EDNS_OPTION_CLIENT_SUBNET && code != EDNS_OPTION_COOKIE) {
+                System.arraycopy(dns, source, sanitized, dest, totalLength);
+                dest += totalLength;
+            }
+            source += totalLength;
+        }
+        return sanitized;
+    }
+
+    /**
+     * Accept an upstream DNS reply only when it is a real standard response to the exact
+     * single question we forwarded. This is intentionally stricter than checking only the
+     * transaction id: mismatched question names/types/classes, query-shaped packets and
+     * structurally incomplete answer/authority/additional sections are rejected before
+     * they can be written back into the VPN tunnel.
+     */
+    static boolean isValidUpstreamResponse(byte[] query, byte[] response, int responseLength) {
+        if (query == null || response == null || query.length < 17 || responseLength < 17 || responseLength > response.length) {
+            return false;
+        }
+        if (query[0] != response[0] || query[1] != response[1]) return false;
+
+        int queryFlags = u16(query, 2);
+        int responseFlags = u16(response, 2);
+        if ((queryFlags & 0x8000) != 0 || (queryFlags & 0x7800) != 0) return false;
+        if ((responseFlags & 0x8000) == 0 || (responseFlags & 0x7800) != 0) return false;
+        // A truncated UDP reply is not a complete answer. Passing TC=1 back into the
+        // local DNS-only VPN can trigger retries that this UDP tunnel does not service
+        // and can create unreliable fallback behavior. Treat it as an upstream failure
+        // so the resolver pool can try another server instead.
+        if ((responseFlags & 0x0200) != 0) return false;
+        if (u16(query, 4) != 1 || u16(response, 4) != 1) return false;
+
+        byte[] trimmed = responseLength == response.length ? response : Arrays.copyOf(response, responseLength);
+        String queryName = extractQueryName(query);
+        String responseName = extractQueryName(trimmed);
+        if (queryName == null || responseName == null || !queryName.equals(responseName)) return false;
+
+        int queryEnd = questionEnd(query);
+        int responseEnd = questionEnd(trimmed);
+        if (queryEnd < 4 || responseEnd < 4) return false;
+        if (u16(query, queryEnd - 4) != u16(trimmed, responseEnd - 4)
+                || u16(query, queryEnd - 2) != u16(trimmed, responseEnd - 2)) {
+            return false;
+        }
+        return hasWellFormedResponseSections(trimmed, responseEnd);
+    }
+
+    /**
+     * Validate the framing of every declared resource record without interpreting its
+     * payload. A response that claims records which are not fully present, uses an
+     * impossible/forward owner-name pointer, carries an excessive record count, or leaves
+     * undeclared trailing bytes is treated as malformed. This keeps parser work bounded
+     * and prevents ambiguous partial replies from entering the local tunnel.
+     */
+    private static boolean hasWellFormedResponseSections(byte[] dns, int pos) {
+        if (dns == null || pos < 12 || pos > dns.length) return false;
+        long total = (long)u16(dns, 6) + u16(dns, 8) + u16(dns, 10);
+        if (total > MAX_RESPONSE_RR_COUNT) return false;
+
+        for (long i = 0; i < total; i++) {
+            int next = skipResourceName(dns, pos);
+            if (next < 0 || next + 10 > dns.length) return false;
+            int rdLength = u16(dns, next + 8);
+            pos = next + 10;
+            if (rdLength > dns.length - pos) return false;
+            pos += rdLength;
+        }
+        return pos == dns.length;
+    }
+
+    /** Skip an RR owner name. Compression pointers must point backwards into this message. */
+    private static int skipResourceName(byte[] dns, int pos) {
+        int guard = 0;
+        while (pos < dns.length && guard++ < 128) {
+            int len = dns[pos] & 0xFF;
+            if (len == 0) return pos + 1;
+            if ((len & 0xC0) == 0xC0) {
+                if (pos + 1 >= dns.length) return -1;
+                int pointer = ((len & 0x3F) << 8) | (dns[pos + 1] & 0xFF);
+                if (pointer < 12 || pointer >= pos || pointer >= dns.length) return -1;
+                return pos + 2;
+            }
+            if ((len & 0xC0) != 0 || len > 63 || pos + 1 + len > dns.length) return -1;
+            pos += 1 + len;
+        }
+        return -1;
+    }
+
     static byte[] nxdomain(byte[] query) { return errorResponse(query, 3); }
     static byte[] servfail(byte[] query) { return errorResponse(query, 2); }
 
@@ -157,12 +389,60 @@ final class DnsPacket {
         put16(out, 10, ipv4Checksum(out, 0, 20));
 
         int udp = 20;
+        int udpLen = 8 + dnsResponse.length;
         put16(out, udp, DNS_PORT);
         put16(out, udp + 2, query.sourcePort);
-        put16(out, udp + 4, 8 + dnsResponse.length);
+        put16(out, udp + 4, udpLen);
         put16(out, udp + 6, 0);
         System.arraycopy(dnsResponse, 0, out, udp + 8, dnsResponse.length);
+
+        // IPv4 permits a zero UDP checksum, but the local VPN can cheaply provide end-to-end
+        // integrity for every synthesized DNS reply. Compute the checksum over the IPv4
+        // pseudo-header and complete UDP datagram after the payload is in place. RFC 768
+        // represents a computed zero checksum on the wire as 0xFFFF; literal zero means
+        // "checksum not supplied" and is intentionally avoided here.
+        int udpChecksum = udpIpv4Checksum(out, udp, udpLen);
+        put16(out, udp + 6, udpChecksum == 0 ? 0xFFFF : udpChecksum);
         return out;
+    }
+
+    private static int udpIpv4Checksum(byte[] packet, int udpOffset, int udpLen) {
+        long sum = 0;
+        // IPv4 pseudo-header: source + destination addresses, zero/protocol and UDP length.
+        sum = addWords(sum, packet, 12, 8);
+        sum += packet[9] & 0xFF;
+        sum += udpLen & 0xFFFF;
+        sum = fold(sum);
+
+        int end = udpOffset + udpLen;
+        int i = udpOffset;
+        while (i + 1 < end) {
+            sum += ((packet[i] & 0xFF) << 8) | (packet[i + 1] & 0xFF);
+            sum = fold(sum);
+            i += 2;
+        }
+        if (i < end) {
+            sum += (packet[i] & 0xFF) << 8;
+            sum = fold(sum);
+        }
+        return (int) (~fold(sum)) & 0xFFFF;
+    }
+
+    private static long addWords(long sum, byte[] data, int off, int len) {
+        int end = off + len;
+        int i = off;
+        while (i + 1 < end) {
+            sum += ((data[i] & 0xFF) << 8) | (data[i + 1] & 0xFF);
+            sum = fold(sum);
+            i += 2;
+        }
+        if (i < end) sum += (data[i] & 0xFF) << 8;
+        return fold(sum);
+    }
+
+    private static long fold(long sum) {
+        while ((sum >> 16) != 0) sum = (sum & 0xFFFF) + (sum >> 16);
+        return sum;
     }
 
     private static int ipv4Checksum(byte[] data, int off, int len) {

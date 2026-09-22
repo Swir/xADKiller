@@ -1,0 +1,43 @@
+name: xADKiller Android active DNS probe contract
+
+on:
+  push:
+    branches: [ android-v160-mega ]
+    paths:
+      - "tools/android-v160-active-dns-probe.py"
+      - "ci/test_android_active_dns_probe.py"
+      - "ANDROID_V160_ROADMAP.md"
+      - ".github/workflows/android-active-dns-probe-contract.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: xadkiller-android-active-dns-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Python 3
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: SWIR progress SVG consistency
+        run: python3 ci/progress_svg.py android --check
+      - name: Active DNS probe unit contract
+        run: python3 ci/test_android_active_dns_probe.py
+      - name: Syntax
+        run: python3 -m py_compile tools/android-v160-active-dns-probe.py ci/test_android_active_dns_probe.py
+      - name: Privacy and safety contract
+        run: |
+          grep -q 'device_serial_sha256_16' tools/android-v160-active-dns-probe.py
+          grep -q 'release_gate_closed.*False' tools/android-v160-active-dns-probe.py
+          ! grep -Eq 'requests\.|urllib\.|http://|https://' tools/android-v160-active-dns-probe.py
+          ! grep -q '"device_serial":' tools/android-v160-active-dns-probe.py
+          echo "Android active DNS physical-probe privacy contract: PASS"

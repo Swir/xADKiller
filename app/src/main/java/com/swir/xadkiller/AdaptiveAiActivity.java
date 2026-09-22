@@ -9,7 +9,6 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -43,7 +42,7 @@ public class AdaptiveAiActivity extends Activity {
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(18),dp(18),dp(18),dp(30));scroll.addView(root,new ScrollView.LayoutParams(-1,-2));
 
         TextView title=tv("ADAPTIVE AI LAB",27,text,true);title.setLetterSpacing(.07f);root.addView(title);
-        root.addView(tv("xADKiller v1.5.0 • Local + Community + Benchmark Learning",12,blue,true));
+        root.addView(tv("xADKiller v1.6.0-dev • Local + Community + Benchmark Learning",12,blue,true));
         root.addView(tv(I18n.languageStatus(this),10,muted,false));space(root,12);
 
         LinearLayout intro=card(surface,18);root.addView(intro,lpWrap());
@@ -58,7 +57,7 @@ public class AdaptiveAiActivity extends Activity {
         Switch auto=new Switch(this);auto.setText(I18n.t(this,"Ucz się lekko po udanym Auto-Skip"));auto.setTextColor(text);auto.setChecked(prefs.getBoolean(AdaptiveLearningEngine.KEY_AUTO_LEARN,true));
         auto.setOnCheckedChangeListener((x,on)->{prefs.edit().putBoolean(AdaptiveLearningEngine.KEY_AUTO_LEARN,on).apply();SystemLogStore.info(this,"AI_MODEL","Auto-learning po Skip-Ad: "+on);});controls.addView(auto,lpWrap());
         space(controls,7);
-        Button access=button("USTAWIENIA SMART ENGINE",surface2,text);access.setOnClickListener(v->{try{startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));}catch(Exception e){SystemLogStore.error(this,"AI_UI","Nie udało się otworzyć Accessibility",e);}});controls.addView(access,lpH(48));space(root,10);
+        Button access=button("USTAWIENIA SMART ENGINE",surface2,text);access.setOnClickListener(v->SmartEngineAccessGuide.open(this));controls.addView(access,lpH(48));space(root,10);
 
         LinearLayout model=card(surface,18);root.addView(model,lpWrap());model.addView(tv("MODEL LOKALNY",15,text,true));
         modelStats=tv("",13,text,false);model.addView(modelStats);space(model,5);lastObservation=tv("",12,muted,false);model.addView(lastObservation);space(model,10);
