@@ -8,7 +8,7 @@ const readJson = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
 
 const manifest = readJson(path.join(base, "manifest.json"));
 if (manifest.manifest_version !== 3) fail("manifest_version must be 3");
-if (manifest.version !== "1.4.0") fail(`unexpected version ${manifest.version}`);
+if (manifest.version !== "1.5.0") fail(`unexpected v1.5 development version ${manifest.version}`);
 if (Number(manifest.minimum_chrome_version) < 121) fail("minimum Chrome must be >=121");
 for (const p of ["storage","alarms","declarativeNetRequest","activeTab"]) {
   if (!manifest.permissions?.includes(p)) fail(`missing permission ${p}`);
@@ -148,4 +148,4 @@ for (const rel of ["service-worker.js","background.js","live-signatures.js","tit
   if (/importScripts\s*\(\s*["']https?:/i.test(code)) fail(`${rel}: remote hosted code forbidden`);
 }
 
-if (!process.exitCode) console.log(`OK: xADKiller TITAN v1.4.0 store build validated: ${standard} STANDARD block + ${ultra} ULTRA block, PL/EN only with persistent language switch, no active COMPAT allow ruleset, no declarativeNetRequestFeedback permission, ${intel.length} consensus dynamic domains, ${session.length} session rules${dormantCompat ? `, ${dormantCompat} dormant COMPAT source rules not referenced` : ""}`);
+if (!process.exitCode) console.log(`OK: xADKiller Chrome v1.5.0 development package validated: ${standard} STANDARD block + ${ultra} ULTRA block, PL/EN only with persistent language switch, no active COMPAT allow ruleset, no declarativeNetRequestFeedback permission, ${intel.length} consensus dynamic domains, ${session.length} session rules${dormantCompat ? `, ${dormantCompat} dormant COMPAT source rules not referenced` : ""}`);

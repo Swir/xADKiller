@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "channel": "protection-feed-v2",
+  "published_ref": "protection-feed-v2",
+  "published_commit": "0930f563b4a4bfdef67885988485bfa8c7646784",
+  "publication_mode": "parallel-data-only-v2",
+  "legacy_schema_v1_unchanged": true,
+  "remote_executable_code": false,
+  "purpose": "Published side-by-side schema-v2 protection-data channel for xADKiller Chrome v1.5 hardening. Stable schema-v1 endpoints remain unchanged for the current store/main consumer until the manual beta and release gates are complete.",
+  "feeds": [
+    {
+      "id": "live-shield",
+      "path": "browser-intelligence/v2/xadkiller-live-shield.json",
+      "feed_version": "2026.09.18.1",
+      "expires_at": "2026-10-18T01:30:00Z",
+      "git_blob_sha1": "1e2931556cd6d888fd50da92d04266512a213fc7",
+      "bytes": 3771,
+      "rollback": {
+        "previous_version": "2026.09.13.1",
+        "previous_ref": "live-shield-feed/browser-intelligence/xadkiller-live-shield.json"
+      }
+    },
+    {
+      "id": "live-matrix",
+      "path": "browser-intelligence/v2/xadkiller-live-matrix.json",
+      "feed_version": "2026.09.18.1",
+      "expires_at": "2026-10-18T01:30:00Z",
+      "git_blob_sha1": "a10298b6d9004f0466bee6d601efce77d1a439a8",
+      "bytes": 10292,
+      "rollback": {
+        "previous_version": "2026.09.13.2",
+        "previous_ref": "main/browser-intelligence/xadkiller-live-shield.json"
+      }
+    },
+    {
+      "id": "titan",
+      "path": "browser-intelligence/v2/xadkiller-titan-feed.json",
+      "feed_version": "2026.09.18.1",
+      "expires_at": "2026-10-18T01:30:00Z",
+      "git_blob_sha1": "ea60aa6a868b65b05f1554b89a5db3fa12d50214",
+      "bytes": 2085,
+      "rollback": {
+        "previous_version": "2026.09.13.1",
+        "previous_ref": "main/browser-intelligence/xadkiller-titan-feed.json"
+      }
+    }
+  ]
+}

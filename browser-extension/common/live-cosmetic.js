@@ -2,6 +2,7 @@
   if (globalThis.__xadLiveCosmeticMatrix) return;
   globalThis.__xadLiveCosmeticMatrix = true;
 
+  const RECOVERY_KEY = "xadHeuristicRecoverySitesV1";
   let styleEl = null;
 
   function normalizeHost(value) {
@@ -13,6 +14,16 @@
     return (allowSites || []).some((entry) => {
       const d = normalizeHost(entry);
       return d && (host === d || host.endsWith("." + d));
+    });
+  }
+
+  function recoveryActive(host, map, now = Date.now()) {
+    host = normalizeHost(host);
+    if (!host || !map || typeof map !== "object") return false;
+    return Object.entries(map).some(([entry, rawUntil]) => {
+      const d = normalizeHost(entry);
+      const until = Number(rawUntil || 0);
+      return d && Number.isFinite(until) && until > now && (host === d || host.endsWith("." + d));
     });
   }
 
@@ -37,11 +48,14 @@
       enabled:true,
       mode:"standard",
       allowSites:[],
+      [RECOVERY_KEY]:{},
       xadLiveCosmeticStandard:[],
       xadLiveCosmeticUltra:[]
     }, (prefs) => {
       const el = ensureStyle();
-      const enabled = prefs.enabled !== false && !siteAllowed(location.hostname, Array.isArray(prefs.allowSites) ? prefs.allowSites : []);
+      const enabled = prefs.enabled !== false
+        && !siteAllowed(location.hostname, Array.isArray(prefs.allowSites) ? prefs.allowSites : [])
+        && !recoveryActive(location.hostname, prefs[RECOVERY_KEY]);
       if (!enabled) {
         el.textContent = "";
         el.disabled = true;
@@ -58,7 +72,7 @@
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    if (changes.enabled || changes.mode || changes.allowSites || changes.xadLiveCosmeticStandard || changes.xadLiveCosmeticUltra) apply();
+    if (changes.enabled || changes.mode || changes.allowSites || changes[RECOVERY_KEY] || changes.xadLiveCosmeticStandard || changes.xadLiveCosmeticUltra) apply();
   });
 
   const begin = () => {

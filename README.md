@@ -6,7 +6,7 @@
 
 ### Android APK + Chrome Manifest V3 protection by SWIR
 
-![Chrome Stable](https://img.shields.io/badge/Chrome_stable-v1.4.0-02050A?style=for-the-badge&logo=googlechrome&logoColor=62E5FF)
+![Chrome Stable](https://img.shields.io/badge/Chrome_stable-v1.5.0-02050A?style=for-the-badge&logo=googlechrome&logoColor=62E5FF)
 ![Android Stable](https://img.shields.io/badge/Android_stable-v1.5.1-02050A?style=for-the-badge&logo=android&logoColor=62E5FF)
 ![Chrome Dev](https://img.shields.io/badge/Chrome_dev-v1.5.0-07111C?style=for-the-badge)
 ![Android Dev](https://img.shields.io/badge/Android_dev-v1.6.0-07111C?style=for-the-badge)
@@ -19,19 +19,19 @@
 
 `main` remains the stable/public baseline. Active Android and Chrome development is intentionally isolated on dedicated branches and open PRs so store/release code is not overwritten by unfinished work.
 
-### Chrome — v1.5.0 development
+### Chrome — v1.5.0 complete
 
 <img width="100%" src="assets/readme/chrome/progress-card.svg" alt="xADKiller Chrome v1.5.0 development progress" />
 
 | Item | Status |
 |---|---|
-| Stable public release | **chrome-v1.4.0 — TITAN** |
+| Stable public GitHub release | **chrome-v1.5.0 — Adaptive Memory & Stability** |
 | Development branch | [`chrome-v150-adaptive-memory`](https://github.com/Swir/xADKiller/tree/chrome-v150-adaptive-memory) |
 | Open PR | [#5 — Chrome v150 adaptive memory](https://github.com/Swir/xADKiller/pull/5) |
-| Verified development progress | **23/26 = 88.5%** |
-| Latest validated snapshot before main sync | `474f78837271b5916354ab42cce89710206b50f4` |
-| Exact-head CI after main sync | **PENDING** |
-| Release readiness | **BLOCKED** — refreshed normal-browsing/manual beta validation + merge/store gates still required |
+| Verified development progress | **27/27 = 100%** |
+| User-validated test snapshot | `444da22624ba5b720741c0c2f2c92e128b9d7f1e` |
+| Exact-head CI | **GREEN — TITAN + normal-browsing-v2 + feed-v2** |
+| Release status | **PUBLISHED** — `chrome-v1.5.0` released on GitHub from the user-tested artifact; Chrome Web Store publication is tracked separately |
 
 ### Android — v1.6.0 development
 
@@ -134,10 +134,10 @@ The progress cards above mirror the verified development-branch roadmap states. 
 
 ## 📦 Releases
 
-- Chrome stable: [`chrome-v1.4.0`](https://github.com/Swir/xADKiller/releases/tag/chrome-v1.4.0)
+- Chrome stable: [`chrome-v1.5.0`](https://github.com/Swir/xADKiller/releases/tag/chrome-v1.5.0) — published and SHA-256 verified
 - Android stable: [`v1.5.1`](https://github.com/Swir/xADKiller/releases/tag/v1.5.1)
 
-A green CI run alone does not justify merging development code or publishing a Release.
+Chrome v1.5.0 development is **100% complete** with green CI and user-confirmed real browsing. GitHub release promotion is approved; Chrome Web Store publication is not claimed until it actually happens.
 
 ## 🔎 Search Keywords
 

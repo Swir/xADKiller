@@ -1,0 +1,288 @@
+import fs from "node:fs";
+import path from "node:path";
+import vm from "node:vm";
+
+const root = path.resolve(import.meta.dirname, "..");
+const source = fs.readFileSync(path.join(root, "common", "feed-guard.js"), "utf8");
+const LIVE_SHIELD = "https://raw.githubusercontent.com/Swir/xADKiller/live-shield-feed/browser-intelligence/xadkiller-live-shield.json";
+const LIVE_MATRIX = "https://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-live-shield.json";
+const TITAN = "https://raw.githubusercontent.com/Swir/xADKiller/main/browser-intelligence/xadkiller-titan-feed.json";
+const NOW_ISO = new Date().toISOString();
+const HOUR = 60 * 60 * 1000;
+const MINUS_1H_ISO = new Date(Date.now() - HOUR).toISOString();
+const MINUS_2H_ISO = new Date(Date.now() - 2 * HOUR).toISOString();
+const MINUS_3H_ISO = new Date(Date.now() - 3 * HOUR).toISOString();
+const MINUS_4H_ISO = new Date(Date.now() - 4 * HOUR).toISOString();
+const EXPIRES_7D_ISO = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+function response(data, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers:{ "content-type":"application/json" } });
+}
+
+async function makeGuard(payloadByUrl, seed = {}) {
+  const storage = { ...seed };
+  const listeners = [];
+  const context = {
+    URL,
+    Response,
+    TypeError,
+    Date,
+    console,
+    globalThis:null,
+    chrome:{
+      storage:{
+        local:{
+          get:(defaults, cb) => cb({ ...defaults, ...storage }),
+          set:(values, cb) => { Object.assign(storage, values || {}); if (cb) cb(); }
+        }
+      },
+      runtime:{
+        onMessage:{ addListener:(listener) => listeners.push(listener) }
+      }
+    },
+    fetch:async (input) => {
+      const url = typeof input === "string" ? input : input?.url;
+      if (!(url in payloadByUrl)) return response({ ok:true });
+      const value = payloadByUrl[url];
+      if (value && typeof value === "object" && value.__status) return response(value.body || {}, value.__status);
+      return response(value);
+    }
+  };
+  context.globalThis = context;
+  context.__storage = storage;
+  context.__listeners = listeners;
+  vm.createContext(context);
+  vm.runInContext(source, context, { filename:"feed-guard.js" });
+  return context;
+}
+
+async function expectReject(promise, label, reason = "") {
+  let rejection = "";
+  try { await promise; } catch (error) {
+    rejection = String(error?.message || error);
+  }
+  if (!/xad_feed_guard_/.test(rejection)) throw new Error(`${label} was not rejected`);
+  if (reason && !rejection.includes(`xad_feed_guard_${reason}`)) {
+    throw new Error(`${label} rejected for wrong reason: ${rejection}`);
+  }
+}
+
+function requireFeed(health, kind) {
+  const feed = health?.feeds?.[kind];
+  if (!feed) throw new Error(`missing health for ${kind}`);
+  return feed;
+}
+
+const healthyShield = {
+  schema:1, feed_version:"2026.09.17.1", updated_at:NOW_ISO,
+  standard_domains:Array.from({length:80}, (_,i) => `ads${i}.example.net`),
+  ultra_domains:Array.from({length:60}, (_,i) => `ultra${i}.example.net`)
+};
+const healthyMatrix = {
+  schema:1, feed_version:"2026.09.17.1", updated_at:NOW_ISO,
+  standard_signatures:Array.from({length:20}, (_,i) => ({ filter:`/ad-${i}/`, types:["script"] })),
+  ultra_signatures:Array.from({length:12}, (_,i) => ({ filter:`/ultra-${i}/`, types:["script"] })),
+  standard_cosmetic:Array.from({length:20}, (_,i) => `.ad-${i}`),
+  ultra_cosmetic:Array.from({length:12}, (_,i) => `.ultra-${i}`)
+};
+const healthyTitan = {
+  schema:1, feed_version:"2026.09.17.1", updated_at:NOW_ISO,
+  regex_signatures:[
+    { regex:"adserver", types:["script"] },
+    { regex:"pagead", types:["xmlhttprequest"] },
+    { regex:"prebid", types:["script"] },
+    { regex:"commercial", types:["media"] }
+  ]
+};
+function v2(feed, version = "2026.09.18.1") {
+  return {
+    ...feed,
+    schema:2,
+    feed_version:version,
+    updated_at:NOW_ISO,
+    expires_at:EXPIRES_7D_ISO,
+    rollback:{ previous_version:"2026.09.17.1", previous_ref:"feed-data/2026.09.17.1" }
+  };
+}
+
+{
+  const guard = await makeGuard({ [LIVE_SHIELD]:healthyShield, [LIVE_MATRIX]:healthyMatrix, [TITAN]:healthyTitan });
+  await guard.fetch(LIVE_SHIELD);
+  await guard.fetch(LIVE_MATRIX);
+  await guard.fetch(TITAN);
+  const health = await guard.XAD_FEED_GUARD.readHealth();
+  for (const kind of ["live-shield", "live-matrix", "titan"]) {
+    const feed = requireFeed(health, kind);
+    if (feed.successCount !== 1 || feed.failureCount !== 0 || feed.consecutiveFailures !== 0) {
+      throw new Error(`bad successful health counters for ${kind}: ${JSON.stringify(feed)}`);
+    }
+    if (feed.lastVersion !== "2026.09.17.1" || feed.lastSchema !== 1 || !feed.lastSuccessAt || feed.lastError) {
+      throw new Error(`bad successful health metadata for ${kind}: ${JSON.stringify(feed)}`);
+    }
+    if (!feed.lastFeedUpdatedAt || feed.highestFeedUpdatedAt !== feed.lastFeedUpdatedAt || feed.highestFeedSchema !== 1) {
+      throw new Error(`feed high-water metadata missing for ${kind}: ${JSON.stringify(feed)}`);
+    }
+  }
+  if (guard.__listeners.length !== 1) throw new Error("getFeedGuardHealth runtime listener missing");
+}
+
+{
+  const guard = await makeGuard({ [LIVE_SHIELD]:v2(healthyShield), [LIVE_MATRIX]:v2(healthyMatrix), [TITAN]:v2(healthyTitan) });
+  await guard.fetch(LIVE_SHIELD);
+  await guard.fetch(LIVE_MATRIX);
+  await guard.fetch(TITAN);
+  const health = await guard.XAD_FEED_GUARD.readHealth();
+  for (const kind of ["live-shield", "live-matrix", "titan"]) {
+    const feed = requireFeed(health, kind);
+    if (feed.lastSchema !== 2 || feed.lastVersion !== "2026.09.18.1" || feed.failureCount !== 0) {
+      throw new Error(`v2 contract was not accepted/recorded for ${kind}: ${JSON.stringify(feed)}`);
+    }
+    if (feed.highestFeedSchema !== 2 || feed.rollbackPreviousVersion !== "2026.09.17.1" || !feed.rollbackPreviousRef) {
+      throw new Error(`v2 transition metadata missing for ${kind}: ${JSON.stringify(feed)}`);
+    }
+  }
+}
+
+// Stateful anti-replay / anti-downgrade gate. The highest accepted v2 timestamp
+// remains a high-water mark even after an explicitly authorised rollback.
+{
+  const current = {
+    ...v2(healthyShield, "2026.09.18.9"),
+    updated_at:MINUS_2H_ISO,
+    expires_at:EXPIRES_7D_ISO,
+    rollback:{ previous_version:"2026.09.17.1", previous_ref:"feed-data/2026.09.17.1" }
+  };
+  const payloads = { [LIVE_SHIELD]:current };
+  const guard = await makeGuard(payloads);
+  await guard.fetch(LIVE_SHIELD);
+
+  let feed = requireFeed(await guard.XAD_FEED_GUARD.readHealth(), "live-shield");
+  const highWater = Date.parse(MINUS_2H_ISO);
+  if (feed.highestFeedUpdatedAt !== highWater || feed.highestFeedVersion !== "2026.09.18.9" || feed.highestFeedSchema !== 2) {
+    throw new Error(`v2 high-water mark not recorded: ${JSON.stringify(feed)}`);
+  }
+
+  payloads[LIVE_SHIELD] = { ...current, feed_version:"2026.09.18.10" };
+  await expectReject(guard.fetch(LIVE_SHIELD), "same-timestamp version collision", "version_collision");
+
+  payloads[LIVE_SHIELD] = { ...current, updated_at:MINUS_1H_ISO };
+  await expectReject(guard.fetch(LIVE_SHIELD), "same version reused at newer timestamp", "version_reuse");
+
+  payloads[LIVE_SHIELD] = {
+    ...current,
+    feed_version:"2026.09.18.8",
+    updated_at:MINUS_3H_ISO,
+    rollback:{ previous_version:"2026.09.17.0", previous_ref:"feed-data/2026.09.17.0" }
+  };
+  await expectReject(guard.fetch(LIVE_SHIELD), "older unrelated v2 replay", "replay");
+
+  payloads[LIVE_SHIELD] = { ...healthyShield, feed_version:"2026.09.17.9", updated_at:MINUS_4H_ISO };
+  await expectReject(guard.fetch(LIVE_SHIELD), "unauthorised schema v1 downgrade", "schema_downgrade");
+
+  payloads[LIVE_SHIELD] = { ...healthyShield, feed_version:"2026.09.17.1", updated_at:MINUS_4H_ISO };
+  await guard.fetch(LIVE_SHIELD);
+  await guard.fetch(LIVE_SHIELD); // idempotent re-fetch of the accepted rollback remains valid
+
+  feed = requireFeed(await guard.XAD_FEED_GUARD.readHealth(), "live-shield");
+  if (feed.lastSchema !== 1 || feed.lastVersion !== "2026.09.17.1" || feed.highestFeedUpdatedAt !== highWater || feed.highestFeedSchema !== 2) {
+    throw new Error(`authorised rollback/high-water preservation failed: ${JSON.stringify(feed)}`);
+  }
+  if (feed.rollbackPreviousVersion || feed.rollbackPreviousRef) {
+    throw new Error(`rollback authorisation should clear after schema-v1 rollback: ${JSON.stringify(feed)}`);
+  }
+
+  payloads[LIVE_SHIELD] = { ...healthyShield, feed_version:"2026.09.18.11", updated_at:NOW_ISO };
+  await expectReject(guard.fetch(LIVE_SHIELD), "schema v1 cannot advance past a v2 high-water mark", "schema_downgrade");
+}
+
+{
+  const guard = await makeGuard({ [LIVE_SHIELD]:{ ...healthyShield, schema:3 } });
+  await expectReject(guard.fetch(LIVE_SHIELD), "unsupported schema", "schema");
+  const feed = requireFeed(await guard.XAD_FEED_GUARD.readHealth(), "live-shield");
+  if (feed.failureCount !== 1 || feed.consecutiveFailures !== 1 || feed.lastError !== "schema") {
+    throw new Error(`schema failure was not recorded safely: ${JSON.stringify(feed)}`);
+  }
+}
+
+{
+  const guard = await makeGuard({ [LIVE_SHIELD]:{ ...v2(healthyShield), expires_at:"not-a-date" } });
+  await expectReject(guard.fetch(LIVE_SHIELD), "invalid v2 expiry", "expires_at");
+}
+
+{
+  const expired = new Date(Date.now() - 60_000).toISOString();
+  const updated = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const guard = await makeGuard({ [LIVE_MATRIX]:{ ...v2(healthyMatrix), updated_at:updated, expires_at:expired } });
+  await expectReject(guard.fetch(LIVE_MATRIX), "expired v2 feed", "expired_feed");
+}
+
+{
+  const tooFar = new Date(Date.now() + 61 * 24 * 60 * 60 * 1000).toISOString();
+  const guard = await makeGuard({ [TITAN]:{ ...v2(healthyTitan), expires_at:tooFar } });
+  await expectReject(guard.fetch(TITAN), "overlong v2 lifetime", "expiry_window");
+}
+
+{
+  const guard = await makeGuard({ [LIVE_SHIELD]:{ ...v2(healthyShield), rollback:{ previous_version:"2026.09.17.1", previous_ref:"https://evil.example/payload.js" } } });
+  await expectReject(guard.fetch(LIVE_SHIELD), "remote rollback URL", "rollback_ref");
+}
+
+{
+  const same = v2(healthyShield);
+  same.rollback = { previous_version:same.feed_version, previous_ref:"feed-data/current" };
+  const guard = await makeGuard({ [LIVE_SHIELD]:same });
+  await expectReject(guard.fetch(LIVE_SHIELD), "same-version rollback", "rollback_same_version");
+}
+
+{
+  const guard = await makeGuard({ [LIVE_SHIELD]:{ ...healthyShield, updated_at:"not-a-date" } });
+  await expectReject(guard.fetch(LIVE_SHIELD), "invalid feed timestamp", "updated_at");
+}
+
+{
+  const stale = new Date(Date.now() - 46 * 24 * 60 * 60 * 1000).toISOString();
+  const guard = await makeGuard({ [LIVE_MATRIX]:{ ...healthyMatrix, updated_at:stale } });
+  await expectReject(guard.fetch(LIVE_MATRIX), "stale matrix feed", "stale_feed");
+  const feed = requireFeed(await guard.XAD_FEED_GUARD.readHealth(), "live-matrix");
+  if (feed.lastError !== "stale_feed") throw new Error(`stale feed health missing: ${JSON.stringify(feed)}`);
+}
+
+{
+  const future = new Date(Date.now() + 25 * 60 * 60 * 1000).toISOString();
+  const guard = await makeGuard({ [TITAN]:{ ...healthyTitan, updated_at:future } });
+  await expectReject(guard.fetch(TITAN), "future TITAN feed", "future_feed");
+}
+
+{
+  const guard = await makeGuard({ [LIVE_MATRIX]:{ ...healthyMatrix, standard_signatures:healthyMatrix.standard_signatures.slice(0, 7) } });
+  await expectReject(guard.fetch(LIVE_MATRIX), "undersized matrix");
+}
+
+{
+  const guard = await makeGuard({ [TITAN]:{ ...healthyTitan, regex_signatures:[healthyTitan.regex_signatures[0]] } });
+  await expectReject(guard.fetch(TITAN), "undersized titan feed");
+}
+
+{
+  const guard = await makeGuard({ [LIVE_SHIELD]:{ ...healthyShield, standard_domains:healthyShield.standard_domains.slice(0, 24) } }, {
+    liveStandardDomains:Array.from({length:100}, (_,i) => `old${i}.example.net`)
+  });
+  await expectReject(guard.fetch(LIVE_SHIELD), "suspicious live shield shrink");
+}
+
+{
+  const guard = await makeGuard({ [TITAN]:{ ...healthyTitan, regex_signatures:healthyTitan.regex_signatures.slice(0, 2) } }, {
+    xadTitanFeed:{ regex:Array.from({length:10}, (_,i) => ({ regex:`old${i}` })) }
+  });
+  await expectReject(guard.fetch(TITAN), "suspicious titan shrink");
+}
+
+{
+  const guard = await makeGuard({ [LIVE_SHIELD]:{ __status:503, body:{ error:"temporary" } } });
+  const result = await guard.fetch(LIVE_SHIELD);
+  if (result.status !== 503) throw new Error("HTTP status was unexpectedly changed by Feed Guard");
+  const feed = requireFeed(await guard.XAD_FEED_GUARD.readHealth(), "live-shield");
+  if (feed.failureCount !== 1 || feed.lastError !== "http_503") throw new Error(`HTTP failure health missing: ${JSON.stringify(feed)}`);
+}
+
+console.log("[xADKiller FEED GUARD CI] PASS • schema v1/v2 + expiry/rollback + anti-replay/downgrade high-water + age/anti-shrink + local health counters verified");
