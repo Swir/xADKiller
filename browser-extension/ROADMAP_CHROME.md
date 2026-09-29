@@ -12,7 +12,7 @@ Status: **development complete / release promotion** on `chrome-v150-adaptive-me
 
 <img width="100%" src="../assets/readme/chrome/progress-mini.svg" alt="xADKiller Chrome v1.5.0 roadmap progress" />
 
-**Development progress:** **100% — 25/25 engineering + manual acceptance items verified.**  
+**Development progress:** **100% — 27/27 engineering + manual acceptance items verified.**  
 **Release readiness:** **READY FOR GITHUB RELEASE** — refreshed normal-browsing/manual beta validation was confirmed by the user on 2026-09-29 and merge approval was explicitly granted. Chrome Web Store publication remains a separate external distribution step and is not claimed here.
 
 ### Phase 1 — Adaptive Memory
