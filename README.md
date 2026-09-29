@@ -28,7 +28,7 @@
 | GitHub release target | **chrome-v1.5.0 — Adaptive Memory & Stability** |
 | Development branch | [`chrome-v150-adaptive-memory`](https://github.com/Swir/xADKiller/tree/chrome-v150-adaptive-memory) |
 | Open PR | [#5 — Chrome v150 adaptive memory](https://github.com/Swir/xADKiller/pull/5) |
-| Verified development progress | **25/25 = 100%** |
+| Verified development progress | **27/27 = 100%** |
 | User-validated test snapshot | `444da22624ba5b720741c0c2f2c92e128b9d7f1e` |
 | Exact-head CI | **GREEN — TITAN + normal-browsing-v2 + feed-v2** |
 | Release readiness | **READY FOR GITHUB RELEASE** — user confirmed normal browsing works great on 2026-09-29 and approved merge/release; Chrome Web Store publication is tracked separately |
