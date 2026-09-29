@@ -1,0 +1,92 @@
+name: Publish xADKiller Chrome v1.5.0
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/release-chrome-v1.5.0.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release target
+        uses: actions/checkout@v4
+
+      - name: Download exact user-tested CI artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: '11040686151'
+          TESTED_SOURCE_SHA: '444da22624ba5b720741c0c2f2c92e128b9d7f1e'
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" > /tmp/xad-artifact.zip
+          unzip -q /tmp/xad-artifact.zip -d release
+          test -f release/xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip
+          test -f release/SHA256SUMS.txt
+          grep -F "a0b29bb61c4b579497c2ac41bce1e35c8d0a550f43d477ba2608b43eef2a817f  xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip" release/SHA256SUMS.txt
+          (cd release && sha256sum -c SHA256SUMS.txt)
+          unzip -tq release/xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip
+          printf 'Tested source: %s\n' "$TESTED_SOURCE_SHA"
+
+      - name: Verify Manifest V3 release metadata
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/xad-store
+          mkdir -p /tmp/xad-store
+          unzip -q release/xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip -d /tmp/xad-store
+          node - <<'NODE'
+          const fs = require('fs');
+          const m = JSON.parse(fs.readFileSync('/tmp/xad-store/manifest.json','utf8'));
+          if (m.manifest_version !== 3) throw new Error('Expected Manifest V3');
+          if (m.version !== '1.5.0') throw new Error('Expected version 1.5.0');
+          if (m.permissions?.includes('declarativeNetRequestFeedback')) throw new Error('Debug feedback permission present');
+          console.log('Release manifest OK:', m.version);
+          NODE
+
+      - name: Release notes
+        run: |
+          cat > release/RELEASE_NOTES.md <<'EOF'
+          # xADKiller Chrome v1.5.0 — Adaptive Memory & Stability
+
+          Stable GitHub release of the Chrome/Chromium Manifest V3 line.
+
+          ## Highlights
+          - Adaptive Memory with bounded local persistence and 21-day TTL.
+          - Breakage Guard and recovery controls.
+          - STANDARD / ULTRA / TITAN protection layers.
+          - Hardened data-only Live Shield / Live Matrix / TITAN feed handling.
+          - Feed provenance, expiry, checksum, rollback and anti-replay protections.
+          - PL/EN diagnostics and release metadata aligned to v1.5.0.
+          - No remote executable code in protection feeds.
+
+          ## Validation
+          - Exact-head Chrome CI was green for TITAN, normal-browsing-v2 witness and feed-v2 production contract.
+          - The attached ZIP is the exact CI artifact manually tested by the project owner on 2026-09-29 and confirmed working great.
+          - SHA-256 is verified before release publication.
+
+          ## Chrome Web Store
+          GitHub release completion does not claim Chrome Web Store publication or Google review. Store distribution is tracked separately.
+          EOF
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: chrome-v1.5.0
+          TARGET: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cp release/xADKiller-Chrome-v1.5.0-dev-Adaptive-Memory.zip release/xADKiller-Chrome-v1.5.0.zip
+          sha256sum release/xADKiller-Chrome-v1.5.0.zip > release/xADKiller-Chrome-v1.5.0.zip.sha256
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/xADKiller-Chrome-v1.5.0.zip release/xADKiller-Chrome-v1.5.0.zip.sha256 --clobber
+            gh release edit "$TAG" --title "xADKiller Chrome v1.5.0 — Adaptive Memory & Stability" --notes-file release/RELEASE_NOTES.md
+          else
+            gh release create "$TAG"               release/xADKiller-Chrome-v1.5.0.zip               release/xADKiller-Chrome-v1.5.0.zip.sha256               --target "$TARGET"               --title "xADKiller Chrome v1.5.0 — Adaptive Memory & Stability"               --notes-file release/RELEASE_NOTES.md
+          fi

@@ -1,0 +1,55 @@
+name: xADKiller Chrome v1.5 qualification contract
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ chrome-v150-adaptive-memory ]
+    paths:
+      - "browser-extension/tools/chrome-v150-qualification.mjs"
+      - "browser-extension/tools/validate-normal-browsing-v2-witness.mjs"
+      - "browser-extension/package.json"
+      - ".github/workflows/chrome-v150-qualification-contract.yml"
+
+concurrency:
+  group: xadkiller-chrome-v150-qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  qualification-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Node 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Syntax and package metadata
+        run: |
+          node --check browser-extension/tools/chrome-v150-qualification.mjs
+          node --check browser-extension/tools/validate-normal-browsing-v2-witness.mjs
+          node -e 'const p=require("./browser-extension/package.json"); if(!p.scripts?.["qualify:v150"]) process.exit(1)'
+      - name: Qualification gate-set self-test
+        run: node browser-extension/tools/chrome-v150-qualification.mjs --self-test
+      - name: Safety and exact-package contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOL=browser-extension/tools/chrome-v150-qualification.mjs
+          grep -q 'validate-normal-browsing-v2-witness.mjs' "$TOOL"
+          grep -q 'expectedPackageSha256' "$TOOL"
+          grep -q 'checkout commit mismatch' "$TOOL"
+          grep -q 'test:benchmark' "$TOOL"
+          grep -q 'test:real-page' "$TOOL"
+          grep -q 'test:shadow-soak' "$TOOL"
+          grep -q 'test:performance' "$TOOL"
+          grep -q 'test:feeds' "$TOOL"
+          grep -q 'release_gate_closed: false' "$TOOL"
+          grep -q 'Manifest V3' "$TOOL"
+          grep -q 'symlink is not allowed' "$TOOL"
+          ! grep -Eq 'https?://|fetch\(|XMLHttpRequest|WebSocket' "$TOOL"
+          echo "Chrome v1.5 qualification remains exact-package, local, pinned-v2-bound and non-authorizing: PASS"

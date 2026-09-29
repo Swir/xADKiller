@@ -67,6 +67,7 @@ const ULTRA_EXTRA_PATTERNS = [
 
 let intelDomainsPromise = null;
 let liveFeedPromise = null;
+let dynamicRebuildQueue = Promise.resolve();
 
 function lastErrorMessage() {
   return chrome.runtime.lastError ? chrome.runtime.lastError.message : "";
@@ -101,6 +102,15 @@ function storageSet(values) {
 }
 function dynamicRules() {
   return new Promise((resolve) => chrome.declarativeNetRequest.getDynamicRules((rules) => resolve(rules || [])));
+}
+function updateDynamicRulesAsync(removeRuleIds, addRules) {
+  return new Promise((resolve, reject) => {
+    chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules }, () => {
+      const error = lastErrorMessage();
+      if (error) reject(new Error(error));
+      else resolve();
+    });
+  });
 }
 
 async function loadIntelDomains() {
@@ -206,7 +216,13 @@ function applyProtection(enabled, mode, done = () => {}) {
 }
 
 function rebuildDynamicRules(allowSites, customDomains, mode = "standard", enabled = true, done = () => {}) {
-  Promise.all([loadIntelDomains(), loadLiveFeed(false), dynamicRules()]).then(([intelDomains, liveFeed, current]) => {
+  // Multiple lifecycle paths can rebuild the same DNR pool at startup: installation/startup,
+  // a just-finished Live Shield fetch, mode changes and user edits. Chromium applies
+  // updateDynamicRules atomically, but overlapping calls can temporarily count both rule
+  // generations against the dynamic quota. Serialize the complete read/build/write cycle so
+  // each generation removes the actual current xADKiller IDs before adding its replacement.
+  const rebuild = async () => {
+    const [intelDomains, liveFeed, current] = await Promise.all([loadIntelDomains(), loadLiveFeed(false), dynamicRules()]);
     const removeRuleIds = current
       .filter((r) =>
         (r.id >= INTEL_RULE_MIN && r.id <= INTEL_RULE_MAX) ||
@@ -262,9 +278,11 @@ function rebuildDynamicRules(allowSites, customDomains, mode = "standard", enabl
 
     const addRules = [...allowRules, ...blockRules, ...intelRules, ...liveRules, ...coreRules];
     if (addRules.length > 29950) throw new Error(`dynamic_rule_budget_exceeded_${addRules.length}`);
+    await updateDynamicRulesAsync(removeRuleIds, addRules);
+  };
 
-    chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules }, () => done(lastErrorMessage()));
-  }).catch((error) => done(String(error?.message || error)));
+  dynamicRebuildQueue = dynamicRebuildQueue.catch(() => {}).then(rebuild);
+  dynamicRebuildQueue.then(() => done(""), (error) => done(String(error?.message || error)));
 }
 
 function defaults(callback) {
@@ -314,7 +332,10 @@ function ensureDefaults() {
     chrome.storage.local.set(normalized);
     createLiveAlarm();
     syncProtection(normalized);
-    loadLiveFeed(false).then(() => syncProtection(normalized));
+    // The feed may finish after the user changes mode/settings. Re-read current prefs before
+    // the refresh rebuild so stale startup STANDARD state can never overwrite a newer ULTRA
+    // generation (or vice versa).
+    loadLiveFeed(false).then(() => defaults((latest) => syncProtection(latest)));
     try { chrome.declarativeNetRequest.setExtensionActionOptions({ displayActionCountAsBadgeText: true }); } catch (_) {}
   });
 }

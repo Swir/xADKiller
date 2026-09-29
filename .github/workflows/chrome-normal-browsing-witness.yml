@@ -1,0 +1,52 @@
+name: xADKiller Chrome normal-browsing witness
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ chrome-v150-adaptive-memory ]
+    paths:
+      - "browser-extension/tools/normal-browsing-beta-witness.mjs"
+      - "browser-extension/tests/normal-browsing-beta-witness.mjs"
+      - "browser-extension/package.json"
+      - ".github/workflows/chrome-normal-browsing-witness.yml"
+
+concurrency:
+  group: xadkiller-chrome-beta-witness-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  witness-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Node 22
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: |
+          node --check browser-extension/tools/normal-browsing-beta-witness.mjs
+          node --check browser-extension/tests/normal-browsing-beta-witness.mjs
+      - name: Privacy provenance and release-gate regression
+        working-directory: browser-extension
+        run: npm run test:beta-witness
+      - name: Witness safety contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOL=browser-extension/tools/normal-browsing-beta-witness.mjs
+          grep -q 'schema: 2' "$TOOL"
+          grep -q 'release_gate_closed: false' "$TOOL"
+          grep -q 'manual_beta_review_ready' "$TOOL"
+          grep -q 'source_commit' "$TOOL"
+          grep -q 'package_sha256' "$TOOL"
+          grep -q 'hostnames: "sha256-prefix-16"' "$TOOL"
+          grep -q 'urls: "omitted"' "$TOOL"
+          grep -q 'telemetry: false' "$TOOL"
+          ! grep -Eq 'fetch\(|XMLHttpRequest|WebSocket|https?://' "$TOOL"
+          echo "Chrome normal-browsing witness remains local, provenance-bound, redacted and non-authorizing: PASS"

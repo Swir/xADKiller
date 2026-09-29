@@ -1,0 +1,38 @@
+name: xADKiller Chrome feed-v2 production channel contract
+
+on:
+  push:
+    branches: [ chrome-v150-adaptive-memory ]
+    paths:
+      - "browser-intelligence/feed-v2-production-channel.json"
+      - "browser-extension/tests/feed-v2-production-channel.mjs"
+      - "browser-extension/tools/feed-v2-network-contract.mjs"
+      - ".github/workflows/chrome-feed-v2-production-channel.yml"
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "browser-intelligence/feed-v2-production-channel.json"
+      - "browser-extension/tests/feed-v2-production-channel.mjs"
+      - "browser-extension/tools/feed-v2-network-contract.mjs"
+      - ".github/workflows/chrome-feed-v2-production-channel.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Node 24
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: Verify published schema-v2 channel exact bytes rollback and data-only contract
+        run: node tests/feed-v2-production-channel.mjs

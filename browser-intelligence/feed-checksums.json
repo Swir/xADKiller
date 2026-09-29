@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "algorithm": "git-blob-sha1",
+  "purpose": "Audit exact data-only protection feed payloads used by xADKiller Browser. Runtime logic remains packaged in the extension and does not execute remote code.",
+  "feeds": [
+    {
+      "id": "live-shield",
+      "source_ref": "live-shield-feed",
+      "path": "browser-intelligence/xadkiller-live-shield.json",
+      "feed_version": "2026.09.13.1",
+      "updated_at": "2026-09-13T15:05:00Z",
+      "git_blob_sha1": "2b4d4ff60fb957698f51be3b791883db8f162869"
+    },
+    {
+      "id": "live-matrix",
+      "source_ref": "main",
+      "path": "browser-intelligence/xadkiller-live-shield.json",
+      "feed_version": "2026.09.13.2",
+      "updated_at": "2026-09-13T16:18:00Z",
+      "git_blob_sha1": "cb285128d415efe3792041c369693bb7485982be"
+    },
+    {
+      "id": "titan",
+      "source_ref": "main",
+      "path": "browser-intelligence/xadkiller-titan-feed.json",
+      "feed_version": "2026.09.13.1",
+      "updated_at": "2026-09-13T17:25:00Z",
+      "git_blob_sha1": "651b0df376800885ce1cbed8f3a879ba8dc662a4"
+    }
+  ]
+}

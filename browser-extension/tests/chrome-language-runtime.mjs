@@ -21,7 +21,7 @@ async function findWorker(browser, timeout = 22000) {
       if (!worker) continue;
       try {
         const manifest = await worker.evaluate(() => chrome.runtime.getManifest());
-        if (manifest.version === "1.4.0" && manifest.name.includes("xADKiller")) return worker;
+        if (manifest.version === "1.5.0" && manifest.name.includes("xADKiller")) return worker;
       } catch (_) {}
     }
     await delay(200);
@@ -44,6 +44,18 @@ async function waitLanguage(popup, lang, protection) {
   }, { timeout:12000 }, lang, protection);
 }
 
+async function assertRuleBudget(popup, expectedTitle) {
+  await popup.waitForFunction((title) => {
+    const label = document.querySelector('[data-i18n="ruleBudget"]');
+    const ids = ["ruleBudgetStandard","ruleBudgetUltra","ruleBudgetBoost","ruleBudgetRuntime"];
+    const values = ids.map((id) => document.getElementById(id)?.textContent?.trim() || "");
+    return label?.textContent?.trim() === title && values.every((value) => /^\d[\d\s,.]*$/.test(value));
+  }, { timeout:12000 }, expectedTitle);
+  const values = await popup.$$eval(".budgetGrid b", (nodes) => nodes.map((node) => node.textContent?.trim() || ""));
+  if (values.length !== 4) throw new Error(`rule budget cell count mismatch: ${values.length}`);
+  log("Rule budget UI OK", `${expectedTitle} • ${values.join("/")}`);
+}
+
 let browser = null;
 try {
   browser = await puppeteer.launch({
@@ -64,6 +76,7 @@ try {
 
   await popup.select("#language", "pl");
   await waitLanguage(popup, "pl", "Ochrona");
+  await assertRuleBudget(popup, "Budżet reguł");
   let stored = await worker.evaluate(async () => (await chrome.storage.local.get({ uiLanguage:"" })).uiLanguage);
   if (stored !== "pl") throw new Error(`Polish language preference not stored: ${stored}`);
   log("Polish switch OK", "Ochrona");
@@ -71,10 +84,12 @@ try {
 
   popup = await openPopup(browser, extensionId);
   await waitLanguage(popup, "pl", "Ochrona");
+  await assertRuleBudget(popup, "Budżet reguł");
   log("Polish persistence OK");
 
   await popup.select("#language", "en");
   await waitLanguage(popup, "en", "Protection");
+  await assertRuleBudget(popup, "Rule Budget");
   stored = await worker.evaluate(async () => (await chrome.storage.local.get({ uiLanguage:"" })).uiLanguage);
   if (stored !== "en") throw new Error(`English language preference not stored: ${stored}`);
   log("English switch OK", "Protection");
@@ -82,7 +97,8 @@ try {
 
   popup = await openPopup(browser, extensionId);
   await waitLanguage(popup, "en", "Protection");
-  log("PASS", "PL/EN switching and persistence verified");
+  await assertRuleBudget(popup, "Rule Budget");
+  log("PASS", "PL/EN switching, persistence and rule-budget diagnostics verified");
   await popup.close();
 } finally {
   if (browser) { try { await browser.close(); } catch (_) {} }

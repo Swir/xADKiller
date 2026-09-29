@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>xADKiller — Normal browsing beta review</title>
+  <style>
+    :root{color-scheme:dark;--bg:#02050A;--panel:#07111C;--blue:#0088FF;--cyan:#62E5FF;--text:#F4FAFF;--muted:#8DA8B8;--bad:#ff667a;--good:#68e6a8}
+    *{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,var(--bg),var(--panel));color:var(--text);font:14px/1.45 system-ui,Segoe UI,sans-serif;min-height:100vh}
+    main{max-width:900px;margin:0 auto;padding:28px 18px 48px}h1{margin:0 0 8px;font-size:28px}.lead,.note{color:var(--muted)}
+    .card{margin-top:18px;padding:18px;border:1px solid #1b5274;border-radius:18px;background:#07111cdd;box-shadow:0 0 24px #0088ff18}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}@media(max-width:700px){.grid{grid-template-columns:1fr}}
+    label{display:grid;gap:6px;color:var(--muted);font-weight:650}input,select,button{font:inherit}input,select{width:100%;padding:11px 12px;border:1px solid #24465b;border-radius:10px;background:#030b12;color:var(--text)}
+    .checks{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px}.checks label{display:flex;align-items:center;gap:8px;color:var(--text);font-weight:500}.checks input{width:auto}
+    .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}button{border:0;border-radius:11px;padding:11px 15px;font-weight:750;cursor:pointer;background:linear-gradient(90deg,var(--blue),var(--cyan));color:#00111c}button.secondary{background:#102434;color:var(--text);border:1px solid #2a526d}button.danger{background:#2b151b;color:#ffdfe5;border:1px solid #69313d}
+    #status{min-height:22px;margin-top:12px;color:var(--cyan)}#summary,#feedV2Status,#candidateStatus{font-size:15px}.ready{color:var(--good)}.blocked{color:#ffd38c}.bad{color:var(--bad)}
+    code{color:var(--cyan)}.privacy{border-left:3px solid var(--blue);padding-left:12px}.small{font-size:12px}
+  </style>
+</head>
+<body>
+<main>
+  <h1 data-en="Normal browsing beta review" data-pl="Przegląd beta podczas normalnego używania">Normal browsing beta review</h1>
+  <p class="lead" data-en="Development-only helper for the v1.5 manual browsing gate. It never stores full URLs, paths, titles or raw hostnames." data-pl="Narzędzie wyłącznie dla gałęzi rozwojowej do ręcznej bramki v1.5. Nigdy nie zapisuje pełnych URL, ścieżek, tytułów ani surowych nazw hostów.">Development-only helper for the v1.5 manual browsing gate. It never stores full URLs, paths, titles or raw hostnames.</p>
+
+  <section class="card">
+    <div class="grid">
+      <label><span data-en="Host / domain (hashed locally before saving)" data-pl="Host / domena (haszowana lokalnie przed zapisem)">Host / domain (hashed locally before saving)</span><input id="host" autocomplete="off" spellcheck="false" placeholder="example.com"></label>
+      <label><span data-en="Protection mode" data-pl="Tryb ochrony">Protection mode</span><select id="mode"><option value="standard">STANDARD</option><option value="ultra">ULTRA</option></select></label>
+      <label><span data-en="Page type" data-pl="Typ strony">Page type</span><select id="pageType"><option value="news">news</option><option value="video">video</option><option value="shop">shop</option><option value="login">login</option><option value="checkout">checkout</option><option value="search">search</option><option value="social">social</option><option value="other">other</option></select></label>
+      <label><span data-en="Recovery used" data-pl="Użyte recovery">Recovery used</span><select id="recovery"><option value="none">none</option><option value="heuristic_pause">heuristic_pause</option><option value="site_pause">site_pause</option><option value="allowlist">allowlist</option></select></label>
+    </div>
+    <div class="checks">
+      <label><input id="contentOk" type="checkbox" checked><span data-en="Expected content works" data-pl="Oczekiwana treść działa">Expected content works</span></label>
+      <label><input id="blockingObserved" type="checkbox" checked><span data-en="Blocking observed" data-pl="Blokowanie zaobserwowane">Blocking observed</span></label>
+      <label><input id="breakage" type="checkbox"><span data-en="Breakage observed" data-pl="Zaobserwowano uszkodzenie strony">Breakage observed</span></label>
+    </div>
+    <div class="actions"><button id="add" data-en="Add observation" data-pl="Dodaj obserwację">Add observation</button></div>
+    <div id="status" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="card">
+    <h2 data-en="Pinned v2 feed beta" data-pl="Beta przypiętych feedów v2">Pinned v2 feed beta</h2>
+    <p class="note" data-en="Optional development-only channel: for at most 6 hours, production feed requests are locally redirected to the exact commit-pinned schema-v2 JSON candidates. Any transport failure falls back to the normal schema-v1 production route." data-pl="Opcjonalny kanał wyłącznie rozwojowy: maksymalnie przez 6 godzin żądania feedów są lokalnie kierowane do kandydatów JSON schema-v2 przypiętych do dokładnego commita. Każdy błąd transportu wraca do normalnej produkcyjnej ścieżki schema-v1.">Optional development-only channel: for at most 6 hours, production feed requests are locally redirected to the exact commit-pinned schema-v2 JSON candidates. Any transport failure falls back to the normal schema-v1 production route.</p>
+    <div id="feedV2Status"></div>
+    <div class="actions"><button id="feedV2Enable" data-en="Enable pinned v2 for 6 hours" data-pl="Włącz przypięte v2 na 6 godzin">Enable pinned v2 for 6 hours</button><button id="feedV2Disable" class="secondary" data-en="Return to production v1" data-pl="Wróć do produkcyjnego v1">Return to production v1</button></div>
+    <p class="note small" data-en="This switch never publishes feeds and never changes main/store endpoints. It only affects this local development extension profile." data-pl="Ten przełącznik nigdy nie publikuje feedów ani nie zmienia endpointów main/store. Działa tylko w lokalnym profilu rozszerzenia rozwojowego.">This switch never publishes feeds and never changes main/store endpoints. It only affects this local development extension profile.</p>
+  </section>
+
+  <section class="card">
+    <h2 data-en="Tested candidate binding" data-pl="Powiązanie testowanego kandydata">Tested candidate binding</h2>
+    <div class="grid">
+      <label><span data-en="Exact source commit (40 hex)" data-pl="Dokładny commit źródłowy (40 hex)">Exact source commit (40 hex)</span><input id="sourceCommit" autocomplete="off" spellcheck="false" maxlength="40" placeholder="0123456789abcdef..."></label>
+      <label><span data-en="Tested beta ZIP (hashed locally)" data-pl="Testowany ZIP beta (haszowany lokalnie)">Tested beta ZIP (hashed locally)</span><input id="packageFile" type="file" accept=".zip,application/zip"></label>
+    </div>
+    <div id="candidateStatus"></div>
+    <p class="note small" data-en="The ZIP bytes are read only in this page to compute SHA-256 and are never uploaded or stored. Only the digest is exported." data-pl="Bajty ZIP są odczytywane wyłącznie na tej stronie do obliczenia SHA-256 i nigdy nie są wysyłane ani zapisywane. Eksportowany jest tylko skrót.">The ZIP bytes are read only in this page to compute SHA-256 and are never uploaded or stored. Only the digest is exported.</p>
+  </section>
+
+  <section class="card">
+    <h2 data-en="Local evidence" data-pl="Lokalne dowody">Local evidence</h2>
+    <div id="summary"></div>
+    <div class="actions"><button id="export" class="secondary" data-en="Export privacy-safe witness" data-pl="Eksportuj bezpieczny witness">Export privacy-safe witness</button><button id="reset" class="danger" data-en="Reset local evidence" data-pl="Wyczyść lokalne dowody">Reset local evidence</button></div>
+    <p class="note small" data-en="Manual beta review readiness now requires coverage, fresh exact-byte pinned-v2 evidence and a bound source commit + tested ZIP SHA-256. It still cannot close the Release gate by itself." data-pl="Gotowość ręcznego przeglądu beta wymaga teraz pokrycia, świeżego dowodu dokładnych bajtów przypiętych v2 oraz powiązanego commita źródłowego + SHA-256 testowanego ZIP. Nadal nie może sama zamknąć bramki Release.">Manual beta review readiness now requires coverage, fresh exact-byte pinned-v2 evidence and a bound source commit + tested ZIP SHA-256. It still cannot close the Release gate by itself.</p>
+  </section>
+
+  <section class="card privacy">
+    <strong data-en="Privacy contract" data-pl="Kontrakt prywatności">Privacy contract</strong>
+    <p class="note" data-en="Only a 16-hex SHA-256 prefix of the entered hostname plus test flags is stored locally. Feed-v2 evidence contains only feed kind, validation/fallback state, exact-byte integrity digest and pinned source commit. Candidate binding exports only the entered source commit and locally computed ZIP SHA-256. No telemetry, network upload, page URL, path, query, fragment, title or ZIP bytes are retained." data-pl="Lokalnie zapisywany jest wyłącznie 16-znakowy prefiks SHA-256 wpisanego hosta oraz flagi testu. Dowody feed-v2 zawierają tylko typ feedu, stan walidacji/fallback, skrót integralności dokładnych bajtów i przypięty commit źródłowy. Powiązanie kandydata eksportuje tylko wpisany commit i lokalnie obliczone SHA-256 ZIP. Brak telemetrii i wysyłania; nie są zachowywane URL, ścieżka, query, fragment, tytuł ani bajty ZIP.">Only a 16-hex SHA-256 prefix of the entered hostname plus test flags is stored locally. Feed-v2 evidence contains only feed kind, validation/fallback state, exact-byte integrity digest and pinned source commit. Candidate binding exports only the entered source commit and locally computed ZIP SHA-256. No telemetry, network upload, page URL, path, query, fragment, title or ZIP bytes are retained.</p>
+  </section>
+</main>
+<script src="beta-review.js"></script>
+</body>
+</html>

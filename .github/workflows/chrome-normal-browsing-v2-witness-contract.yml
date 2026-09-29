@@ -1,0 +1,38 @@
+name: xADKiller Chrome normal-browsing v2 witness contract
+
+on:
+  push:
+    branches: [chrome-v150-adaptive-memory]
+    paths:
+      - 'browser-extension/tools/validate-normal-browsing-v2-witness.mjs'
+      - 'browser-extension/tests/normal-browsing-v2-witness-validation.mjs'
+      - 'browser-extension/common/beta-review.js'
+      - 'browser-extension/common/feed-v2-beta-channel.js'
+      - '.github/workflows/chrome-normal-browsing-v2-witness-contract.yml'
+  pull_request:
+    paths:
+      - 'browser-extension/tools/validate-normal-browsing-v2-witness.mjs'
+      - 'browser-extension/tests/normal-browsing-v2-witness-validation.mjs'
+      - 'browser-extension/common/beta-review.js'
+      - 'browser-extension/common/feed-v2-beta-channel.js'
+      - '.github/workflows/chrome-normal-browsing-v2-witness-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate privacy-safe pinned-v2 witness gate
+        run: node tests/normal-browsing-v2-witness-validation.mjs
+      - name: Syntax check validator
+        run: node --check tools/validate-normal-browsing-v2-witness.mjs

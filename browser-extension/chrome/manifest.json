@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
   "minimum_chrome_version": "121",
@@ -23,6 +23,10 @@
     "default_icon": {
       "128": "icons/icon128.png"
     }
+  },
+  "options_ui": {
+    "page": "beta-review.html",
+    "open_in_tab": true
   },
   "icons": {
     "128": "icons/icon128.png"
