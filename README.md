@@ -25,13 +25,13 @@
 
 | Item | Status |
 |---|---|
-| GitHub release target | **chrome-v1.5.0 — Adaptive Memory & Stability** |
+| Stable public GitHub release | **chrome-v1.5.0 — Adaptive Memory & Stability** |
 | Development branch | [`chrome-v150-adaptive-memory`](https://github.com/Swir/xADKiller/tree/chrome-v150-adaptive-memory) |
 | Open PR | [#5 — Chrome v150 adaptive memory](https://github.com/Swir/xADKiller/pull/5) |
 | Verified development progress | **27/27 = 100%** |
 | User-validated test snapshot | `444da22624ba5b720741c0c2f2c92e128b9d7f1e` |
 | Exact-head CI | **GREEN — TITAN + normal-browsing-v2 + feed-v2** |
-| Release readiness | **READY FOR GITHUB RELEASE** — user confirmed normal browsing works great on 2026-09-29 and approved merge/release; Chrome Web Store publication is tracked separately |
+| Release status | **PUBLISHED** — `chrome-v1.5.0` released on GitHub from the user-tested artifact; Chrome Web Store publication is tracked separately |
 
 ### Android — v1.6.0 development
 
@@ -134,7 +134,7 @@ The progress cards above mirror the verified development-branch roadmap states. 
 
 ## 📦 Releases
 
-- Chrome stable target: [`chrome-v1.5.0`](https://github.com/Swir/xADKiller/releases/tag/chrome-v1.5.0) — publish/verify after merge
+- Chrome stable: [`chrome-v1.5.0`](https://github.com/Swir/xADKiller/releases/tag/chrome-v1.5.0) — published and SHA-256 verified
 - Android stable: [`v1.5.1`](https://github.com/Swir/xADKiller/releases/tag/v1.5.1)
 
 Chrome v1.5.0 development is **100% complete** with green CI and user-confirmed real browsing. GitHub release promotion is approved; Chrome Web Store publication is not claimed until it actually happens.
