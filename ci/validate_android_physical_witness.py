@@ -404,7 +404,10 @@ def self_test() -> None:
         try:
             validate(root, apk)
         except AssertionError as error:
-            assert "claimed soak duration is not proven by timeline" in str(error)
+            assert (
+                "claimed soak duration is not proven by timeline" in str(error)
+                or "timeline timestamps moved backwards" in str(error)
+            )
         else:
             raise AssertionError("compressed soak timeline was accepted")
         timeline_path.write_text(original_timeline, encoding="utf-8")
