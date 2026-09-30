@@ -22,6 +22,7 @@ RECOVERY = {"none", "allowlist", "reload_lists", "restart_vpn", "disable_smart_d
 MIN_OBSERVATIONS = 12
 MIN_CATEGORIES = 6
 MIN_TOTAL_MINUTES = 60
+MIN_REAL_ELAPSED_MINUTES = 60
 MAX_HEARTBEAT_AGE_MS = 15_000
 MAX_OBSERVATIONS = 80
 
@@ -35,14 +36,14 @@ def _require(condition: bool, message: str) -> None:
         raise WitnessError(message)
 
 
-def _iso(value: object, field: str) -> str:
+def _iso(value: object, field: str) -> dt.datetime:
     text = str(value or "").strip()
     try:
         parsed = dt.datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError as exc:
         raise WitnessError(f"{field} must be ISO-8601") from exc
     _require(parsed.tzinfo is not None, f"{field} must include a timezone")
-    return parsed.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+    return parsed.astimezone(dt.timezone.utc)
 
 
 def validate_witness(raw: dict) -> dict:
@@ -68,15 +69,17 @@ def validate_witness(raw: dict) -> dict:
 
     observations = raw.get("observations")
     _require(isinstance(observations, list), "observations must be a list")
-    _require(MIN_OBSERVATIONS <= len(observations) <= MAX_OBSERVATIONS,
-             f"observations must contain {MIN_OBSERVATIONS}..{MAX_OBSERVATIONS} records")
+    _require(
+        MIN_OBSERVATIONS <= len(observations) <= MAX_OBSERVATIONS,
+        f"observations must contain {MIN_OBSERVATIONS}..{MAX_OBSERVATIONS} records",
+    )
 
     categories: set[str] = set()
     networks: set[str] = set()
     total_minutes = 0
     false_positives = 0
     recovered_false_positives = 0
-    timestamps: list[str] = []
+    timestamps: list[dt.datetime] = []
 
     for index, item in enumerate(observations, 1):
         _require(isinstance(item, dict), f"observation {index} must be an object")
@@ -88,15 +91,24 @@ def validate_witness(raw: dict) -> dict:
         _require(recovery in RECOVERY, f"observation {index}: invalid recovery")
         categories.add(category)
         networks.add(network)
-        timestamps.append(_iso(item.get("observed_at"), f"observation {index}.observed_at"))
+
+        observed_at = _iso(item.get("observed_at"), f"observation {index}.observed_at")
+        if timestamps:
+            _require(
+                observed_at > timestamps[-1],
+                f"observation {index}: observed_at must be strictly later than the previous observation",
+            )
+        timestamps.append(observed_at)
 
         minutes = item.get("minutes")
         _require(isinstance(minutes, int) and 1 <= minutes <= 30, f"observation {index}: minutes must be 1..30")
         total_minutes += minutes
 
         heartbeat_age = item.get("vpn_heartbeat_age_ms")
-        _require(isinstance(heartbeat_age, int) and 0 <= heartbeat_age <= MAX_HEARTBEAT_AGE_MS,
-                 f"observation {index}: VPN heartbeat is stale or invalid")
+        _require(
+            isinstance(heartbeat_age, int) and 0 <= heartbeat_age <= MAX_HEARTBEAT_AGE_MS,
+            f"observation {index}: VPN heartbeat is stale or invalid",
+        )
         _require(item.get("protection_active") is True, f"observation {index}: protection_active must be true")
         _require(item.get("expected_content_ok") is True, f"observation {index}: expected content failed")
 
@@ -121,6 +133,14 @@ def validate_witness(raw: dict) -> dict:
     _require(networks == NETWORKS, "both wifi and mobile observations are required")
     _require(total_minutes >= MIN_TOTAL_MINUTES, f"need at least {MIN_TOTAL_MINUTES} cumulative real-app minutes")
 
+    real_elapsed_seconds = (timestamps[-1] - timestamps[0]).total_seconds()
+    _require(real_elapsed_seconds >= 0, "real-app timestamps produced a negative elapsed duration")
+    real_elapsed_minutes = real_elapsed_seconds / 60.0
+    _require(
+        real_elapsed_minutes >= MIN_REAL_ELAPSED_MINUTES,
+        f"need at least {MIN_REAL_ELAPSED_MINUTES} real elapsed minutes between first and last observation",
+    )
+
     return {
         "schema": 1,
         "scope": raw["scope"],
@@ -131,6 +151,7 @@ def validate_witness(raw: dict) -> dict:
             "categories": len(categories),
             "networks": sorted(networks),
             "total_minutes": total_minutes,
+            "real_elapsed_minutes": int(real_elapsed_minutes),
             "false_positives": false_positives,
             "recovered_false_positives": recovered_false_positives,
             "content_failures": 0,
@@ -149,9 +170,11 @@ def validate_witness(raw: dict) -> dict:
 def _valid_fixture() -> dict:
     categories = ["browser", "video", "shopping", "banking", "messaging", "maps"]
     observations = []
+    start = dt.datetime(2026, 9, 20, 0, 0, tzinfo=dt.timezone.utc)
     for index in range(12):
+        observed = start + dt.timedelta(minutes=index * 6)
         observations.append({
-            "observed_at": f"2026-09-20T{index:02d}:00:00Z",
+            "observed_at": observed.isoformat().replace("+00:00", "Z"),
             "category": categories[index % len(categories)],
             "network": "wifi" if index < 6 else "mobile",
             "minutes": 5,
@@ -177,6 +200,7 @@ def self_test() -> None:
     valid = _valid_fixture()
     summary = validate_witness(valid)
     _require(summary["summary"]["total_minutes"] == 60, "self-test total-minute math failed")
+    _require(summary["summary"]["real_elapsed_minutes"] >= 60, "self-test elapsed-time proof failed")
     _require(summary["summary"]["false_positives"] == 1, "self-test false-positive math failed")
     _require(summary["release_gate_closed"] is False, "self-test release gate invariant failed")
 
@@ -188,8 +212,19 @@ def self_test() -> None:
     bad = copy.deepcopy(valid); bad["observations"][0]["url"] = "https://example.invalid"; cases.append((bad, "privacy-sensitive"))
     bad = copy.deepcopy(valid); bad["observations"] = bad["observations"][:11]; cases.append((bad, "observations"))
     bad = copy.deepcopy(valid)
-    for item in bad["observations"]: item["network"] = "wifi"
+    for item in bad["observations"]:
+        item["network"] = "wifi"
     cases.append((bad, "both wifi and mobile"))
+
+    bad = copy.deepcopy(valid)
+    start = dt.datetime(2026, 9, 20, 0, 0, tzinfo=dt.timezone.utc)
+    for index, item in enumerate(bad["observations"]):
+        item["observed_at"] = (start + dt.timedelta(minutes=index)).isoformat().replace("+00:00", "Z")
+    cases.append((bad, "real elapsed minutes"))
+
+    bad = copy.deepcopy(valid)
+    bad["observations"][5]["observed_at"] = bad["observations"][4]["observed_at"]
+    cases.append((bad, "strictly later"))
 
     for candidate, expected in cases:
         try:
