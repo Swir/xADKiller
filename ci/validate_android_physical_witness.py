@@ -23,6 +23,7 @@ SHA256_RE = re.compile(r'^[0-9a-f]{64}$')
 SOAK_LABEL_RE = re.compile(r'^soak_(\d+)m$')
 DEFAULT_MAX_HEARTBEAT_AGE_MS = 30_000
 MAX_HEARTBEAT_FUTURE_SKEW_MS = 15_000
+SOAK_ELAPSED_TOLERANCE_SECONDS = 2
 
 
 def read_text(path: Path) -> str:
@@ -225,14 +226,23 @@ def validate(root: Path, apk_path: Path | None = None) -> dict[str, object]:
 
     if soak_minutes > 0:
         start_hb = require_running(root, "soak_start", timeline, max_age_ms)
+        soak_start_epoch = timeline["soak_start"]
         previous_hb = start_hb
         checkpoints = expected_soak_minutes(soak_minutes)
         for minute in checkpoints:
             label = f"soak_{minute}m"
             current_hb = require_running(root, label, timeline, max_age_ms)
             require_advanced(previous_hb, current_hb, f"soak_{minute}m_liveness")
+            elapsed_seconds = timeline[label] - soak_start_epoch
+            minimum_elapsed = minute * 60 - SOAK_ELAPSED_TOLERANCE_SECONDS
+            assert elapsed_seconds >= minimum_elapsed, (
+                f"{label}: claimed soak duration is not proven by timeline "
+                f"({elapsed_seconds}s elapsed, need at least {minimum_elapsed}s)"
+            )
             previous_hb = current_hb
-        checks["soak_liveness"] = f"PASS ({soak_minutes}m, {len(checkpoints)} checkpoint(s))"
+        checks["soak_liveness"] = (
+            f"PASS ({soak_minutes}m real elapsed, {len(checkpoints)} checkpoint(s))"
+        )
 
     baseline_hb = require_running(root, "baseline", timeline, max_age_ms)
     assert final_heartbeat >= baseline_hb, "final VPN heartbeat regressed behind baseline"
@@ -309,8 +319,17 @@ def self_test() -> None:
             "soak_start", "soak_5m", "soak_10m", "final",
         ]
         rows = []
+        soak_start_epoch = 1_700_000_000 + names.index("soak_start") * 10
         for index, name in enumerate(names):
             epoch = 1_700_000_000 + index * 10
+            if name == "soak_start":
+                epoch = soak_start_epoch
+            elif name == "soak_5m":
+                epoch = soak_start_epoch + 5 * 60
+            elif name == "soak_10m":
+                epoch = soak_start_epoch + 10 * 60
+            elif name == "final":
+                epoch = soak_start_epoch + 10 * 60 + 10
             transport = "CELLULAR" if name == "mobile_only" else "WIFI"
             wifi_on = "0" if name == "mobile_only" else "1"
             write_snapshot(root, name, epoch=epoch, transport=transport, wifi_on=wifi_on, mobile_data="1")
@@ -370,6 +389,25 @@ def self_test() -> None:
         else:
             raise AssertionError("missing soak checkpoint was accepted")
         renamed_checkpoint.rename(missing_checkpoint)
+
+        timeline_path = root / "timeline.tsv"
+        original_timeline = timeline_path.read_text(encoding="utf-8")
+        compressed_rows = []
+        for row in original_timeline.splitlines():
+            epoch_raw, label = row.split("\t", 1)
+            if label == "soak_10m":
+                epoch_raw = str(soak_start_epoch + 20)
+            elif label == "final":
+                epoch_raw = str(soak_start_epoch + 30)
+            compressed_rows.append(f"{epoch_raw}\t{label}")
+        timeline_path.write_text("\n".join(compressed_rows) + "\n", encoding="utf-8")
+        try:
+            validate(root, apk)
+        except AssertionError as error:
+            assert "claimed soak duration is not proven by timeline" in str(error)
+        else:
+            raise AssertionError("compressed soak timeline was accepted")
+        timeline_path.write_text(original_timeline, encoding="utf-8")
 
         bad_apk = root / "tampered.apk"
         bad_apk.write_bytes(b"different APK bytes\n")
