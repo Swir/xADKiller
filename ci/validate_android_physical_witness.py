@@ -339,7 +339,7 @@ def self_test() -> None:
         summary = validate(root, apk)
         assert summary["schema"] == 3
         assert summary["checks"]["wifi_mobile_wifi_handover"].startswith("PASS")
-        assert summary["checks"]["soak_liveness"] == "PASS (10m, 2 checkpoint(s))"
+        assert summary["checks"]["soak_liveness"] == "PASS (10m real elapsed, 2 checkpoint(s))"
         assert summary["checks"]["apk_provenance"].startswith("PASS")
         assert summary["release_gate_closed"] is False
 
