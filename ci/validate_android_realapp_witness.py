@@ -102,6 +102,12 @@ def validate_witness(raw: dict) -> dict:
 
         minutes = item.get("minutes")
         _require(isinstance(minutes, int) and 1 <= minutes <= 30, f"observation {index}: minutes must be 1..30")
+        if len(timestamps) >= 2:
+            elapsed_since_previous = (timestamps[-1] - timestamps[-2]).total_seconds()
+            _require(
+                elapsed_since_previous >= minutes * 60,
+                f"observation {index}: declared minutes exceed measured interval since previous observation",
+            )
         total_minutes += minutes
 
         heartbeat_age = item.get("vpn_heartbeat_age_ms")
@@ -231,6 +237,13 @@ def self_test() -> None:
     bad = copy.deepcopy(valid)
     bad["observations"][5]["observed_at"] = bad["observations"][4]["observed_at"]
     cases.append((bad, "strictly later"))
+
+    bad = copy.deepcopy(valid)
+    previous = _iso(bad["observations"][4]["observed_at"], "self-test previous")
+    bad["observations"][5]["observed_at"] = (
+        previous + dt.timedelta(minutes=1)
+    ).isoformat().replace("+00:00", "Z")
+    cases.append((bad, "measured interval"))
 
     for candidate, expected in cases:
         try:
