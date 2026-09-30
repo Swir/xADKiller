@@ -114,16 +114,20 @@ def validate_witness(raw: dict) -> dict:
 
         false_positive = item.get("false_positive")
         recovered = item.get("recovered")
+        recovery_verified = item.get("recovery_verified")
         _require(isinstance(false_positive, bool), f"observation {index}: false_positive must be boolean")
         _require(isinstance(recovered, bool), f"observation {index}: recovered must be boolean")
+        _require(isinstance(recovery_verified, bool), f"observation {index}: recovery_verified must be boolean")
         if false_positive:
             false_positives += 1
             _require(recovered, f"observation {index}: false positive was not recovered")
+            _require(recovery_verified, f"observation {index}: false-positive recovery was not independently verified")
             _require(recovery != "none", f"observation {index}: recovered false positive needs an explicit recovery")
             recovered_false_positives += 1
         else:
             _require(recovery == "none", f"observation {index}: recovery without a false positive is not valid evidence")
             _require(recovered is False, f"observation {index}: recovered must be false when no false positive occurred")
+            _require(recovery_verified is False, f"observation {index}: recovery_verified must be false when no false positive occurred")
 
         forbidden = {"url", "uri", "host", "hostname", "domain", "package", "app_name", "title", "query", "path"}
         present = sorted(key for key in forbidden if key in item)
@@ -183,6 +187,7 @@ def _valid_fixture() -> dict:
             "expected_content_ok": True,
             "false_positive": index == 7,
             "recovered": index == 7,
+            "recovery_verified": index == 7,
             "recovery": "allowlist" if index == 7 else "none",
         })
     return {
@@ -209,6 +214,7 @@ def self_test() -> None:
     bad = copy.deepcopy(valid); bad["candidate"]["apk_sha256"] = "0" * 63; cases.append((bad, "apk_sha256"))
     bad = copy.deepcopy(valid); bad["observations"][0]["vpn_heartbeat_age_ms"] = 15_001; cases.append((bad, "heartbeat"))
     bad = copy.deepcopy(valid); bad["observations"][7]["recovered"] = False; cases.append((bad, "not recovered"))
+    bad = copy.deepcopy(valid); bad["observations"][7]["recovery_verified"] = False; cases.append((bad, "independently verified"))
     bad = copy.deepcopy(valid); bad["observations"][0]["url"] = "https://example.invalid"; cases.append((bad, "privacy-sensitive"))
     bad = copy.deepcopy(valid); bad["observations"] = bad["observations"][:11]; cases.append((bad, "observations"))
     bad = copy.deepcopy(valid)
