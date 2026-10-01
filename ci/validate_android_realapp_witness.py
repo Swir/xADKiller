@@ -231,7 +231,7 @@ def self_test() -> None:
     bad = copy.deepcopy(valid)
     start = dt.datetime(2026, 9, 20, 0, 0, tzinfo=dt.timezone.utc)
     for index, item in enumerate(bad["observations"]):
-        item["observed_at"] = (start + dt.timedelta(minutes=index)).isoformat().replace("+00:00", "Z")
+        item["observed_at"] = (start + dt.timedelta(minutes=index * 5)).isoformat().replace("+00:00", "Z")
     cases.append((bad, "real elapsed minutes"))
 
     bad = copy.deepcopy(valid)
