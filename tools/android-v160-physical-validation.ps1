@@ -33,6 +33,17 @@ if (-not [string]::IsNullOrWhiteSpace($Serial)) {
     $script:AdbPrefix = @("-s", $Serial)
 }
 
+function Get-Sha256Text {
+    param([Parameter(Mandatory)][string]$Value)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($Value)
+        $hash = $sha.ComputeHash($bytes)
+        return (($hash | ForEach-Object { $_.ToString("x2") }) -join "")
+    }
+    finally { $sha.Dispose() }
+}
+
 function Invoke-AdbText {
     param([Parameter(Mandatory)][string[]]$Arguments, [switch]$IgnoreFailure)
     $previous = $ErrorActionPreference
@@ -65,6 +76,8 @@ if ([string]::IsNullOrWhiteSpace($Serial)) {
 if ((Invoke-AdbText -Arguments @("get-state")).Trim() -ne "device") {
     throw "adb device is not online: $Serial"
 }
+
+$serialHash = (Get-Sha256Text -Value $Serial).Substring(0, 16)
 
 $stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
 if ([string]::IsNullOrWhiteSpace($OutDir)) {
@@ -145,7 +158,7 @@ $metadata = @(
     "schema=3",
     "package=$Package",
     "activity=$Activity",
-    "serial=$Serial",
+    "serial_hash=$serialHash",
     "started_utc=$stamp",
     "source_commit=$sourceCommit",
     "requested_handover=$([int]$Handover.IsPresent)",
@@ -156,7 +169,8 @@ $metadata = @(
     "apk_supplied=$([int](-not [string]::IsNullOrWhiteSpace($Apk)))",
     "apk_basename=$apkBasename",
     "apk_sha256=$apkSha256",
-    "max_heartbeat_age_ms=30000"
+    "max_heartbeat_age_ms=30000",
+    "privacy=local-only-device-id-hashed-no-urls-no-hostnames-no-app-traffic-log"
 ) -join "`n"
 Set-Utf8NoBom -Path (Join-Path $OutDir "metadata.env") -Value ($metadata + "`n")
 
