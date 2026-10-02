@@ -86,6 +86,15 @@ class RealAppWitnessContractTests(unittest.TestCase):
         self.assertTrue(recovery["protection_active_required"])
         self.assertFalse(contract["authorizes_release"])
 
+    def test_repository_template_is_never_accepted_as_physical_evidence(self) -> None:
+        template_path = Path("tools/android-v160-realapp-witness-template.json")
+        template = json.loads(template_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(template["template"])
+        self.assertFalse(template["release_gate_closed"])
+        self.assertEqual(template["observations"], [])
+        self.assert_rejected(template, "template")
+
     def test_global_elapsed_gate_uses_a_coherent_compressed_timeline(self) -> None:
         bad = copy.deepcopy(_valid_fixture())
         start = dt.datetime(2026, 9, 20, 0, 0, tzinfo=dt.timezone.utc)
