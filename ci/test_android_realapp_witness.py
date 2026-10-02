@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 import datetime as dt
+import json
+from pathlib import Path
 import unittest
 
 from ci.validate_android_realapp_witness import WitnessError, _valid_fixture, validate_witness
@@ -57,6 +59,32 @@ class RealAppWitnessContractTests(unittest.TestCase):
         for item in bad["observations"]:
             item["network"] = "wifi"
         self.assert_rejected(bad, "both wifi and mobile")
+
+    def test_template_pins_measured_non_authorizing_contract(self) -> None:
+        template_path = Path("tools/android-v160-realapp-witness-template.json")
+        template = json.loads(template_path.read_text(encoding="utf-8"))
+        contract = template["evidence_contract"]
+
+        network = contract["measured_network_v1"]
+        self.assertEqual(network["allowed_transport"], ["wifi", "mobile"])
+        self.assertEqual(network["source"], "adb_connectivity_active_transport")
+        self.assertEqual(network["timestamp_field"], "network_observed_at")
+        self.assertTrue(network["fail_closed_on_missing_or_ambiguous_transport"])
+        self.assertFalse(network["persist_raw_connectivity_dump"])
+
+        heartbeat = contract["measured_heartbeat_v1"]
+        self.assertEqual(heartbeat["source"], "app_local_prefs")
+        self.assertEqual(heartbeat["heartbeat_epoch_field"], "heartbeat_epoch_ms")
+        self.assertEqual(heartbeat["observation_epoch_field"], "observation_epoch_ms")
+        self.assertEqual(heartbeat["max_age_ms"], 15000)
+        self.assertFalse(heartbeat["caller_supplied_age_authoritative"])
+
+        recovery = contract["recovery_verification_v1"]
+        self.assertTrue(recovery["separate_later_record_required_for_false_positive"])
+        self.assertTrue(recovery["explicit_expected_content_confirmation_required"])
+        self.assertTrue(recovery["fresh_heartbeat_required"])
+        self.assertTrue(recovery["protection_active_required"])
+        self.assertFalse(contract["authorizes_release"])
 
     def test_global_elapsed_gate_uses_a_coherent_compressed_timeline(self) -> None:
         bad = copy.deepcopy(_valid_fixture())
