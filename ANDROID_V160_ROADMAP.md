@@ -50,6 +50,7 @@ The checklist below is the finite denominator for Android v1.6 development progr
 - Blocklist update hardening evaluates **normalized unique-domain counts**, preventing a duplicate-inflated remote feed from passing minimum-size or same-mode anti-shrink checks.
 - Privacy hardening: Android backup is disabled for local xADKiller state; cleartext traffic remains disabled; CI enforces these invariants and rejects QUERY_ALL_PACKAGES.
 - Release remains blocked until manual-device VPN lifecycle, Wi-Fi/mobile transitions, sleep/wake, real-app behavior and longer stability checks are satisfactory.
+- RC evidence hardening is **not yet counted as complete**: gate-quality real-app observations must derive heartbeat age from app-local heartbeat/observation epochs, bind privacy-safe network transport to a measured source/timestamp, and prove false-positive recovery with a distinct later verification event rather than mirroring the original flag. Exact-SHA build provenance must bind source commit and APK digest before final qualification. These contracts do not replace physical-device evidence.
 
 ## Release gate
 No Release until all relevant build, lint, regression, stability, privacy, DNS/VPN lifecycle, blocklist integrity and manual-device checks are green and there are no known critical issues.
