@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -26,7 +27,8 @@ import java.util.Locale;
 
 public class SystemConsoleActivity extends Activity {
     private LinearLayout logBox;
-    private TextView infoText, privateDnsText, networkText, smartText;
+    private TextView infoText, privateDnsText, networkText, smartText, falsePositiveText;
+    private Button falsePositiveButton;
     private boolean errorsOnly = false;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
@@ -43,7 +45,7 @@ public class SystemConsoleActivity extends Activity {
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(18),dp(18),dp(18),dp(30)); scroll.addView(root,new ScrollView.LayoutParams(-1,-2));
 
         TextView title=tv("SYSTEM CONSOLE",26,text,true); title.setLetterSpacing(.08f); root.addView(title);
-        root.addView(tv("xADKiller 1.5.0 • DNS + Smart Engine + Adaptive AI • diagnostics",12,blue,true));
+        root.addView(tv("xADKiller 1.6.0-dev • DNS + Smart Engine + Adaptive AI • diagnostics",12,blue,true));
         root.addView(tv(I18n.languageStatus(this),10,muted,false));
         addSpace(root,12);
 
@@ -58,6 +60,16 @@ public class SystemConsoleActivity extends Activity {
         LinearLayout.LayoutParams hb1=new LinearLayout.LayoutParams(0,dp(46),1); hb1.setMarginEnd(dp(5)); LinearLayout.LayoutParams hb2=new LinearLayout.LayoutParams(0,dp(46),1); hb2.setMarginStart(dp(5)); healthBtns.addView(dnsSettings,hb1); healthBtns.addView(testNet,hb2);
         dnsSettings.setOnClickListener(v->{try{startActivity(PrivateDnsHelper.settingsIntent());}catch(Exception e){SystemLogStore.error(this,"UI","Nie udało się otworzyć ustawień Prywatnego DNS",e);}});
         testNet.setOnClickListener(v->runNetworkTest());
+        addSpace(root,12);
+
+        LinearLayout recovery=card(surface,18); root.addView(recovery,lpMatchWrap());
+        recovery.addView(tv("FALSE-POSITIVE RECOVERY",15,text,true));
+        falsePositiveText=tv("Sprawdzanie ostatniej blokady…",12,muted,false); recovery.addView(falsePositiveText);
+        addSpace(recovery,8);
+        falsePositiveButton=button("ODBLOKUJ OSTATNIĄ DOMENĘ",surface2,text);
+        falsePositiveButton.setOnClickListener(v->confirmFalsePositiveRecovery());
+        recovery.addView(falsePositiveButton,lpMatch(dp(46)));
+        recovery.addView(tv("Domena jest odczytywana wyłącznie z lokalnego logu blokad. Zmiana wymaga potwierdzenia, trafia do lokalnej allowlisty i nie wysyła historii przeglądania.",11,muted,false));
         addSpace(root,12);
 
         LinearLayout controls=card(surface,18); root.addView(controls,lpMatchWrap()); controls.addView(tv("LOGOWANIE",15,text,true));
@@ -99,6 +111,17 @@ public class SystemConsoleActivity extends Activity {
         smartText.setText(I18n.dynamic(this,"Smart Engine: "+(smart?"ON":"OFF")+" • heartbeat="+(age<0?noHeartbeat:age+" ms")+" • wykrycia="+det+" • akcje="+act));
         smartText.setTextColor(smart && age>=0 && age<15000?getColor(R.color.swir_green):getColor(R.color.swir_muted));
 
+        String recoverable=LogStore.latestRecoverableDomain(this);
+        if(recoverable==null){
+            falsePositiveText.setText(I18n.dynamic(this,"Ostatnia blokada DNS: brak domeny do odzyskania"));
+            falsePositiveText.setTextColor(getColor(R.color.swir_muted));
+            falsePositiveButton.setEnabled(false); falsePositiveButton.setAlpha(.55f);
+        }else{
+            falsePositiveText.setText(I18n.dynamic(this,"Ostatnia blokada DNS: "+recoverable));
+            falsePositiveText.setTextColor(getColor(R.color.swir_cyan));
+            falsePositiveButton.setEnabled(true); falsePositiveButton.setAlpha(1f);
+        }
+
         List<SystemLogStore.Entry> entries=SystemLogStore.readRecent(this,500); logBox.removeAllViews();
         int shown=0;
         DateFormat df=DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.MEDIUM,Locale.getDefault());
@@ -114,6 +137,43 @@ public class SystemConsoleActivity extends Activity {
         infoText.setText(I18n.dynamic(this,shown+" wpisów"+(errorsOnly?" • filtr: WARN/ERROR":"")+" • maks. 500 pokazanych"));
         if(shown==0) logBox.addView(tv("Brak wpisów dla wybranego filtra.",13,getColor(R.color.swir_muted),false));
         localize();
+    }
+
+    private void confirmFalsePositiveRecovery() {
+        String domain=LogStore.latestRecoverableDomain(this);
+        if(domain==null){
+            Toast.makeText(this,I18n.t(this,"Brak domeny do odblokowania."),Toast.LENGTH_SHORT).show();
+            refresh();
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(I18n.t(this,"Odblokować ostatnią domenę?"))
+                .setMessage(I18n.dynamic(this,"Dodaj do lokalnej allowlisty: "+domain+"\n\nTa operacja nie wysyła domeny ani historii poza urządzenie."))
+                .setNegativeButton(I18n.t(this,"Anuluj"),null)
+                .setPositiveButton(I18n.t(this,"ODBLOKUJ"),(dialog,which)->recoverFalsePositive(domain))
+                .show();
+    }
+
+    private void recoverFalsePositive(String expectedDomain) {
+        String current=LogStore.latestRecoverableDomain(this);
+        if(current==null || !current.equals(expectedDomain)){
+            Toast.makeText(this,I18n.t(this,"Ostatnia blokada zmieniła się — sprawdź ponownie."),Toast.LENGTH_LONG).show();
+            refresh();
+            return;
+        }
+        if(!LogStore.recoverLatestFalsePositive(this)){
+            Toast.makeText(this,I18n.t(this,"Nie udało się odblokować domeny."),Toast.LENGTH_LONG).show();
+            refresh();
+            return;
+        }
+        SharedPreferences p=getSharedPreferences(BlocklistManager.PREFS,MODE_PRIVATE);
+        if(p.getBoolean("running",false)){
+            try{startService(new Intent(this,AdBlockVpnServiceV121.class).setAction(AdBlockVpnServiceV121.ACTION_RELOAD));}
+            catch(Exception e){SystemLogStore.error(this,"RECOVERY","VPN reload after false-positive recovery failed",e);}
+        }
+        SystemLogStore.info(this,"RECOVERY","False-positive recovery confirmed locally");
+        Toast.makeText(this,I18n.t(this,"Domena dodana do lokalnej allowlisty."),Toast.LENGTH_LONG).show();
+        refresh();
     }
 
     private void runNetworkTest() {
@@ -139,7 +199,7 @@ public class SystemConsoleActivity extends Activity {
         PrivateDnsHelper.Snapshot s=PrivateDnsHelper.inspect(this);
         SharedPreferences p=getSharedPreferences(BlocklistManager.PREFS,MODE_PRIVATE);
         StringBuilder b=new StringBuilder();
-        b.append("xADKiller 1.5.0 SYSTEM REPORT\n");
+        b.append("xADKiller 1.6.0-dev SYSTEM REPORT\n");
         b.append("App language: ").append(I18n.languageName(this)).append(" (system=").append(I18n.rawSystemLanguage(this)).append(")\n");
         b.append("Private DNS: ").append(s.pretty()).append("\n");
         b.append("Network: ").append(s.networkAvailable).append(" DNS=").append(s.dnsServers).append("\n");

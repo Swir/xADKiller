@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "scope": "xADKiller Android v1.6 physical real-app stability witness",
+  "template": true,
+  "candidate": {
+    "source_commit": "REPLACE_WITH_40_HEX_COMMIT",
+    "apk_sha256": "REPLACE_WITH_64_HEX_APK_SHA256"
+  },
+  "device": {
+    "model": "REPLACE_WITH_PHYSICAL_DEVICE_MODEL",
+    "android_sdk": 35
+  },
+  "release_gate_closed": false,
+  "observations": [],
+  "evidence_contract": {
+    "measured_network_v1": {
+      "allowed_transport": [
+        "wifi",
+        "mobile"
+      ],
+      "source": "adb_connectivity_active_transport",
+      "timestamp_field": "network_observed_at",
+      "fail_closed_on_missing_or_ambiguous_transport": true,
+      "persist_raw_connectivity_dump": false
+    },
+    "measured_heartbeat_v1": {
+      "source": "app_local_prefs",
+      "heartbeat_epoch_field": "heartbeat_epoch_ms",
+      "observation_epoch_field": "observation_epoch_ms",
+      "max_age_ms": 15000,
+      "caller_supplied_age_authoritative": false
+    },
+    "recovery_verification_v1": {
+      "separate_later_record_required_for_false_positive": true,
+      "explicit_expected_content_confirmation_required": true,
+      "fresh_heartbeat_required": true,
+      "protection_active_required": true
+    },
+    "authorizes_release": false
+  }
+}
