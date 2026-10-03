@@ -95,6 +95,21 @@ class RealAppWitnessContractTests(unittest.TestCase):
         self.assertEqual(template["observations"], [])
         self.assert_rejected(template, "template")
 
+    def test_unlinked_recovery_record_cannot_override_observation_gate(self) -> None:
+        bad = copy.deepcopy(_valid_fixture())
+        false_positive = bad["observations"][7]
+        false_positive["recovery_verified"] = False
+        bad["recovery_verifications"] = [{
+            "observation_index": 7,
+            "verified_at": "2026-09-20T01:06:00Z",
+            "vpn_heartbeat_age_ms": 1_000,
+            "protection_active": True,
+            "expected_content_confirmed": True,
+            "recovery_action": false_positive["recovery_action"],
+        }]
+
+        self.assert_rejected(bad, "independently verified")
+
     def test_global_elapsed_gate_uses_a_coherent_compressed_timeline(self) -> None:
         bad = copy.deepcopy(_valid_fixture())
         start = dt.datetime(2026, 9, 20, 0, 0, tzinfo=dt.timezone.utc)
