@@ -175,6 +175,7 @@ jobs:
           mkdir -p artifacts
           cp app/build/outputs/apk/debug/app-debug.apk artifacts/xADKiller-Android-v1.6.0-dev-debug.apk
           (cd artifacts && sha256sum xADKiller-Android-v1.6.0-dev-debug.apk > SHA256SUMS.txt && sha256sum -c SHA256SUMS.txt)
+          cp artifacts/xADKiller-Android-v1.6.0-dev-debug.apk "artifacts/xADKiller-Android-v1.6.0-dev-debug-${{ github.event.pull_request.head.sha || github.sha }}.apk"
       - name: Upload tested development APK
         uses: actions/upload-artifact@v7
         with:
