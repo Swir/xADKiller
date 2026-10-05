@@ -7,6 +7,8 @@ param(
     [switch]$Idle,
     [ValidateRange(0, 1440)][int]$SoakMinutes = 0,
     [string]$OutDir = "",
+    [string]$Provenance = "",
+    [string]$ExpectedSourceCommit = "",
     [string]$Serial = "",
     [string]$Package = "com.swir.xadkiller.debug",
     [string]$Activity = ""
@@ -21,8 +23,14 @@ if ([string]::IsNullOrWhiteSpace($Activity)) {
 if ($PackageReplace -and [string]::IsNullOrWhiteSpace($Apk)) {
     throw "-PackageReplace requires -Apk PATH"
 }
+if (-not [string]::IsNullOrWhiteSpace($Apk) -and [string]::IsNullOrWhiteSpace($Provenance)) {
+    throw "-Apk requires -Provenance PROVENANCE.env for exact-SHA binding"
+}
 if (-not [string]::IsNullOrWhiteSpace($Apk) -and -not (Test-Path -LiteralPath $Apk -PathType Leaf)) {
     throw "APK not found: $Apk"
+}
+if (-not [string]::IsNullOrWhiteSpace($Provenance) -and -not (Test-Path -LiteralPath $Provenance -PathType Leaf)) {
+    throw "Provenance file not found: $Provenance"
 }
 if (-not (Get-Command adb -ErrorAction SilentlyContinue)) {
     throw "adb is required and must be available in PATH"
@@ -74,7 +82,7 @@ if ([string]::IsNullOrWhiteSpace($Serial)) {
     $script:AdbPrefix = @("-s", $Serial)
 }
 if ((Invoke-AdbText -Arguments @("get-state")).Trim() -ne "device") {
-    throw "adb device is not online: $Serial"
+    throw "selected adb device is not online"
 }
 
 $serialHash = (Get-Sha256Text -Value $Serial).Substring(0, 16)
@@ -84,8 +92,16 @@ if ([string]::IsNullOrWhiteSpace($OutDir)) {
     $OutDir = Join-Path "artifacts" "android-v160-physical-$stamp"
 }
 $OutDir = [System.IO.Path]::GetFullPath($OutDir)
+if (Test-Path -LiteralPath $OutDir) {
+    throw "Evidence output must be a fresh path and must not already exist: $OutDir"
+}
+$outParent = Split-Path -Parent $OutDir
+if (-not [string]::IsNullOrWhiteSpace($outParent) -and -not (Test-Path -LiteralPath $outParent)) {
+    New-Item -ItemType Directory -Force -Path $outParent | Out-Null
+}
+New-Item -ItemType Directory -Path $OutDir | Out-Null
 $snapshotsDir = Join-Path $OutDir "snapshots"
-New-Item -ItemType Directory -Force -Path $snapshotsDir | Out-Null
+New-Item -ItemType Directory -Path $snapshotsDir | Out-Null
 $timeline = Join-Path $OutDir "timeline.tsv"
 [System.IO.File]::WriteAllText($timeline, "", [System.Text.UTF8Encoding]::new($false))
 
@@ -98,12 +114,56 @@ if (-not [string]::IsNullOrWhiteSpace($Apk)) {
     $apkBasename = [System.IO.Path]::GetFileName($Apk)
 }
 
-$sourceCommit = "unknown"
-if (Get-Command git -ErrorAction SilentlyContinue) {
+$sourceCommit = ""
+$provenanceApkSha256 = ""
+$provenanceArtifact = ""
+$provenanceTestedArtifact = ""
+$provenanceSnapshotSha256 = ""
+$provenanceBound = 0
+if (-not [string]::IsNullOrWhiteSpace($Provenance)) {
+    $provenanceMap = @{}
+    foreach ($line in Get-Content -LiteralPath $Provenance) {
+        if ([string]::IsNullOrWhiteSpace($line) -or $line.TrimStart().StartsWith("#") -or $line -notmatch '=') { continue }
+        $pair = $line -split '=', 2
+        $key = $pair[0].Trim()
+        if ($provenanceMap.ContainsKey($key)) { throw "PROVENANCE.env contains duplicate key: $key" }
+        $provenanceMap[$key] = $pair[1].Trim()
+    }
+    if ([string]$provenanceMap['schema'] -ne '1') { throw "PROVENANCE.env schema must be 1" }
+    if ([string]$provenanceMap['provenance_contract'] -ne 'exact-sha-v1') { throw "PROVENANCE.env provenance_contract must be exact-sha-v1" }
+    $sourceCommit = ([string]$provenanceMap['source_commit']).ToLowerInvariant()
+    $provenanceArtifact = [string]$provenanceMap['artifact']
+    $provenanceTestedArtifact = [string]$provenanceMap['tested_artifact']
+    $provenanceApkSha256 = ([string]$provenanceMap['apk_sha256']).ToLowerInvariant()
+    if ($sourceCommit -notmatch '^[0-9a-f]{40}$') { throw "PROVENANCE.env source_commit must be lowercase 40-hex" }
+    if ($provenanceArtifact -ne 'xADKiller-Android-v1.6.0-dev-debug.apk') { throw "PROVENANCE.env artifact must be the canonical APK name" }
+    $expectedTestedArtifact = "xADKiller-Android-v1.6.0-dev-debug-$sourceCommit.apk"
+    if ($provenanceTestedArtifact -ne $expectedTestedArtifact) { throw "PROVENANCE.env tested_artifact does not bind the exact source commit" }
+    if ($provenanceApkSha256 -notmatch '^[0-9a-f]{64}$') { throw "PROVENANCE.env apk_sha256 must be lowercase 64-hex" }
+    if (-not [string]::IsNullOrWhiteSpace($apkSha256) -and $apkSha256 -ne $provenanceApkSha256) {
+        throw "APK SHA-256 does not match PROVENANCE.env"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($apkBasename) -and $apkBasename -ne $provenanceTestedArtifact) {
+        throw "APK basename does not match PROVENANCE.env tested_artifact"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($apkSha256)) { $provenanceBound = 1 }
+}
+if (-not [string]::IsNullOrWhiteSpace($ExpectedSourceCommit)) {
+    $ExpectedSourceCommit = $ExpectedSourceCommit.Trim().ToLowerInvariant()
+    if ($ExpectedSourceCommit -notmatch '^[0-9a-f]{40}$') { throw "-ExpectedSourceCommit must be lowercase 40-hex" }
+    if (-not [string]::IsNullOrWhiteSpace($sourceCommit) -and $sourceCommit -ne $ExpectedSourceCommit) {
+        throw "-ExpectedSourceCommit does not match PROVENANCE.env"
+    }
+    $sourceCommit = $ExpectedSourceCommit
+}
+if ([string]::IsNullOrWhiteSpace($sourceCommit) -and (Get-Command git -ErrorAction SilentlyContinue)) {
     try {
         $candidateCommit = (& git rev-parse HEAD 2>$null | Select-Object -First 1).Trim().ToLowerInvariant()
         if ($candidateCommit -match '^[0-9a-f]{40}$') { $sourceCommit = $candidateCommit }
     } catch {}
+}
+if ($sourceCommit -notmatch '^[0-9a-f]{40}$') {
+    throw "Gate-quality evidence requires an exact 40-hex source commit; run from the tested checkout or pass -Provenance/-ExpectedSourceCommit."
 }
 
 $script:WifiBefore = ""
@@ -120,10 +180,62 @@ function Set-Utf8NoBom {
     [System.IO.File]::WriteAllText($Path, $Value, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Redact-DeviceId {
+    param([AllowEmptyString()][string]$Value)
+    if (-not [string]::IsNullOrEmpty($Serial)) {
+        return $Value.Replace($Serial, "[redacted-device-id]")
+    }
+    return $Value
+}
+
+function Set-RedactedUtf8NoBom {
+    param([Parameter(Mandatory)][string]$Path, [AllowEmptyString()][string]$Value)
+    Set-Utf8NoBom -Path $Path -Value (Redact-DeviceId -Value $Value)
+}
+
+function Save-BuildProperties {
+    param([Parameter(Mandatory)][string]$Path)
+    $lines = foreach ($key in @(
+        "ro.build.version.release",
+        "ro.build.version.sdk",
+        "ro.build.version.security_patch",
+        "ro.product.cpu.abi"
+    )) {
+        $value = (Invoke-AdbText -Arguments @("shell", "getprop", $key) -IgnoreFailure).Trim()
+        "$key=$value"
+    }
+    Set-RedactedUtf8NoBom -Path $Path -Value (($lines -join "`n") + "`n")
+}
+
 function Save-AdbOutput {
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string[]]$Arguments)
     $value = Invoke-AdbText -Arguments $Arguments -IgnoreFailure
-    Set-Utf8NoBom -Path $Path -Value $value
+    Set-RedactedUtf8NoBom -Path $Path -Value $value
+}
+
+function Assert-WitnessTreeSafe {
+    $unsafe = Get-ChildItem -LiteralPath $OutDir -Recurse -Force | Where-Object {
+        ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
+    } | Select-Object -First 1
+    if ($null -ne $unsafe) {
+        throw "Witness tree contains a reparse point: $($unsafe.FullName)"
+    }
+}
+
+function Write-WitnessManifest {
+    Assert-WitnessTreeSafe
+    $manifestPath = Join-Path $OutDir "witness-manifest.sha256"
+    $rootPrefix = $OutDir.TrimEnd([char[]]@('\', '/')) + [System.IO.Path]::DirectorySeparatorChar
+    $entries = @()
+    foreach ($file in Get-ChildItem -LiteralPath $OutDir -Recurse -File) {
+        $relative = $file.FullName.Substring($rootPrefix.Length).Replace('\', '/')
+        if ($relative -in @('witness-manifest.sha256', 'validation-summary.json', 'validator.txt')) { continue }
+        $digest = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($digest -notmatch '^[0-9a-f]{64}$') { throw "Failed to hash witness file: $relative" }
+        $entries += [PSCustomObject]@{ Relative = $relative; Digest = $digest }
+    }
+    $lines = $entries | Sort-Object -Property Relative | ForEach-Object { "$($_.Digest)  $($_.Relative)" }
+    Set-Utf8NoBom -Path $manifestPath -Value (($lines -join "`n") + "`n")
 }
 
 function Save-Snapshot {
@@ -133,7 +245,7 @@ function Save-Snapshot {
     $epoch = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     [System.IO.File]::AppendAllText($timeline, "$epoch`t$Label`n", [System.Text.UTF8Encoding]::new($false))
     Set-Utf8NoBom -Path (Join-Path $dir "snapshot_epoch_seconds.txt") -Value "$epoch`n"
-    Save-AdbOutput -Path (Join-Path $dir "getprop.txt") -Arguments @("shell", "getprop")
+    Save-BuildProperties -Path (Join-Path $dir "getprop.txt")
     Save-AdbOutput -Path (Join-Path $dir "connectivity.txt") -Arguments @("shell", "dumpsys", "connectivity")
     Save-AdbOutput -Path (Join-Path $dir "power.txt") -Arguments @("shell", "dumpsys", "power")
     Save-AdbOutput -Path (Join-Path $dir "services.txt") -Arguments @("shell", "dumpsys", "activity", "services", $Package)
@@ -154,11 +266,27 @@ function Restore-DeviceState {
     try { if ($script:DataBefore -eq "0") { Invoke-AdbText -Arguments @("shell", "svc", "data", "disable") -IgnoreFailure | Out-Null } } catch {}
 }
 
+if (-not [string]::IsNullOrWhiteSpace($Provenance)) {
+    $canonicalProvenance = @(
+        "schema=1",
+        "provenance_contract=exact-sha-v1",
+        "source_commit=$sourceCommit",
+        "artifact=$provenanceArtifact",
+        "tested_artifact=$provenanceTestedArtifact",
+        "apk_sha256=$provenanceApkSha256"
+    ) -join "`n"
+    $provenanceSnapshotPath = Join-Path $OutDir "build-provenance.env"
+    Set-Utf8NoBom -Path $provenanceSnapshotPath -Value ($canonicalProvenance + "`n")
+    $provenanceSnapshotSha256 = (Get-FileHash -LiteralPath $provenanceSnapshotPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($provenanceSnapshotSha256 -notmatch '^[0-9a-f]{64}$') { throw "Failed to hash canonical provenance snapshot" }
+}
+
 $metadata = @(
     "schema=3",
     "package=$Package",
     "activity=$Activity",
     "serial_hash=$serialHash",
+    "serial_privacy=sha256-16",
     "started_utc=$stamp",
     "source_commit=$sourceCommit",
     "requested_handover=$([int]$Handover.IsPresent)",
@@ -169,6 +297,11 @@ $metadata = @(
     "apk_supplied=$([int](-not [string]::IsNullOrWhiteSpace($Apk)))",
     "apk_basename=$apkBasename",
     "apk_sha256=$apkSha256",
+    "provenance_bound=$provenanceBound",
+    "provenance_contract=$(if (-not [string]::IsNullOrWhiteSpace($Provenance)) { 'exact-sha-v1' } else { 'none' })",
+    "provenance_artifact=$provenanceArtifact",
+    "provenance_tested_artifact=$provenanceTestedArtifact",
+    "provenance_snapshot_sha256=$provenanceSnapshotSha256",
     "max_heartbeat_age_ms=30000",
     "privacy=local-only-device-id-hashed-no-urls-no-hostnames-no-app-traffic-log"
 ) -join "`n"
@@ -176,7 +309,7 @@ Set-Utf8NoBom -Path (Join-Path $OutDir "metadata.env") -Value ($metadata + "`n")
 
 try {
     if (-not [string]::IsNullOrWhiteSpace($Apk)) {
-        Set-Utf8NoBom -Path (Join-Path $OutDir "install-initial.txt") -Value ((Invoke-AdbText -Arguments @("install", "-r", $Apk)) + "`n")
+        Set-RedactedUtf8NoBom -Path (Join-Path $OutDir "install-initial.txt") -Value ((Invoke-AdbText -Arguments @("install", "-r", $Apk)) + "`n")
     }
 
     Save-AdbOutput -Path (Join-Path $OutDir "activity-start.txt") -Arguments @("shell", "am", "start", "-W", "-n", $Activity)
@@ -193,7 +326,7 @@ try {
 
     if ($PackageReplace) {
         Save-Snapshot -Label "pre_package_replace"
-        Set-Utf8NoBom -Path (Join-Path $OutDir "install-package-replace.txt") -Value ((Invoke-AdbText -Arguments @("install", "-r", $Apk)) + "`n")
+        Set-RedactedUtf8NoBom -Path (Join-Path $OutDir "install-package-replace.txt") -Value ((Invoke-AdbText -Arguments @("install", "-r", $Apk)) + "`n")
         Start-Sleep -Seconds 10
         Save-Snapshot -Label "post_package_replace"
     }
@@ -255,6 +388,8 @@ try {
 finally {
     Restore-DeviceState
 }
+
+Write-WitnessManifest
 
 $validator = Join-Path "ci" "validate_android_physical_witness.py"
 $python = Get-Command python -ErrorAction SilentlyContinue
