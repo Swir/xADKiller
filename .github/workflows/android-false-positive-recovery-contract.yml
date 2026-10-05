@@ -1,0 +1,61 @@
+name: xADKiller Android false-positive recovery contract
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ android-v160-mega ]
+    paths:
+      - "app/src/main/java/com/swir/xadkiller/LogStore.java"
+      - "app/src/main/java/com/swir/xadkiller/SystemConsoleActivity.java"
+      - "app/src/test/java/com/swir/xadkiller/LogStoreTest.java"
+      - ".github/workflows/android-false-positive-recovery-contract.yml"
+
+concurrency:
+  group: xadkiller-android-fp-recovery-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  recovery-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android 35 from runner SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -perm -111 | sort -V | tail -n1)"
+          fi
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Local-only recovery UI safety contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          UI=app/src/main/java/com/swir/xadkiller/SystemConsoleActivity.java
+          LOG=app/src/main/java/com/swir/xadkiller/LogStore.java
+          grep -q 'confirmFalsePositiveRecovery' "$UI"
+          grep -q 'setPositiveButton(I18n.t(this,"ODBLOKUJ")' "$UI"
+          grep -q 'LogStore.recoverLatestFalsePositive(this)' "$UI"
+          grep -q 'AdBlockVpnServiceV121.ACTION_RELOAD' "$UI"
+          grep -q 'latestRecoverableDomainFile' "$LOG"
+          ! grep -Eq 'HttpURLConnection|URLConnection|\bfetch\b|raw\.githubusercontent\.com' "$LOG"
+          echo "Android local-only false-positive recovery UI contract: PASS"
+      - name: Recovery log selection and bounded-tail unit regression
+        run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.LogStoreTest
