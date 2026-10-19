@@ -15,6 +15,12 @@
 
 </div>
 
+## 📸 Screenshot
+
+![xADKiller application screenshot](docs/screenshots/application.png)
+
+Static preview of the repository's actual browser-extension popup HTML/CSS. Browser-extension APIs are not connected here; counters and status labels are uninitialized defaults, not measurements of active protection.
+
 ## 📌 Current project status
 
 `main` remains the stable/public baseline. Active Android and Chrome development is intentionally isolated on dedicated branches and open PRs so store/release code is not overwritten by unfinished work.
