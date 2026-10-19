@@ -17,7 +17,7 @@
 
 ## 📸 Screenshot
 
-![xADKiller application screenshot](docs/screenshots/application.png)
+![xADKiller application screenshot](docs/screenshots/application.jpg)
 
 Static preview of the repository's actual browser-extension popup HTML/CSS. Browser-extension APIs are not connected here; counters and status labels are uninitialized defaults, not measurements of active protection.
 
