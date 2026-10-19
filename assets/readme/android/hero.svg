@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
+  <title id="title">xADKiller Android — local DNS ad and tracker protection</title>
+  <desc id="desc">SWIR project banner for the Android xADKiller local VPN and DNS filtering application.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#02050A"/><stop offset="1" stop-color="#07111C"/></linearGradient>
+    <linearGradient id="electric" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0088FF"/><stop offset="1" stop-color="#62E5FF"/></linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <pattern id="grid" width="42" height="42" patternUnits="userSpaceOnUse"><path d="M42 0H0V42" fill="none" stroke="#62E5FF" stroke-opacity=".035"/></pattern>
+  </defs>
+  <rect width="1200" height="320" rx="28" fill="url(#bg)"/>
+  <rect x="1" y="1" width="1198" height="318" rx="27" fill="url(#grid)" stroke="#62E5FF" stroke-opacity=".25" stroke-width="2"/>
+  <path d="M83 70L170 38l87 32v72c0 67-38 111-87 138-49-27-87-71-87-138z" fill="#07111C" stroke="url(#electric)" stroke-width="6" filter="url(#glow)"/>
+  <path d="M126 151l29 29 62-72" fill="none" stroke="#62E5FF" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="310" y="70" fill="#62E5FF" font-family="Segoe UI,Arial,sans-serif" font-size="16" font-weight="700" letter-spacing="4">SWIR PROJECT</text>
+  <text x="310" y="135" fill="#F4FAFF" font-family="Segoe UI,Arial,sans-serif" font-size="58" font-weight="800">xADKiller Android</text>
+  <text x="310" y="185" fill="#8DA8B8" font-family="Segoe UI,Arial,sans-serif" font-size="24">Local VPN/DNS ad &amp; tracker blocking without root</text>
+  <line x1="310" y1="220" x2="1065" y2="220" stroke="url(#electric)" stroke-width="2" stroke-opacity=".7"/>
+  <text x="310" y="260" fill="#62E5FF" font-family="Segoe UI,Arial,sans-serif" font-size="17" font-weight="700">ANDROID • PRIVACY-FIRST • LOCAL FILTERING • BY SWIR</text>
+</svg>

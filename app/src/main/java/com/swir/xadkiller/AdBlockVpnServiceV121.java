@@ -24,6 +24,9 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.util.Arrays;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class AdBlockVpnServiceV121 extends VpnService {
@@ -36,17 +39,22 @@ public class AdBlockVpnServiceV121 extends VpnService {
     public static final String EXTRA_BLOCKED = "blocked";
     public static final String EXTRA_DOMAINS = "domains";
     public static final String EXTRA_LAST = "last";
+    public static final String EXTRA_UPSTREAM = "upstream";
     public static final String KEY_HEARTBEAT = "vpn_heartbeat_v121";
 
     private static final int NOTIFICATION_ID = 73;
     private static final String CHANNEL_ID = "xadkiller_vpn";
     private static final String VPN_DNS = "10.111.222.1";
     private static final String VPN_CLIENT = "10.111.222.2";
-    private static final String[] UPSTREAMS = {"1.1.1.1", "9.9.9.9", "8.8.8.8"};
+    private static final long HEARTBEAT_INTERVAL_MS = 5_000L;
+    private static final DnsUpstreamPool UPSTREAM_POOL = new DnsUpstreamPool(
+            new String[]{"1.1.1.1", "9.9.9.9", "8.8.8.8"});
 
     private final AtomicBoolean workerRunning = new AtomicBoolean(false);
+    private final Object heartbeatLock = new Object();
     private volatile ParcelFileDescriptor vpnInterface;
     private volatile Thread worker;
+    private volatile ScheduledExecutorService heartbeatExecutor;
     private volatile long queries;
     private volatile long blocked;
     private volatile String lastBlocked = "—";
@@ -56,7 +64,8 @@ public class AdBlockVpnServiceV121 extends VpnService {
         super.onCreate();
         createNotificationChannel();
         int base = BlocklistManager.bootstrap(this);
-        SystemLogStore.info(this, "VPN", "Serwis v1.5.0 utworzony • bootstrap=" + base + " domen • lang=" + I18n.language(this));
+        SystemLogStore.info(this, "VPN", "Serwis v1.6.0-dev utworzony • bootstrap=" + base + " domen • lang=" + I18n.language(this));
+        SystemLogStore.info(this, "UPSTREAM", "Adaptive DNS pool • " + UPSTREAM_POOL.snapshot(System.currentTimeMillis()));
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -147,6 +156,11 @@ public class AdBlockVpnServiceV121 extends VpnService {
                 PrivateDnsHelper.Snapshot dns = PrivateDnsHelper.inspect(this);
                 if (dns.isStrict()) SystemLogStore.warn(this, "PRIVATE_DNS", "Start przy STRICT: " + dns.pretty());
 
+                long networkEpochAt = System.currentTimeMillis();
+                UPSTREAM_POOL.onNetworkChanged(networkEpochAt);
+                SystemLogStore.info(this, "UPSTREAM", "Nowa epoka sieci VPN • reset tylko RTT/slow state • " +
+                        UPSTREAM_POOL.snapshot(networkEpochAt));
+
                 SystemLogStore.info(this, "VPN", "Budowanie TUN • client=" + VPN_CLIENT + " • dns=" + VPN_DNS);
                 Builder b = new Builder()
                         .setSession("xADKiller")
@@ -164,6 +178,7 @@ public class AdBlockVpnServiceV121 extends VpnService {
                         .putLong(KEY_HEARTBEAT, System.currentTimeMillis())
                         .apply();
                 SystemLogStore.info(this, "VPN", "Interfejs VPN utworzony poprawnie");
+                startHeartbeat();
                 sendStatus(true);
                 maybeRefreshBlocklist();
                 processPackets(vpnInterface);
@@ -173,6 +188,7 @@ public class AdBlockVpnServiceV121 extends VpnService {
                 sendStatus(true);
             } finally {
                 workerRunning.set(false);
+                stopHeartbeat();
                 closeVpnInterface();
                 getSharedPreferences(BlocklistManager.PREFS, MODE_PRIVATE).edit()
                         .putBoolean("running", false)
@@ -184,6 +200,38 @@ public class AdBlockVpnServiceV121 extends VpnService {
             }
         }, "xADKiller-VPN-Worker");
         worker.start();
+    }
+
+    private void startHeartbeat() {
+        synchronized (heartbeatLock) {
+            stopHeartbeatLocked();
+            heartbeatExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "xADKiller-VPN-Heartbeat");
+                thread.setDaemon(true);
+                return thread;
+            });
+            heartbeatExecutor.scheduleAtFixedRate(() -> {
+                if (!workerRunning.get() || vpnInterface == null) return;
+                try {
+                    sendStatus(true);
+                } catch (Throwable error) {
+                    SystemLogStore.warn(this, "VPN", "Heartbeat status update failed: " + error.getClass().getSimpleName());
+                }
+            }, HEARTBEAT_INTERVAL_MS, HEARTBEAT_INTERVAL_MS, TimeUnit.MILLISECONDS);
+        }
+        SystemLogStore.info(this, "VPN", "Traffic-independent heartbeat aktywny • interval=" + HEARTBEAT_INTERVAL_MS + "ms");
+    }
+
+    private void stopHeartbeat() {
+        synchronized (heartbeatLock) {
+            stopHeartbeatLocked();
+        }
+    }
+
+    private void stopHeartbeatLocked() {
+        ScheduledExecutorService executor = heartbeatExecutor;
+        heartbeatExecutor = null;
+        if (executor != null) executor.shutdownNow();
     }
 
     private void processPackets(ParcelFileDescriptor pfd) throws IOException {
@@ -267,40 +315,60 @@ public class AdBlockVpnServiceV121 extends VpnService {
 
     private byte[] forward(byte[] query) {
         String lastError = "";
-        for (String server : UPSTREAMS) {
+        long orderAt = System.currentTimeMillis();
+        for (String server : UPSTREAM_POOL.order(orderAt)) {
             DatagramSocket socket = null;
+            long startedNs = System.nanoTime();
             try {
                 socket = new DatagramSocket();
                 if (!protect(socket)) {
                     lastError = "protect() failed for " + server;
+                    UPSTREAM_POOL.recordFailure(server, System.currentTimeMillis());
                     continue;
                 }
-                socket.setSoTimeout(2200);
-                DatagramPacket request = new DatagramPacket(
-                        query, query.length, InetAddress.getByName(server), 53);
+
+                // Pin the UDP socket to the selected resolver before sending. A connected
+                // DatagramSocket accepts datagrams only from that exact IP:port peer, so a
+                // same-LAN/off-path packet cannot win the race solely by guessing the DNS
+                // transaction/question tuple. DnsPacket validation remains a second layer.
+                InetSocketAddress target = new InetSocketAddress(InetAddress.getByName(server), DnsPacket.DNS_PORT);
+                socket.connect(target);
+                socket.setSoTimeout(UPSTREAM_POOL.timeoutMs(server));
+                DatagramPacket request = new DatagramPacket(query, query.length);
                 socket.send(request);
+
                 byte[] buf = new byte[8192];
                 DatagramPacket response = new DatagramPacket(buf, buf.length);
                 socket.receive(response);
-                if (response.getLength() < 12) {
-                    lastError = "short response from " + server;
+                if (!target.equals(response.getSocketAddress())) {
+                    lastError = "unexpected DNS peer for " + server;
+                    UPSTREAM_POOL.recordFailure(server, System.currentTimeMillis());
+                    SystemLogStore.warn(this, "UPSTREAM", "Odrzucono odpowiedź DNS z nieoczekiwanego peer • server=" + server);
                     continue;
                 }
-                if (query.length >= 2 && (buf[0] != query[0] || buf[1] != query[1])) {
-                    lastError = "transaction id mismatch from " + server;
+                if (!DnsPacket.isValidUpstreamResponse(query, buf, response.getLength())) {
+                    lastError = "mismatched response from " + server;
+                    UPSTREAM_POOL.recordFailure(server, System.currentTimeMillis());
+                    SystemLogStore.warn(this, "UPSTREAM", "Odrzucono niepasującą odpowiedź DNS • server=" + server);
                     continue;
                 }
+                long rttMs = Math.max(1L, (System.nanoTime() - startedNs) / 1_000_000L);
+                UPSTREAM_POOL.recordSuccess(server, rttMs, System.currentTimeMillis());
                 return Arrays.copyOf(buf, response.getLength());
             } catch (SocketTimeoutException e) {
                 lastError = "timeout " + server;
+                UPSTREAM_POOL.recordFailure(server, System.currentTimeMillis());
             } catch (Exception e) {
                 lastError = server + ": " + e.getClass().getSimpleName() + " " + e.getMessage();
+                UPSTREAM_POOL.recordFailure(server, System.currentTimeMillis());
             } finally {
                 if (socket != null) socket.close();
             }
         }
-        if (!lastError.isEmpty())
-            SystemLogStore.warn(this, "UPSTREAM", "Wszystkie upstream DNS zawiodły • " + lastError);
+        if (!lastError.isEmpty()) {
+            SystemLogStore.warn(this, "UPSTREAM", "Wszystkie upstream DNS zawiodły • " + lastError +
+                    " • health=" + UPSTREAM_POOL.snapshot(System.currentTimeMillis()));
+        }
         return null;
     }
 
@@ -323,6 +391,7 @@ public class AdBlockVpnServiceV121 extends VpnService {
         getSharedPreferences(BlocklistManager.PREFS, MODE_PRIVATE).edit()
                 .putBoolean("running", actuallyRunning)
                 .putLong(KEY_HEARTBEAT, actuallyRunning ? now : 0)
+                .putString("dns_upstream_health", UPSTREAM_POOL.snapshot(now))
                 .apply();
         Intent i = new Intent(ACTION_STATUS).setPackage(getPackageName());
         i.putExtra(EXTRA_RUNNING, actuallyRunning);
@@ -330,6 +399,7 @@ public class AdBlockVpnServiceV121 extends VpnService {
         i.putExtra(EXTRA_BLOCKED, blocked);
         i.putExtra(EXTRA_DOMAINS, BlocklistManager.currentCount());
         i.putExtra(EXTRA_LAST, lastBlocked);
+        i.putExtra(EXTRA_UPSTREAM, UPSTREAM_POOL.snapshot(now));
         sendBroadcast(i);
     }
 
@@ -354,6 +424,7 @@ public class AdBlockVpnServiceV121 extends VpnService {
     private void stopVpnInternal(boolean self) {
         SystemLogStore.info(this, "VPN", "Zatrzymywanie • queries=" + queries + " • blocked=" + blocked);
         workerRunning.set(false);
+        stopHeartbeat();
         closeVpnInterface();
         getSharedPreferences(BlocklistManager.PREFS, MODE_PRIVATE).edit()
                 .putBoolean("running", false)

@@ -1,0 +1,33 @@
+name: xADKiller Android handover witness contract
+
+on:
+  push:
+    branches: [android-v160-mega]
+    paths:
+      - 'ci/validate_android_handover_witness.py'
+      - 'ci/test_android_handover_witness.py'
+      - 'tools/android-v160-active-dns-probe.py'
+      - '.github/workflows/android-handover-witness-contract.yml'
+  pull_request:
+    paths:
+      - 'ci/validate_android_handover_witness.py'
+      - 'ci/test_android_handover_witness.py'
+      - 'tools/android-v160-active-dns-probe.py'
+      - '.github/workflows/android-handover-witness-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate handover witness contract tests
+        run: python -m unittest -v ci/test_android_handover_witness.py
+      - name: Compile validator
+        run: python -m py_compile ci/validate_android_handover_witness.py

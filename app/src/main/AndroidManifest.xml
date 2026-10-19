@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -10,7 +11,8 @@
 
     <application
         android:name=".XadKillerApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@drawable/ic_launcher"
         android:label="xADKiller"
         android:localeConfig="@xml/locales_config"
@@ -66,12 +68,16 @@
                 android:resource="@xml/smart_ad_accessibility_service" />
         </service>
 
+        <!-- System-only restart broadcasts do not require third-party reachability. Keeping
+             this receiver non-exported prevents explicit broadcasts from other apps while
+             BOOT_COMPLETED / MY_PACKAGE_REPLACED remain deliverable by Android itself. -->
         <receiver
             android:name=".BootReceiverV121"
             android:enabled="true"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

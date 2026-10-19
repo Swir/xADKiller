@@ -2,10 +2,21 @@
   <title id="title">xADKiller Chrome progress — 100.0%</title>
   <desc id="desc">v1.5.0 Adaptive Memory &amp; Stability roadmap. Status HARDENING. Roadmap items: 27/27 verified. Development progress and release readiness are separate gates.</desc>
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#02050A"/><stop offset="1" stop-color="#07111C"/></linearGradient>
-    <linearGradient id="progressGradient" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0088FF"/><stop offset="1" stop-color="#62E5FF"/></linearGradient>
-    <filter id="softGlow" x="-10%" y="-80%" width="120%" height="260%"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-    <pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#62E5FF" stroke-opacity=".035" stroke-width="1"/></pattern>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#02050A"/>
+      <stop offset="1" stop-color="#07111C"/>
+    </linearGradient>
+    <linearGradient id="progressGradient" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0088FF"/>
+      <stop offset="1" stop-color="#62E5FF"/>
+    </linearGradient>
+    <filter id="softGlow" x="-10%" y="-80%" width="120%" height="260%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse">
+      <path d="M36 0H0V36" fill="none" stroke="#62E5FF" stroke-opacity=".035" stroke-width="1"/>
+    </pattern>
     <clipPath id="trackClip"><rect x="50" y="138" width="1100" height="18" rx="9"/></clipPath>
   </defs>
   <rect x="1" y="1" width="1198" height="178" rx="22" fill="url(#bg)" stroke="#62E5FF" stroke-opacity=".28" stroke-width="2"/>
