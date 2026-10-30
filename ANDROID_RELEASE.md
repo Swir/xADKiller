@@ -43,8 +43,9 @@ automatically. Subsequent production updates must use the same private release k
 2. Update STANDARD lists. Confirm the list count grows and protection stays active.
 3. Switch Wi-Fi → mobile → Wi-Fi; check normal browsing and new DNS block events.
 4. Lock the screen for 5–10 minutes, unlock and verify protection and internet.
-5. Stop/start protection several times. Test pause and resume. Add `example.com`
-   as a block rule, then allow it, then remove the exception. Normal access should return.
+5. Stop/start protection several times. Test pause and resume. Block `example.com`,
+   allow it, then remove the allow rule (blocking should resume). Finally remove
+   the block rule (normal access should return). Cached DNS may delay browser changes.
 6. Restart the phone with autostart enabled, unlock it and verify protection.
 7. Use normal apps for longer, and report crashes, broken content or unusual battery use.
 
