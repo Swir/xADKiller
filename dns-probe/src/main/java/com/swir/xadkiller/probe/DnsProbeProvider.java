@@ -70,6 +70,14 @@ public final class DnsProbeProvider extends ContentProvider {
                         network.bindSocket(socket);
                         socket.setSoTimeout(12_000);
                         socket.connect(InetAddress.getByName("10.111.222.1"), 53);
+                        // A new VPN can become visible before its route is installed.
+                        // Do not send a probe with a source selected from the old Wi-Fi route.
+                        if (!"10.111.222.2".equals(socket.getLocalAddress().getHostAddress())) {
+                            last = new IllegalStateException("VPN source address not ready: " + socket.getLocalAddress());
+                            socket.close();
+                            SystemClock.sleep(50);
+                            continue;
+                        }
                         socket.send(new DatagramPacket(payload, payload.length));
                         return socket;
                     } catch (java.io.IOException error) {

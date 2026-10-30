@@ -22,15 +22,17 @@ public class VpnRuntimeTest {
     private SharedPreferences prefs;
     private Activity activity;
 
-    @Before public void prepare() {
+    @Before public void prepare() throws Exception {
         context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         prefs = context.getSharedPreferences(BlocklistManager.PREFS, Context.MODE_PRIVATE);
         // Make these tests independent of live blocklist downloads.
-        prefs.edit().putLong(BlocklistManager.KEY_LAST_UPDATE, System.currentTimeMillis()).commit();
+        prefs.edit().putLong(BlocklistManager.KEY_LAST_UPDATE, System.currentTimeMillis())
+                .putBoolean(BlocklistManager.KEY_AUTOSTART, false).commit();
         DnsPause.resume(context);
         assertNull("Grant ACTIVATE_VPN to the disposable test app before running", VpnService.prepare(context));
         activity = InstrumentationRegistry.getInstrumentation().startActivitySync(
                 new Intent(context, MainActivityV121.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        stop();
     }
 
     @After public void cleanup() throws Exception {
