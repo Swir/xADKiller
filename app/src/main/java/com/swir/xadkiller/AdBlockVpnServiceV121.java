@@ -267,7 +267,7 @@ public class AdBlockVpnServiceV121 extends VpnService {
                 thread.setDaemon(true);
                 return thread;
             });
-            heartbeatExecutor.scheduleAtFixedRate(() -> {
+            heartbeatExecutor.scheduleWithFixedDelay(() -> {
                 if (!workerRunning.get() || vpnInterface == null) return;
                 try {
                     sendStatus(true);

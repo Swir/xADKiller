@@ -479,6 +479,7 @@ public class MainActivityV121 extends MainActivityV140 {
         long pause = DnsPause.remaining(this);
         if (pauseButton != null) {
             pauseButton.setEnabled(currentHealth.vpn == DashboardStatusModel.VpnState.ACTIVE || pause > 0);
+            pauseButton.setAlpha(pauseButton.isEnabled() ? 1f : .45f);
             pauseButton.setText(pause > 0
                     ? tr("WZNÓW DNS • ", "RESUME DNS • ") + ((pause + 59_999) / 60_000) + " min"
                     : tr("WSTRZYMAJ DNS NA CHWILĘ", "PAUSE DNS TEMPORARILY"));
