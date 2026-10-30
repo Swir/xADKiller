@@ -1,6 +1,7 @@
 package com.swir.xadkiller;
 
 import android.Manifest;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -59,10 +60,12 @@ public class MainActivityV121 extends MainActivityV140 {
     private TextView healthUpdate;
     private Button recoveryButton;
     private DashboardStatusModel currentHealth;
+    private Button pauseButton;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         installHealthPanel();
+        installQuickActions();
         applyPremiumSurfacePass();
         refreshDevelopmentLabels();
         refreshHealthPanel();
@@ -150,8 +153,129 @@ public class MainActivityV121 extends MainActivityV140 {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         panelParams.setMargins(0, 0, 0, dp16(10));
 
-        int insertAt = Math.min(2, root.getChildCount());
+        int insertAt = Math.min(4, root.getChildCount());
         root.addView(panel, insertAt, panelParams);
+    }
+
+    private void installQuickActions() {
+        LinearLayout root = dashboardRoot();
+        if (root == null) return;
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp16(16), dp16(14), dp16(16), dp16(14));
+        panel.setBackground(premiumSurface(false));
+        panel.addView(statusText(tr("SZYBKIE DZIAŁANIA", "QUICK ACTIONS"), 11,
+                getColor(R.color.swir_cyan), true));
+        pauseButton = quickButton(panel, "", () -> {
+            if (DnsPause.remaining(this) > 0) {
+                DnsPause.resume(this);
+                refreshHealthPanel();
+            } else {
+                new AlertDialog.Builder(this).setTitle(tr("Pauza filtrowania DNS", "Pause DNS filtering"))
+                        .setItems(new String[]{tr("5 minut", "5 minutes"), tr("15 minut", "15 minutes")}, (d, which) -> {
+                            DnsPause.pause(this, which == 0 ? 5 : 15);
+                            refreshHealthPanel();
+                        }).setNegativeButton(I18n.t(this, "Anuluj"), null).show();
+            }
+        });
+        panel.addView(statusText(tr("Ochrona DNS wznowi się automatycznie. Smart Engine działa osobno.",
+                "DNS filtering resumes automatically. Smart Engine operates separately."),
+                11, getColor(R.color.swir_muted), false));
+        quickButton(panel, tr("MOJE REGUŁY", "MY RULES"), this::chooseRules);
+        quickButton(panel, tr("OSTATNIE BLOKADY / ODBLOKUJ", "RECENT BLOCKS / ALLOW"), this::showRecentBlocks);
+        Switch auto = new Switch(this);
+        SharedPreferences p = getSharedPreferences(BlocklistManager.PREFS, MODE_PRIVATE);
+        auto.setText(tr("Wznawiaj ochronę po restarcie telefonu", "Resume protection after device restart"));
+        auto.setTextSize(12);
+        auto.setMinHeight(dp16(48));
+        auto.setChecked(p.getBoolean(BlocklistManager.KEY_AUTOSTART, true));
+        auto.setOnCheckedChangeListener((button, checked) -> p.edit()
+                .putBoolean(BlocklistManager.KEY_AUTOSTART, checked).apply());
+        styleSwitch(auto);
+        panel.addView(auto);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(0, 0, 0, dp16(10));
+        root.addView(panel, Math.min(4, root.getChildCount()), params);
+    }
+
+    private Button quickButton(LinearLayout panel, String label, Runnable action) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setAllCaps(false);
+        button.setTextSize(12);
+        button.setOnClickListener(v -> action.run());
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(0, dp16(8), 0, dp16(4));
+        button.setMinHeight(dp16(48));
+        button.setPadding(dp16(12), dp16(8), dp16(12), dp16(8));
+        panel.addView(button, params);
+        return button;
+    }
+
+    private void chooseRules() {
+        new AlertDialog.Builder(this).setTitle(tr("Moje reguły", "My rules"))
+                .setItems(new String[]{tr("Dozwolone domeny", "Allowed domains"),
+                        tr("Własne blokady", "Custom blocks")}, (d, which) -> showRules(which == 0))
+                .setNegativeButton(I18n.t(this, "Anuluj"), null).show();
+    }
+
+    private void showRules(boolean allow) {
+        java.util.List<String> domains = BlocklistManager.rules(this, allow);
+        AlertDialog.Builder dialog = new AlertDialog.Builder(this)
+                .setTitle(allow ? tr("Dozwolone domeny", "Allowed domains") : tr("Własne blokady", "Custom blocks"))
+                .setNegativeButton(I18n.t(this, "Anuluj"), null);
+        if (domains.isEmpty()) dialog.setMessage(tr("Brak reguł. Dodaj domenę w sekcji poniżej.",
+                "No rules yet. Add a domain in the section below."));
+        else dialog.setItems(domains.toArray(new String[0]), (d, which) -> {
+            String domain = domains.get(which);
+            new AlertDialog.Builder(this).setTitle(tr("Usunąć regułę?", "Remove rule?"))
+                    .setMessage(domain + "\n\n" + tr("Reguły z pobranych list pozostaną aktywne.",
+                            "Rules from downloaded lists remain active."))
+                    .setNegativeButton(I18n.t(this, "Anuluj"), null)
+                    .setPositiveButton(tr("Usuń", "Remove"), (confirm, button) ->
+                            runRuleEdit(() -> BlocklistManager.removeRule(getApplicationContext(), domain, allow)))
+                    .show();
+        });
+        dialog.show();
+    }
+
+    private void showRecentBlocks() {
+        new Thread(() -> {
+            java.util.LinkedHashSet<String> unique = new java.util.LinkedHashSet<>();
+            for (LogStore.Entry entry : LogStore.readRecent(getApplicationContext(), 100)) {
+                String domain = BlocklistManager.normalize(entry.domain);
+                if (domain != null) unique.add(domain);
+                if (unique.size() == 30) break;
+            }
+            String[] domains = unique.toArray(new String[0]);
+            runOnUiThread(() -> {
+                if (isDestroyed() || isFinishing()) return;
+                AlertDialog.Builder dialog = new AlertDialog.Builder(this)
+                        .setTitle(tr("Ostatnie blokady", "Recent blocks"))
+                        .setNegativeButton(I18n.t(this, "Anuluj"), null);
+                if (domains.length == 0) dialog.setMessage(tr("Nie ma jeszcze blokad DNS.", "No DNS blocks recorded yet."));
+                else dialog.setItems(domains, (d, which) -> new AlertDialog.Builder(this)
+                        .setTitle(tr("Zezwolić na domenę?", "Allow this domain?"))
+                        .setMessage(domains[which] + "\n\n" + tr("Wyjątek obejmie też jej subdomeny. Możesz go usunąć w Moich regułach.",
+                                "The exception includes subdomains. Remove it anytime in My rules."))
+                        .setNegativeButton(I18n.t(this, "Anuluj"), null)
+                        .setPositiveButton(I18n.t(this, "ZEZWÓL"), (confirm, button) ->
+                                runRuleEdit(() -> BlocklistManager.addAllow(getApplicationContext(), domains[which])))
+                        .show());
+                dialog.show();
+            });
+        }, "xADKiller-RecentBlocks").start();
+    }
+
+    private void runRuleEdit(Runnable edit) {
+        new Thread(() -> {
+            edit.run();
+            runOnUiThread(() -> {
+                if (isDestroyed() || isFinishing()) return;
+                refreshHealthPanel();
+                Toast.makeText(this, tr("Reguły zaktualizowane", "Rules updated"), Toast.LENGTH_SHORT).show();
+            });
+        }, "xADKiller-EditRules").start();
     }
 
     /**
@@ -294,6 +418,7 @@ public class MainActivityV121 extends MainActivityV140 {
 
     private void refreshHealthPanel() {
         if (healthSummary == null) return;
+        refreshProtectionUi();
 
         long now = System.currentTimeMillis();
         SharedPreferences p = getSharedPreferences(BlocklistManager.PREFS, MODE_PRIVATE);
@@ -349,6 +474,19 @@ public class MainActivityV121 extends MainActivityV140 {
                 break;
             default:
                 setLine(healthDns, tr("DNS: brak aktywnej sieci / handover", "DNS: no active network / handover"), warn);
+        }
+
+        long pause = DnsPause.remaining(this);
+        if (pauseButton != null) {
+            pauseButton.setEnabled(currentHealth.vpn == DashboardStatusModel.VpnState.ACTIVE || pause > 0);
+            pauseButton.setText(pause > 0
+                    ? tr("WZNÓW DNS • ", "RESUME DNS • ") + ((pause + 59_999) / 60_000) + " min"
+                    : tr("WSTRZYMAJ DNS NA CHWILĘ", "PAUSE DNS TEMPORARILY"));
+        }
+        if (pause > 0) {
+            healthSummary.setText(tr("Filtrowanie DNS wstrzymane", "DNS filtering paused"));
+            healthSummary.setTextColor(warn);
+            setLine(healthDns, tr("DNS: pauza • automatyczne wznowienie", "DNS: paused • resumes automatically"), warn);
         }
 
         switch (currentHealth.blocklist) {
@@ -500,7 +638,7 @@ public class MainActivityV121 extends MainActivityV140 {
             TextView textView = (TextView) view;
             CharSequence text = textView.getText();
             if (text != null && text.toString().startsWith("xADKiller 1.5.0")) {
-                textView.setText(text.toString().replace("xADKiller 1.5.0", "xADKiller 1.6.0-dev"));
+                textView.setText(text.toString().replace("xADKiller 1.5.0", "xADKiller 1.6.0"));
             }
         }
         if (view instanceof ViewGroup) {

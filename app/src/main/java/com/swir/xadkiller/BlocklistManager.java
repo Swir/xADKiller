@@ -63,10 +63,15 @@ final class BlocklistManager {
     private static volatile long[] BLOCKED = new long[0];
     private static volatile Set<String> ALLOWED = Collections.emptySet();
     private static volatile boolean fullLoaded;
+    private static volatile boolean initialized;
+    private static final Object UPDATE_LOCK = new Object();
 
     private BlocklistManager() {}
 
-    static synchronized int bootstrap(Context context) {
+    static int bootstrap(Context context) {
+        if (initialized) return BLOCKED.length;
+        synchronized (BlocklistManager.class) {
+        if (initialized) return BLOCKED.length;
         try {
             LongCollector c = new LongCollector(8192);
             try (InputStream in = context.getAssets().open("default_blocklist.txt")) {
@@ -76,12 +81,14 @@ final class BlocklistManager {
             BLOCKED = c.toSortedUnique();
             ALLOWED = readAllowList(context);
             fullLoaded = false;
+            initialized = true;
             return BLOCKED.length;
         } catch (Throwable t) {
             BLOCKED = new long[0];
             ALLOWED = Collections.emptySet();
             fullLoaded = false;
             return 0;
+        }
         }
     }
 
@@ -103,7 +110,8 @@ final class BlocklistManager {
             Set<String> allow = readAllowList(context);
             BLOCKED = result;
             ALLOWED = allow;
-            fullLoaded = true;
+            fullLoaded = cache.isFile();
+            initialized = true;
             return result.length;
         } catch (OutOfMemoryError oom) {
             fullLoaded = false;
@@ -143,7 +151,8 @@ final class BlocklistManager {
 
     static int currentCount() { return BLOCKED.length; }
 
-    static synchronized int updateRemote(Context context) throws IOException {
+    static int updateRemote(Context context) throws IOException {
+        synchronized (UPDATE_LOCK) {
         File tmp = new File(context.getFilesDir(), CACHE_FILE + ".tmp");
         File dst = new File(context.getFilesDir(), CACHE_FILE);
         File bak = new File(context.getFilesDir(), CACHE_FILE + ".bak");
@@ -195,9 +204,11 @@ final class BlocklistManager {
                             " • previousUnique=" + previousCount + " • activeUnique=" + count);
         } catch (Throwable ignored) {}
         return count;
+        }
     }
 
-    static synchronized void clearRemoteCache(Context context) {
+    static void clearRemoteCache(Context context) {
+        synchronized (UPDATE_LOCK) {
         File cache = new File(context.getFilesDir(), CACHE_FILE);
         File tmp = new File(context.getFilesDir(), CACHE_FILE + ".tmp");
         File bak = new File(context.getFilesDir(), CACHE_FILE + ".bak");
@@ -206,7 +217,9 @@ final class BlocklistManager {
         if (bak.exists()) bak.delete();
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .remove(KEY_LAST_UPDATE).remove(KEY_CACHE_MODE).putBoolean(KEY_STRICT, false).apply();
+        initialized = false;
         bootstrap(context);
+        }
     }
 
     static boolean candidateCountLooksHealthy(String previousMode, String newMode, int previousCount, int newCount) {
@@ -249,7 +262,7 @@ final class BlocklistManager {
         if (bak.exists() && !bak.delete()) bak.deleteOnExit();
     }
 
-    static void addCustomBlock(Context context, String domain) {
+    static synchronized void addCustomBlock(Context context, String domain) {
         updateSet(context, KEY_CUSTOM_BLOCK, domain, true);
         updateSet(context, KEY_ALLOW, domain, false);
         String n = normalize(domain);
@@ -257,16 +270,32 @@ final class BlocklistManager {
         ALLOWED = readAllowList(context);
     }
 
-    static void addAllow(Context context, String domain) {
+    static synchronized void addAllow(Context context, String domain) {
         updateSet(context, KEY_ALLOW, domain, true);
         updateSet(context, KEY_CUSTOM_BLOCK, domain, false);
         ALLOWED = readAllowList(context);
     }
 
-    static void clearCustomRules(Context context) {
+    static synchronized void clearCustomRules(Context context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .remove(KEY_CUSTOM_BLOCK).remove(KEY_ALLOW).apply();
         ALLOWED = Collections.emptySet();
+        load(context);
+    }
+
+    static synchronized void removeRule(Context context, String domain, boolean allow) {
+        updateSet(context, allow ? KEY_ALLOW : KEY_CUSTOM_BLOCK, domain, false);
+        // Rebuild to retain a block that also comes from the downloaded lists.
+        load(context);
+    }
+
+    static java.util.List<String> rules(Context context, boolean allow) {
+        Set<String> saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getStringSet(allow ? KEY_ALLOW : KEY_CUSTOM_BLOCK, Collections.emptySet());
+        java.util.List<String> result = new java.util.ArrayList<>();
+        if (saved != null) result.addAll(saved);
+        Collections.sort(result);
+        return result;
     }
 
     private static int downloadInto(String source, BufferedWriter writer, int max) throws IOException {

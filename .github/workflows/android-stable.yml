@@ -1,0 +1,99 @@
+name: Android release qualification
+
+on:
+  push:
+    branches: [android-stable]
+    paths: ['app/**', 'ci/**', 'build.gradle', 'settings.gradle', 'gradle.properties', '.github/workflows/android-stable.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.9'
+      - name: Install SDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" >/dev/null
+      - name: Large-list memory qualification
+        run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.BlocklistLargeListQualificationTest -PxadkillerLargeListQualification=true
+      - name: Unit tests, release lint and build
+        run: gradle --no-daemon testDebugUnitTest testReleaseUnitTest lintRelease assembleRelease assembleDebug assembleDebugAndroidTest
+      - name: Validate production package
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release-unsigned.apk
+          unzip -tq "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > package.txt
+          grep -q "package: name='com.swir.xadkiller' versionCode='13' versionName='1.6.0'" package.txt
+          ! grep -q 'application-debuggable' package.txt
+          python3 ci/validate_android_release.py
+          mkdir -p artifacts
+          cp "$APK" artifacts/
+          cp package.txt artifacts/
+          git rev-parse HEAD > artifacts/SOURCE_COMMIT.txt
+          (cd artifacts && sha256sum app-release-unsigned.apk > UNSIGNED_SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: Android-release-build
+          path: |
+            artifacts/*
+            app/build/test-results/**
+            app/build/reports/lint-results-release.*
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/androidTest/debug/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  emulator:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [29, 35]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: Android-release-build
+          path: tested
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Real VPN integration tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install tested/app/build/outputs/apk/debug/app-debug.apk
+            adb install tested/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell appops set com.swir.xadkiller.debug ACTIVATE_VPN allow
+            adb shell settings put global private_dns_mode off
+            adb shell am instrument -w com.swir.xadkiller.debug.test/androidx.test.runner.AndroidJUnitRunner | tee runtime.txt
+            grep -q 'OK (5 tests)' runtime.txt
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: Android-runtime-api-${{ matrix.api }}
+          path: runtime.txt

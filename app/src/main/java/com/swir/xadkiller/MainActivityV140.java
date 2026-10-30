@@ -150,24 +150,37 @@ public class MainActivityV140 extends Activity {
         Button github=button("GITHUB • github.com/Swir/xADKiller",surface2,text);github.setOnClickListener(v->openUrl("https://github.com/Swir/xADKiller"));root.addView(github,h(48));gap(root,10);
         TextView footer=tv("xADKiller 1.5.0 • Multi-Language • Adaptive AI • BY SWIR",11,muted,false);footer.setGravity(Gravity.CENTER);root.addView(footer,wrap());
         setContentView(scroll);
+        // Android 15+ enforces edge-to-edge for target 35. Keep actions above system bars.
+        if (Build.VERSION.SDK_INT >= 35) {
+            scroll.setOnApplyWindowInsetsListener((view, insets) -> {
+                android.graphics.Insets bars = insets.getInsets(android.view.WindowInsets.Type.systemBars()
+                        | android.view.WindowInsets.Type.displayCutout() | android.view.WindowInsets.Type.ime());
+                view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+                return insets;
+            });
+            scroll.requestApplyInsets();
+        }
         I18n.apply(this, scroll);
     }
 
+    protected void refreshProtectionUi() { renderAll(); }
+
     private void renderAll() {
         boolean running=hasFreshVpn();
-        renderVpn(running,0,0,BlocklistManager.currentCount(),"—");
+        renderVpn(running,prefs().getLong("dns_queries",0),prefs().getLong("dns_blocked",0),BlocklistManager.currentCount(),prefs().getString("dns_last_blocked","—"));
         renderPrivateDns();renderSmart();renderAi();renderListInfo();
         localize();
     }
 
     private void renderVpn(boolean running,long queries,long blocked,int domains,String last) {
         if(vpnStatus==null)return;
-        if(running){vpnStatus.setText(I18n.t(this,"AKTYWNA"));vpnStatus.setTextColor(c(R.color.swir_green));vpnButton.setText(I18n.t(this,"WYŁĄCZ OCHRONĘ"));vpnButton.setBackground(round(c(R.color.swir_red),12));vpnButton.setTextColor(Color.WHITE);}
+        if(running && DnsPause.remaining(this)>0){vpnStatus.setText("pl".equals(I18n.language(this))?"PAUZA DNS":"DNS PAUSED");vpnStatus.setTextColor(c(R.color.swir_blue));vpnButton.setText(I18n.t(this,"WYŁĄCZ OCHRONĘ"));}
+        else if(running){vpnStatus.setText(I18n.t(this,"AKTYWNA"));vpnStatus.setTextColor(c(R.color.swir_green));vpnButton.setText(I18n.t(this,"WYŁĄCZ OCHRONĘ"));vpnButton.setBackground(round(c(R.color.swir_red),12));vpnButton.setTextColor(Color.WHITE);}
         else{vpnStatus.setText(I18n.t(this,"WYŁĄCZONA"));vpnStatus.setTextColor(c(R.color.swir_red));vpnButton.setText(I18n.t(this,"WŁĄCZ OCHRONĘ"));vpnButton.setBackground(round(c(R.color.swir_blue),12));vpnButton.setTextColor(Color.BLACK);}
         dnsStats.setText(I18n.dynamic(this,blocked+" zablokowanych • "+queries+" zapytań"));domainCount.setText(I18n.dynamic(this,domains+" domen na liście"));lastBlocked.setText(I18n.dynamic(this,"Ostatnia blokada: "+(last==null?"—":last)));
     }
 
-    private boolean hasFreshVpn(){SharedPreferences p=prefs();long hb=p.getLong(AdBlockVpnServiceV121.KEY_HEARTBEAT,0);boolean r=p.getBoolean("running",false);boolean fresh=r&&hb>0&&System.currentTimeMillis()-hb<12000;if(r&&!fresh)p.edit().putBoolean("running",false).putLong(AdBlockVpnServiceV121.KEY_HEARTBEAT,0).apply();return fresh;}
+    private boolean hasFreshVpn(){SharedPreferences p=prefs();long hb=p.getLong(AdBlockVpnServiceV121.KEY_HEARTBEAT,0);long age=System.currentTimeMillis()-hb;return p.getBoolean("running",false)&&hb>0&&age>=0&&age<12000;}
 
     private void renderPrivateDns(){if(privateDns==null)return;PrivateDnsHelper.Snapshot s=PrivateDnsHelper.inspect(this);privateDns.setText(I18n.dynamic(this,(s.isStrict()?"⚠ STRICT • ":"OK • ")+s.pretty()+" • DNS: "+s.dnsServers));privateDns.setTextColor(s.isStrict()?c(R.color.swir_red):c(R.color.swir_green));}
 
@@ -197,9 +210,19 @@ public class MainActivityV140 extends Activity {
     private void updateLists(){if(updateButton==null||!updateButton.isEnabled())return;updateButton.setEnabled(false);updateButton.setText(I18n.t(this,"POBIERANIE…"));new Thread(()->{try{int n=BlocklistManager.updateRemote(getApplicationContext());SystemLogStore.info(this,"BLOCKLIST","Update OK • "+n);runOnUiThread(()->{updateButton.setEnabled(true);updateButton.setText(I18n.t(this,"AKTUALIZUJ LISTY"));domainCount.setText(I18n.dynamic(this,n+" domen na liście"));renderListInfo();reloadVpn();localize();});}catch(Throwable t){SystemLogStore.error(this,"BLOCKLIST","Update failed",t);runOnUiThread(()->{updateButton.setEnabled(true);updateButton.setText(I18n.t(this,"AKTUALIZUJ LISTY"));Toast.makeText(this,I18n.t(this,"Błąd list — zobacz konsolę."),Toast.LENGTH_LONG).show();localize();});}},"xADKiller-ListUpdate").start();}
     private void reloadVpn(){if(!hasFreshVpn())return;try{startService(new Intent(this,AdBlockVpnServiceV121.class).setAction(AdBlockVpnServiceV121.ACTION_RELOAD));}catch(Exception e){SystemLogStore.error(this,"VPN","Reload failed",e);}}
 
-    private void addRule(boolean block){String d=BlocklistManager.normalize(domainInput.getText().toString());if(d==null){Toast.makeText(this,I18n.t(this,"Podaj poprawną domenę."),Toast.LENGTH_LONG).show();return;}if(block)BlocklistManager.addCustomBlock(this,d);else BlocklistManager.addAllow(this,d);domainInput.setText("");domainCount.setText(I18n.dynamic(this,BlocklistManager.currentCount()+" domen na liście"));reloadVpn();}
+    private void addRule(boolean block) {
+        String domain = BlocklistManager.normalize(domainInput.getText().toString());
+        if (domain == null) { Toast.makeText(this,I18n.t(this,"Podaj poprawną domenę."),Toast.LENGTH_LONG).show(); return; }
+        domainInput.setText("");
+        new Thread(() -> {
+            if (block) BlocklistManager.addCustomBlock(getApplicationContext(), domain);
+            else BlocklistManager.addAllow(getApplicationContext(), domain);
+            runOnUiThread(() -> { if (!isDestroyed()) { renderAll(); Toast.makeText(this,
+                    "pl".equals(I18n.language(this)) ? "Reguła zapisana" : "Rule saved", Toast.LENGTH_SHORT).show(); }});
+        }, "xADKiller-SaveRule").start();
+    }
 
-    private void confirmReset(){new AlertDialog.Builder(this).setTitle(I18n.t(this,"Reset cache / ULTRA?")).setMessage(I18n.t(this,"Usunie pobraną dużą listę i wyłączy ULTRA. Własne reguły zostaną zachowane.")).setNegativeButton(I18n.t(this,"Anuluj"),null).setPositiveButton("RESET",(d,w)->{try{startService(new Intent(this,AdBlockVpnServiceV121.class).setAction(AdBlockVpnServiceV121.ACTION_STOP));}catch(Exception ignored){}BlocklistManager.clearRemoteCache(this);renderAll();Toast.makeText(this,I18n.t(this,"Cache zresetowany."),Toast.LENGTH_LONG).show();}).show();}
+    private void confirmReset(){new AlertDialog.Builder(this).setTitle(I18n.t(this,"Reset cache / ULTRA?")).setMessage(I18n.t(this,"Usunie pobraną dużą listę i wyłączy ULTRA. Własne reguły zostaną zachowane.")).setNegativeButton(I18n.t(this,"Anuluj"),null).setPositiveButton("RESET",(d,w)->{try{startService(new Intent(this,AdBlockVpnServiceV121.class).setAction(AdBlockVpnServiceV121.ACTION_STOP));}catch(Exception ignored){}new Thread(() -> {BlocklistManager.clearRemoteCache(getApplicationContext());runOnUiThread(() -> {if(!isDestroyed()){renderAll();Toast.makeText(this,I18n.t(this,"Cache zresetowany."),Toast.LENGTH_LONG).show();}});},"xADKiller-ResetCache").start();}).show();}
 
     private void loadFullListAsync(){new Thread(()->{try{int n=BlocklistManager.load(getApplicationContext());runOnUiThread(()->{if(domainCount!=null)domainCount.setText(I18n.dynamic(this,n+" domen na liście"));localize();});}catch(Throwable t){SystemLogStore.error(this,"BLOCKLIST","Startup load failed",t);}},"xADKiller-StartupList").start();}
 

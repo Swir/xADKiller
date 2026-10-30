@@ -1,5 +1,12 @@
 <!-- SWIR-README-STANDARD:v2 -->
 
+**Android 1.6.0 release candidate:** the `android-stable` branch adds temporary DNS
+pause, editable exceptions, recent-block recovery and VPN lifecycle fixes. See
+[installation, privacy and phone checks](ANDROID_RELEASE.md). Stable promotion
+follows automated tests and physical-phone validation.
+
+**Firefox Stable:** [Firefox 1.5.0](https://github.com/Swir/xADKiller/releases/tag/firefox-v1.5.0).
+
 <div align="center">
 
 # xADKiller

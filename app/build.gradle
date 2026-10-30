@@ -5,13 +5,15 @@ plugins {
 android {
     namespace 'com.swir.xadkiller'
     compileSdk 35
+    buildToolsVersion '35.0.0'
 
     defaultConfig {
         applicationId 'com.swir.xadkiller'
         minSdk 26
         targetSdk 35
-        versionCode 12
+        versionCode 13
         versionName '1.6.0'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
     buildTypes {
@@ -46,6 +48,8 @@ android {
 
 dependencies {
     testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
 }
 
 def xadLargeListQualification = project.findProperty('xadkillerLargeListQualification')?.toString()?.toBoolean() ?: false

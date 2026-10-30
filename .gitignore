@@ -1,0 +1,12 @@
+.gradle/
+**/build/
+local.properties
+*.keystore
+*.jks
+*.p12
+*.password
+artifacts/
+test-results/
+browser-extension/node_modules/
+browser-extension/dist/
+__pycache__/

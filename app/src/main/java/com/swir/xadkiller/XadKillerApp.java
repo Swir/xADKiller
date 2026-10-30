@@ -18,6 +18,6 @@ public class XadKillerApp extends Application {
         // cache-install rename window. An interrupted .tmp is deliberately never promoted.
         BlocklistCacheRecovery.recover(this);
 
-        SystemLogStore.info(this, "APP", "Start procesu xADKiller 1.6.0-dev • lokalny VPN/DNS • Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")");
+        SystemLogStore.info(this, "APP", "Start procesu xADKiller 1.6.0 • lokalny VPN/DNS • Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")");
     }
 }

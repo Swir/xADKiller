@@ -93,7 +93,7 @@ public class BootReceiverV121 extends BroadcastReceiver {
         String reason = VpnLifecycleStartPolicy.ACTION_MY_PACKAGE_REPLACED.equals(action)
                 ? "MY_PACKAGE_REPLACED • resume recent previously-running protection"
                 : "BOOT_COMPLETED • autostart";
-        SystemLogStore.info(context, "BOOT", reason + " • v1.6.0-dev");
+        SystemLogStore.info(context, "BOOT", reason + " • v1.6.0");
 
         Intent service = new Intent(context, AdBlockVpnServiceV121.class)
                 .setAction(AdBlockVpnServiceV121.ACTION_START);
