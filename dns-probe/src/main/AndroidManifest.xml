@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <permission android:name="com.swir.xadkiller.probe.QUERY" android:protectionLevel="signature" />
+    <application android:label="xADKiller test probe" android:allowBackup="false" android:usesCleartextTraffic="false">
+        <provider android:name=".DnsProbeProvider" android:authorities="com.swir.xadkiller.probe"
+            android:exported="true" android:permission="com.swir.xadkiller.probe.QUERY" />
+    </application>
+</manifest>

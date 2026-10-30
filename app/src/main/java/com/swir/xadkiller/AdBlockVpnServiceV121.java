@@ -213,6 +213,8 @@ public class AdBlockVpnServiceV121 extends VpnService {
                         .setSession("xADKiller")
                         .setMtu(1500)
                         .setBlocking(true)
+                        // This is a DNS-only tunnel. Do not blackhole normal IPv6 traffic.
+                        .allowFamily(OsConstants.AF_INET6)
                         .addAddress(VPN_CLIENT, 32)
                         .addRoute(VPN_DNS, 32)
                         .addDnsServer(VPN_DNS);

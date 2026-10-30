@@ -5,9 +5,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.VpnService;
-import android.net.ConnectivityManager;
-import android.net.Network;
-import android.net.NetworkCapabilities;
 import android.os.SystemClock;
 import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -15,11 +12,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import java.io.ByteArrayOutputStream;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.function.BooleanSupplier;
 import static org.junit.Assert.*;
 
@@ -136,43 +128,12 @@ public class VpnRuntimeTest {
         assertTrue("VPN state did not converge before timeout", condition.getAsBoolean());
     }
 
-    private int query(String host) throws Exception {
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        int id = (int) System.nanoTime() & 0xffff;
-        bytes.write(new byte[]{(byte)(id >> 8), (byte)id, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0});
-        for (String label : host.split("\\.")) {
-            byte[] value = label.getBytes(StandardCharsets.US_ASCII);
-            bytes.write(value.length); bytes.write(value);
-        }
-        bytes.write(new byte[]{0, 0, 1, 0, 1});
-        byte[] payload = bytes.toByteArray();
-        try (DatagramSocket socket = new DatagramSocket()) {
-            // Android exempts the VPN provider UID from default VPN routing. Bind this
-            // in-process probe explicitly to the VPN, as an ordinary protected app routes.
-            ConnectivityManager manager = context.getSystemService(ConnectivityManager.class);
-            Network vpn = null;
-            long deadline = SystemClock.elapsedRealtime() + 5000;
-            while (vpn == null && SystemClock.elapsedRealtime() < deadline) {
-                for (Network network : manager.getAllNetworks()) {
-                    NetworkCapabilities caps = manager.getNetworkCapabilities(network);
-                    if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) vpn = network;
-                }
-                if (vpn == null) SystemClock.sleep(50);
-            }
-            assertNotNull("VPN network must be registered before a wire-level probe", vpn);
-            vpn.bindSocket(socket);
-            socket.setSoTimeout(12_000);
-            socket.connect(InetAddress.getByName("10.111.222.1"), 53);
-            socket.send(new DatagramPacket(payload, payload.length));
-            byte[] response = new byte[8192];
-            DatagramPacket packet = new DatagramPacket(response, response.length);
-            socket.receive(packet);
-            assertTrue(packet.getLength() >= 12);
-            assertEquals(id, ((response[0] & 255) << 8) | (response[1] & 255));
-            assertTrue((response[2] & 128) != 0);
-            int code = response[3] & 15;
-            if (code == 0) assertTrue("Successful A query must have an answer", response[6] != 0 || response[7] != 0);
-            return code;
-        }
+    private int query(String host) {
+        android.os.Bundle result = context.getContentResolver().call(
+                android.net.Uri.parse("content://com.swir.xadkiller.probe"), "query", host, null);
+        assertNotNull("Separate DNS probe did not return a result", result);
+        assertNull("Wire-level DNS probe failed: " + result.getString("error"), result.getString("error"));
+        assertTrue("Probe must report a DNS response code", result.containsKey("rcode"));
+        return result.getInt("rcode");
     }
 }

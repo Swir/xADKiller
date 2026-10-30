@@ -1,0 +1,4 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="com.swir.xadkiller.probe.QUERY" />
+    <queries><provider android:authorities="com.swir.xadkiller.probe" /></queries>
+</manifest>

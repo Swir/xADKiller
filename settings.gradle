@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "xADKiller"
-include ':app'
+include ':app', ':dns-probe'

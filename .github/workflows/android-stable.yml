@@ -3,7 +3,7 @@ name: Android release qualification
 on:
   push:
     branches: [android-stable]
-    paths: ['app/**', 'ci/**', 'build.gradle', 'settings.gradle', 'gradle.properties', '.github/workflows/android-stable.yml']
+    paths: ['app/**', 'dns-probe/**', 'ci/**', 'build.gradle', 'settings.gradle', 'gradle.properties', '.github/workflows/android-stable.yml']
   workflow_dispatch:
 
 permissions:
@@ -31,7 +31,7 @@ jobs:
       - name: Large-list memory qualification
         run: gradle --no-daemon testDebugUnitTest --tests com.swir.xadkiller.BlocklistLargeListQualificationTest -PxadkillerLargeListQualification=true
       - name: Unit tests, release lint and build
-        run: gradle --no-daemon testDebugUnitTest testReleaseUnitTest lintRelease assembleRelease assembleDebug assembleDebugAndroidTest
+        run: gradle --no-daemon testDebugUnitTest testReleaseUnitTest :app:lintRelease :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest :dns-probe:assembleDebug
       - name: Validate production package
         run: |
           set -euo pipefail
@@ -56,6 +56,7 @@ jobs:
             app/build/reports/lint-results-release.*
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/androidTest/debug/*.apk
+            dns-probe/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -86,6 +87,7 @@ jobs:
           target: google_apis
           disable-animations: true
           script: |
+            adb install tested/dns-probe/build/outputs/apk/debug/dns-probe-debug.apk
             adb install tested/app/build/outputs/apk/debug/app-debug.apk
             adb install tested/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             adb shell appops set com.swir.xadkiller.debug ACTIVATE_VPN allow

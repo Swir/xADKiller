@@ -15,6 +15,8 @@ the release candidate is checked by the owner. A prerelease is not Stable.
   Closing a session also closes its active upstream socket.
 - Blocking tunnel reads avoid idle spinning. A separate heartbeat reports idle
   liveness. Physical network changes reset outdated resolver health penalties.
+- Ordinary IPv6 traffic can use the underlying network instead of being
+  accidentally disabled by the IPv4-only DNS tunnel.
 - Returning to the dashboard retains session counters and the loaded blocklist.
   Downloads no longer hold the blocklist monitor while doing network IO; rule
   changes and cache recovery run away from the UI thread.
