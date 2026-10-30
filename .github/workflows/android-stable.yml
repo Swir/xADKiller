@@ -92,10 +92,13 @@ jobs:
             adb install tested/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             adb shell appops set com.swir.xadkiller.debug ACTIVATE_VPN allow
             adb shell settings put global private_dns_mode off
+            adb logcat -c
             adb shell am instrument -w com.swir.xadkiller.debug.test/androidx.test.runner.AndroidJUnitRunner | tee runtime.txt
+            adb logcat -d > runtime-logcat.txt
+            adb shell run-as com.swir.xadkiller.debug cat files/system_console.log > runtime-app.txt
             grep -q 'OK (5 tests)' runtime.txt
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: Android-runtime-api-${{ matrix.api }}
-          path: runtime.txt
+          path: runtime*.txt

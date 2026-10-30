@@ -36,10 +36,7 @@ public final class DnsProbeProvider extends ContentProvider {
             }
             bytes.write(new byte[]{0, 0, 1, 0, 1});
             byte[] payload = bytes.toByteArray();
-            try (DatagramSocket socket = boundVpnSocket(manager)) {
-                socket.setSoTimeout(12_000);
-                socket.connect(InetAddress.getByName("10.111.222.1"), 53);
-                socket.send(new DatagramPacket(payload, payload.length));
+            try (DatagramSocket socket = sendWhenRouteReady(manager, payload)) {
                 byte[] response = new byte[8192];
                 DatagramPacket packet = new DatagramPacket(response, response.length);
                 socket.receive(packet);
@@ -58,22 +55,30 @@ public final class DnsProbeProvider extends ContentProvider {
         return result;
     }
 
-    private static DatagramSocket boundVpnSocket(ConnectivityManager manager) throws Exception {
+    private static DatagramSocket sendWhenRouteReady(ConnectivityManager manager, byte[] payload) throws Exception {
         // establish() can return before netd has applied the new network's UID ranges.
         // Wait for route access; never retry or reinterpret the DNS response itself.
         long deadline = SystemClock.elapsedRealtime() + 5000;
         Exception last = null;
         while (SystemClock.elapsedRealtime() < deadline) {
-            for (Network network : manager.getAllNetworks()) {
+            Network network = manager.getActiveNetwork();
+            if (network != null) {
                 NetworkCapabilities caps = manager.getNetworkCapabilities(network);
-                if (caps == null || !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) continue;
-                DatagramSocket socket = new DatagramSocket();
-                try {
-                    network.bindSocket(socket);
-                    return socket;
-                } catch (java.net.SocketException error) {
-                    last = error;
-                    socket.close();
+                if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                    DatagramSocket socket = new DatagramSocket();
+                    try {
+                        network.bindSocket(socket);
+                        socket.setSoTimeout(12_000);
+                        socket.connect(InetAddress.getByName("10.111.222.1"), 53);
+                        socket.send(new DatagramPacket(payload, payload.length));
+                        return socket;
+                    } catch (java.io.IOException error) {
+                        socket.close();
+                        // Before a successful send, Android may still be applying UID rules.
+                        // Do not retry a timeout or reinterpret any received DNS response.
+                        if (!error.toString().contains("EPERM")) throw error;
+                        last = error;
+                    }
                 }
             }
             SystemClock.sleep(50);

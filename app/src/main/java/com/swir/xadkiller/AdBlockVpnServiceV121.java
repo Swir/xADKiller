@@ -70,6 +70,9 @@ public class AdBlockVpnServiceV121 extends VpnService {
     @Override public void onCreate() {
         super.onCreate();
         createNotificationChannel();
+        // A STOP can be delivered to a newly-created service while a foreground START
+        // is queued. Fulfil Android's foreground deadline before inspecting any action.
+        startInForeground();
         int base = BlocklistManager.bootstrap(this);
         SystemLogStore.info(this, "VPN", "Serwis v1.6.0 utworzony • bootstrap=" + base + " domen • lang=" + I18n.language(this));
         SystemLogStore.info(this, "UPSTREAM", "Adaptive DNS pool • " + UPSTREAM_POOL.snapshot(System.currentTimeMillis()));
@@ -102,12 +105,14 @@ public class AdBlockVpnServiceV121 extends VpnService {
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
+        startInForeground();
         String action = intent != null ? intent.getAction() : null;
         SystemLogStore.info(this, "VPN", "onStartCommand • action=" + action + " • startId=" + startId);
 
         if (ACTION_STOP.equals(action)) {
             SystemLogStore.info(this, "VPN", "Odebrano STOP");
-            stopVpn();
+            stopVpnInternal(false);
+            stopSelf(startId);
             return START_NOT_STICKY;
         }
 
@@ -115,12 +120,17 @@ public class AdBlockVpnServiceV121 extends VpnService {
             new Thread(() -> {
                 int count = BlocklistManager.load(getApplicationContext());
                 SystemLogStore.info(this, "BLOCKLIST", "Przeładowano listę w tle • " + count + " domen");
-                if (workerRunning.get() && vpnInterface != null) sendStatus(true);
+                synchronized (sessionLock) {
+                    if (workerRunning.get() && vpnInterface != null) sendStatus(true);
+                    else if (!workerRunning.get()) {
+                        stopForeground(STOP_FOREGROUND_REMOVE);
+                        stopSelf(startId);
+                    }
+                }
             }, "xADKiller-Reload").start();
             return workerRunning.get() ? START_STICKY : START_NOT_STICKY;
         }
 
-        startInForeground();
         synchronized (sessionLock) {
         if (workerRunning.compareAndSet(false, true)) {
             startProtectionPipeline();
