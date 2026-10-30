@@ -8,6 +8,7 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Binder;
 import android.os.SystemClock;
 import java.io.ByteArrayOutputStream;
 import java.net.DatagramPacket;
@@ -23,18 +24,9 @@ public final class DnsProbeProvider extends ContentProvider {
         if (!"query".equals(method) || !("example.com".equals(host) || "doubleclick.net".equals(host)))
             throw new IllegalArgumentException("Unsupported test fixture");
         Bundle result = new Bundle();
+        long identity = Binder.clearCallingIdentity();
         try {
             ConnectivityManager manager = getContext().getSystemService(ConnectivityManager.class);
-            Network vpn = null;
-            long deadline = SystemClock.elapsedRealtime() + 5000;
-            while (vpn == null && SystemClock.elapsedRealtime() < deadline) {
-                for (Network network : manager.getAllNetworks()) {
-                    NetworkCapabilities caps = manager.getNetworkCapabilities(network);
-                    if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) vpn = network;
-                }
-                if (vpn == null) SystemClock.sleep(50);
-            }
-            if (vpn == null) throw new IllegalStateException("No VPN network");
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             int id = (int)System.nanoTime() & 0xffff;
             bytes.write(new byte[]{(byte)(id >> 8), (byte)id, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0});
@@ -44,8 +36,7 @@ public final class DnsProbeProvider extends ContentProvider {
             }
             bytes.write(new byte[]{0, 0, 1, 0, 1});
             byte[] payload = bytes.toByteArray();
-            try (DatagramSocket socket = new DatagramSocket()) {
-                vpn.bindSocket(socket);
+            try (DatagramSocket socket = boundVpnSocket(manager)) {
                 socket.setSoTimeout(12_000);
                 socket.connect(InetAddress.getByName("10.111.222.1"), 53);
                 socket.send(new DatagramPacket(payload, payload.length));
@@ -61,8 +52,33 @@ public final class DnsProbeProvider extends ContentProvider {
             }
         } catch (Exception error) {
             result.putString("error", error.toString());
+        } finally {
+            Binder.restoreCallingIdentity(identity);
         }
         return result;
+    }
+
+    private static DatagramSocket boundVpnSocket(ConnectivityManager manager) throws Exception {
+        // establish() can return before netd has applied the new network's UID ranges.
+        // Wait for route access; never retry or reinterpret the DNS response itself.
+        long deadline = SystemClock.elapsedRealtime() + 5000;
+        Exception last = null;
+        while (SystemClock.elapsedRealtime() < deadline) {
+            for (Network network : manager.getAllNetworks()) {
+                NetworkCapabilities caps = manager.getNetworkCapabilities(network);
+                if (caps == null || !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) continue;
+                DatagramSocket socket = new DatagramSocket();
+                try {
+                    network.bindSocket(socket);
+                    return socket;
+                } catch (java.net.SocketException error) {
+                    last = error;
+                    socket.close();
+                }
+            }
+            SystemClock.sleep(50);
+        }
+        throw new IllegalStateException("VPN route access did not become available", last);
     }
 
     @Override public Cursor query(Uri u, String[] p, String s, String[] a, String o) { return null; }
