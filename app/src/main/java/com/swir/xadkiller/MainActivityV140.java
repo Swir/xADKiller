@@ -150,16 +150,6 @@ public class MainActivityV140 extends Activity {
         Button github=button("GITHUB • github.com/Swir/xADKiller",surface2,text);github.setOnClickListener(v->openUrl("https://github.com/Swir/xADKiller"));root.addView(github,h(48));gap(root,10);
         TextView footer=tv("xADKiller 1.5.0 • Multi-Language • Adaptive AI • BY SWIR",11,muted,false);footer.setGravity(Gravity.CENTER);root.addView(footer,wrap());
         setContentView(scroll);
-        // Android 15+ enforces edge-to-edge for target 35. Keep actions above system bars.
-        if (Build.VERSION.SDK_INT >= 35) {
-            scroll.setOnApplyWindowInsetsListener((view, insets) -> {
-                android.graphics.Insets bars = insets.getInsets(android.view.WindowInsets.Type.systemBars()
-                        | android.view.WindowInsets.Type.displayCutout() | android.view.WindowInsets.Type.ime());
-                view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
-                return insets;
-            });
-            scroll.requestApplyInsets();
-        }
         I18n.apply(this, scroll);
     }
 

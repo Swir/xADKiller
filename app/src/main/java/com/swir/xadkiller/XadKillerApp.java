@@ -6,6 +6,7 @@ import android.os.Build;
 public class XadKillerApp extends Application {
     @Override public void onCreate() {
         super.onCreate();
+        registerActivityLifecycleCallbacks(new ScreenInsets());
         Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             try {
