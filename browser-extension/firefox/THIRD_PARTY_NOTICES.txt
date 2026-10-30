@@ -1,0 +1,37 @@
+xADKiller Firefox protection data — third-party notices
+
+The packaged rule/domain/cosmetic data is generated from these projects by
+xADKiller's filter-conversion, ranking and deduplication scripts. The Firefox
+snapshot was generated on 2026-10-30. Network rules are converted to DNR JSON;
+selectors are stored as data for the packaged cosmetic engine. The upstream
+projects do not endorse xADKiller.
+
+EasyList and EasyPrivacy
+Copyright: EasyList authors and contributors.
+Source: https://github.com/easylist/easylist
+Inputs: https://easylist.to/easylist/easylist.txt
+        https://easylist.to/easylist/easyprivacy.txt
+License information: https://easylist.to/pages/licence.html
+GPL version 3 or later is used for the applicable dual-licensed filter data.
+
+AdGuard Base, Tracking Protection and DNS filters
+Copyright: AdGuard Software Ltd. and contributors.
+Sources: https://github.com/AdguardTeam/AdguardFilters
+         https://github.com/AdguardTeam/AdGuardSDNSFilter
+License: GNU General Public License version 3.
+
+HaGeZi DNS blocklists
+Copyright: HaGeZi and contributors.
+Source: https://github.com/hagezi/dns-blocklists
+License: GNU General Public License version 3.
+
+StevenBlack hosts
+Copyright (c) 2026 Steven Black and contributing source-list authors.
+Source: https://github.com/StevenBlack/hosts
+License: MIT; see licenses/StevenBlack-MIT.txt and upstream list attribution.
+
+The complete GPL v3 text is included as licenses/GPL-3.0.txt.
+These notices concern the third-party filter data and do not assign a new
+license to the original xADKiller application code. The frozen editable JSON
+data and conversion scripts are available with the matching source release:
+https://github.com/Swir/xADKiller/releases/tag/firefox-v1.5.0

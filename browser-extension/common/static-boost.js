@@ -31,6 +31,8 @@
     clearTimeout(deferredTimer);
     deferredTimer = setTimeout(() => apply().catch(() => {}), delay);
   }
+  // Firefox's atomic core-mode transition can release boost capacity first.
+  if (globalThis.XAD_PLATFORM?.browser === "firefox") globalThis.XAD_SCHEDULE_STATIC_BOOST = scheduleApply;
   function pendingUltraReserve(enabled) {
     if (enabled.includes("ultra")) return 0;
     const ultraCost = Math.max(0, Number(globalThis.XAD_BUILD_META?.ultraRules || 10000));

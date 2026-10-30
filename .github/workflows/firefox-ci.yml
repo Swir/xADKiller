@@ -1,0 +1,52 @@
+name: Firefox release checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, firefox-stable]
+    tags: ['firefox-v*']
+    paths: ['browser-extension/**', '.github/workflows/firefox-ci.yml']
+  pull_request:
+    paths: ['browser-extension/**', '.github/workflows/firefox-ci.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  firefox:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        firefox: ['142.0', 'latest']
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: browser-extension/package-lock.json
+      - uses: browser-actions/setup-firefox@v1
+        id: firefox
+        with:
+          firefox-version: ${{ matrix.firefox }}
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run build:firefox
+      - run: node tests/firefox-build-contract.mjs
+      - run: npm run lint:firefox
+        env:
+          NO_UPDATE_NOTIFIER: '1'
+      - run: npm run test:firefox
+        env:
+          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+      - run: npm run package:firefox
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: firefox-${{ matrix.firefox }}
+          path: |
+            browser-extension/web-ext-artifacts/*.zip
+            browser-extension/test-results/firefox/runtime-report.json

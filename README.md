@@ -4,7 +4,11 @@
 
 # xADKiller
 
-### Android APK + Chrome Manifest V3 protection by SWIR
+### Android APK + Chrome and Firefox protection by SWIR
+
+**Firefox Stable 1.5.0:** [Download the GitHub release](https://github.com/Swir/xADKiller/releases/tag/firefox-v1.5.0) · [Firefox build and installation](browser-extension/FIREFOX.md)
+
+The Firefox ZIP is ready for manual Mozilla Add-ons submission. It is unsigned; Mozilla review, signing and store publication are separate steps.
 
 ![Chrome Stable](https://img.shields.io/badge/Chrome_stable-v1.5.0-02050A?style=for-the-badge&logo=googlechrome&logoColor=62E5FF)
 ![Android Stable](https://img.shields.io/badge/Android_stable-v1.5.1-02050A?style=for-the-badge&logo=android&logoColor=62E5FF)

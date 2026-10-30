@@ -86,6 +86,15 @@ function uniqueDomains(items, limit) {
   return [...new Set((Array.isArray(items) ? items : []).map(normalizeHost).filter(Boolean))].slice(0, limit);
 }
 
+// Firefox permits fewer dynamic rules than Chromium. Multiple domains with
+// identical actions/conditions can share one rule without losing coverage.
+function domainRuleGroups(domains) {
+  const size = Math.max(1, Math.min(100, Number(self.XAD_PLATFORM?.domainRuleGroupSize) || 1));
+  const groups = [];
+  for (let i = 0; i < domains.length; i += size) groups.push(domains.slice(i, i + size));
+  return groups;
+}
+
 function hostAllowed(host, allowSites) {
   host = normalizeHost(host);
   return !!host && (allowSites || []).some((entry) => {
@@ -205,6 +214,11 @@ async function loadLiveFeed(force = false) {
 function applyProtection(enabled, mode, done = () => {}) {
   const enableRulesetIds = [];
   const disableRulesetIds = [];
+  // Release optional boost capacity atomically before enabling Firefox's core
+  // mode. Static Boost will re-evaluate its available budget after the change.
+  if (self.XAD_PLATFORM?.browser === "firefox") {
+    disableRulesetIds.push("titan_boost_1", "titan_boost_2", "titan_boost_3");
+  }
   if (enabled) {
     enableRulesetIds.push(STANDARD_RULESET);
     if (mode === "ultra") enableRulesetIds.push(ULTRA_RULESET);
@@ -212,7 +226,11 @@ function applyProtection(enabled, mode, done = () => {}) {
   } else {
     disableRulesetIds.push(STANDARD_RULESET, ULTRA_RULESET);
   }
-  chrome.declarativeNetRequest.updateEnabledRulesets({ enableRulesetIds, disableRulesetIds }, () => done(lastErrorMessage()));
+  chrome.declarativeNetRequest.updateEnabledRulesets({ enableRulesetIds, disableRulesetIds }, () => {
+    const error = lastErrorMessage();
+    if (self.XAD_PLATFORM?.browser === "firefox") self.XAD_SCHEDULE_STATIC_BOOST?.();
+    done(error);
+  });
 }
 
 function rebuildDynamicRules(allowSites, customDomains, mode = "standard", enabled = true, done = () => {}) {
@@ -243,29 +261,29 @@ function rebuildDynamicRules(allowSites, customDomains, mode = "standard", enabl
       condition: { requestDomains: [domain], resourceTypes: ["main_frame","sub_frame"] }
     }));
 
-    const blockRules = enabled ? cleanCustom.map((domain, index) => ({
+    const blockRules = enabled ? domainRuleGroups(cleanCustom).map((domains, index) => ({
       id: CUSTOM_RULE_MIN + index,
       priority: 500,
       action: { type: "block" },
-      condition: { requestDomains: [domain], resourceTypes: ["main_frame", ...BLOCK_RESOURCE_TYPES] }
+      condition: { requestDomains: domains, resourceTypes: ["main_frame", ...BLOCK_RESOURCE_TYPES] }
     })) : [];
 
     const intelLimit = enabled ? (mode === "ultra" ? ULTRA_INTEL_LIMIT : STANDARD_INTEL_LIMIT) : 0;
-    const intelRules = intelDomains.slice(0, intelLimit).map((domain, index) => ({
+    const intelRules = domainRuleGroups(intelDomains.slice(0, intelLimit)).map((domains, index) => ({
       id: INTEL_RULE_MIN + index,
       priority: 20,
       action: { type: "block" },
-      condition: { requestDomains: [domain], resourceTypes: BLOCK_RESOURCE_TYPES }
+      condition: { requestDomains: domains, resourceTypes: BLOCK_RESOURCE_TYPES }
     }));
 
     const liveDomains = enabled
       ? uniqueDomains(mode === "ultra" ? [...liveFeed.standard, ...liveFeed.ultra] : liveFeed.standard, mode === "ultra" ? LIVE_ULTRA_LIMIT : LIVE_STANDARD_LIMIT)
       : [];
-    const liveRules = liveDomains.map((domain, index) => ({
+    const liveRules = domainRuleGroups(liveDomains).map((domains, index) => ({
       id: LIVE_RULE_MIN + index,
       priority: 80,
       action: { type: "block" },
-      condition: { requestDomains: [domain], resourceTypes: BLOCK_RESOURCE_TYPES }
+      condition: { requestDomains: domains, resourceTypes: BLOCK_RESOURCE_TYPES }
     }));
 
     const corePatterns = enabled ? (mode === "ultra" ? [...STANDARD_CORE_PATTERNS, ...ULTRA_EXTRA_PATTERNS] : STANDARD_CORE_PATTERNS) : [];

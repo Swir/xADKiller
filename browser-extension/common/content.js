@@ -94,6 +94,7 @@
   }
   function hideElement(el, kind = "basic") {
     if (!(el instanceof Element) || el.dataset.xadkillerHidden === "1" || unsafeContainer(el)) return false;
+    if (el.dataset.xadkillerShadowHidden === "1" || el.dataset.xadkillerTitanShadowHidden === "1") return false;
     el.dataset.xadkillerPrevDisplay = el.style.display || "";
     el.dataset.xadkillerHidden = "1";
     el.style.setProperty("display", "none", "important");

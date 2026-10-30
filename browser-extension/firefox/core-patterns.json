@@ -1,0 +1,9 @@
+[
+  { "urlFilter": "/ads/", "resourceTypes": ["script", "xmlhttprequest", "sub_frame", "image"] },
+  { "urlFilter": "/vast/", "resourceTypes": ["xmlhttprequest", "media", "sub_frame"] },
+  { "urlFilter": "/vmap/", "resourceTypes": ["xmlhttprequest", "media"] },
+  { "urlFilter": "?ad_unit=", "resourceTypes": ["script", "xmlhttprequest", "sub_frame"] },
+  { "urlFilter": "&ad_unit=", "resourceTypes": ["script", "xmlhttprequest", "sub_frame"] },
+  { "urlFilter": "?ad_slot=", "resourceTypes": ["script", "xmlhttprequest", "sub_frame"] },
+  { "urlFilter": "&ad_slot=", "resourceTypes": ["script", "xmlhttprequest", "sub_frame"] }
+]

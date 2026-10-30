@@ -28,13 +28,15 @@
         && !isAllowed(host, Array.isArray(prefs.allowSites) ? prefs.allowSites : [])
         && !recovered;
       try {
+        const detail = {
+          active,
+          heuristicRecovery:recovered,
+          mode:prefs.mode === "ultra" ? "ultra" : "standard",
+          smartEnabled:prefs.smartEnabled !== false
+        };
         window.dispatchEvent(new CustomEvent("xadkiller:preflight-config", {
-          detail:{
-            active,
-            heuristicRecovery:recovered,
-            mode:prefs.mode === "ultra" ? "ultra" : "standard",
-            smartEnabled:prefs.smartEnabled !== false
-          }
+          // Firefox isolates content-script objects from the page realm.
+          detail:typeof cloneInto === "function" ? cloneInto(detail, window) : detail
         }));
       } catch (_) {}
     });

@@ -1,0 +1,4 @@
+browser-extension/node_modules/
+browser-extension/dist/
+browser-extension/web-ext-artifacts/
+browser-extension/test-results/

@@ -15,6 +15,7 @@
 
   function rememberAndHide(el) {
     if (!(el instanceof Element)) return;
+    if (el.dataset.xadkillerHidden === "1" || el.dataset.xadkillerShadowHidden === "1") return;
     if (!shadowHidden.has(el)) {
       shadowHidden.set(el, {
         display:el.style.getPropertyValue("display"),

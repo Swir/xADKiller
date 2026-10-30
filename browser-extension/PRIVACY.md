@@ -1,6 +1,6 @@
 # xADKiller Browser Extension — Privacy Policy
 
-Last updated: 2026-09-14
+Last updated: 2026-10-30
 
 xADKiller is a browser extension designed to block advertising and tracking requests and to hide advertising user-interface elements locally in the browser.
 
@@ -12,7 +12,7 @@ The extension processes website URLs, request destinations and page DOM/text sig
 
 ## Local storage
 
-The extension may store the following information locally in the Chrome profile:
+The extension may store the following information locally in the Chrome or Firefox profile:
 
 - whether protection is enabled;
 - STANDARD or ULTRA mode;
@@ -27,7 +27,7 @@ This locally stored configuration is not sold or used for advertising profiling.
 
 xADKiller periodically downloads rule and signature **data** from the public Swir/xADKiller GitHub repository. These feeds contain blocking domains, URL signatures, cosmetic selectors and related protection metadata. They are data only; xADKiller does not download or execute remote JavaScript or other remote executable code.
 
-Requests to GitHub are subject to GitHub's own network and privacy practices. xADKiller does not attach a user account identifier or browsing history to its rule-update requests.
+Requests to GitHub are subject to GitHub's own network and privacy practices. As with any network connection, GitHub can receive connection metadata such as the source IP address. xADKiller does not attach a user account identifier, cookies, page content or browsing history to its rule-update requests.
 
 ## Website access
 
@@ -35,7 +35,7 @@ xADKiller requests access to HTTP and HTTPS websites because an ad blocker must 
 
 The extension does not use this access to collect passwords, payment information, health information, private messages or other sensitive form contents for sale, advertising, credit decisions or unrelated profiling.
 
-## Chrome permissions
+## Browser permissions
 
 - `declarativeNetRequest`: applies local network blocking rules.
 - `storage`: stores extension settings and locally learned protection data.
@@ -57,7 +57,7 @@ The use of information received from Google APIs will adhere to the Chrome Web S
 
 ## Retention and removal
 
-Local extension data remains in the user's Chrome profile until it is changed, cleared, or the extension is removed. Removing xADKiller through Chrome removes extension-local storage according to Chrome's extension storage behavior.
+Local extension data remains in the user's browser profile until it is changed, cleared, or the extension is removed. Removing xADKiller removes extension-local storage according to the browser's extension storage behavior. Adaptive network memory expires after 21 days and is bounded to 180 entries; the popup provides a reset control. Site-recovery history is bounded, stays local and has a clear control.
 
 ## Changes
 

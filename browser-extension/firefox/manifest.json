@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "1.0.0",
+  "version": "1.5.0",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
   "permissions": [
     "storage",
+    "alarms",
     "declarativeNetRequest",
     "activeTab"
   ],
@@ -14,7 +15,23 @@
   ],
   "background": {
     "scripts": [
-      "background.js"
+      "platform.js",
+      "build-meta.js",
+      "feed-transport-guard.js",
+      "feed-v2-beta-channel.js",
+      "feed-data-contract.js",
+      "feed-rollback-provenance.js",
+      "feed-guard.js",
+      "feed-requestinfo-guard.js",
+      "feed-v2-compat.js",
+      "feed-cache-integrity.js",
+      "background.js",
+      "live-signatures.js",
+      "titan-engine.js",
+      "static-boost.js",
+      "standard-core-boost.js",
+      "temporary-site-guard.js",
+      "heuristic-recovery.js"
     ]
   },
   "action": {
@@ -30,9 +47,29 @@
   "declarative_net_request": {
     "rule_resources": [
       {
-        "id": "core",
+        "id": "standard",
         "enabled": true,
-        "path": "rules/core.json"
+        "path": "rules/standard.json"
+      },
+      {
+        "id": "ultra",
+        "enabled": false,
+        "path": "rules/ultra.json"
+      },
+      {
+        "id": "titan_boost_1",
+        "enabled": false,
+        "path": "rules/titan-boost-1.json"
+      },
+      {
+        "id": "titan_boost_2",
+        "enabled": false,
+        "path": "rules/titan-boost-2.json"
+      },
+      {
+        "id": "titan_boost_3",
+        "enabled": false,
+        "path": "rules/titan-boost-3.json"
       }
     ]
   },
@@ -43,9 +80,33 @@
         "https://*/*"
       ],
       "js": [
-        "content.js"
+        "titan-main.js",
+        "early-guard.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "preflight-config.js",
+        "cosmetic-data.js",
+        "content.js",
+        "shadow-sentinel.js",
+        "live-cosmetic.js",
+        "network-scout.js"
+      ],
+      "run_at": "document_start",
+      "world": "ISOLATED",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
     }
   ],
   "browser_specific_settings": {

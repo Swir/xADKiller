@@ -56,6 +56,9 @@
 
   function rememberAndHide(el) {
     if (!(el instanceof Element)) return;
+    // One layer owns the original inline styles. Capturing another layer's
+    // display:none would leave the element hidden after recovery/disable.
+    if (el.dataset.xadkillerHidden === "1" || el.dataset.xadkillerTitanShadowHidden === "1") return;
     if (!hidden.has(el)) {
       hidden.set(el, {
         display:el.style.getPropertyValue("display"),

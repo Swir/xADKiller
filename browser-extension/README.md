@@ -8,6 +8,8 @@
 
 # xADKiller Chrome
 
+**Firefox Stable 1.5.0 is also available:** see [FIREFOX.md](FIREFOX.md) for the dedicated Firefox build, tests and manual AMO submission instructions. [GitHub release](https://github.com/Swir/xADKiller/releases/tag/firefox-v1.5.0). Mozilla signing and publication are handled manually.
+
 **xADKiller Chrome by SWIR** is a Manifest V3 ad and tracker blocker built around declarative network rules, local cosmetic protection and privacy-preserving adaptive layers. The published Chrome line remains stable while v1.5.0 is hardened on a separate development branch.
 
 ## Project status
@@ -114,7 +116,7 @@ See [`PRIVACY.md`](PRIVACY.md) for the store-facing privacy policy.
 
 The current stable source/release baseline is **xADKiller Chrome v1.4.0 — TITAN**. v1.5.0-dev artifacts are CI development packages only and are **not** merged into `main` or published as the next store update until the remaining release gate passes.
 
-Firefox-related source remains secondary/later work; the active release target in this roadmap is Chrome/Chromium.
+The Firefox 1.5.0 release is documented separately in [FIREFOX.md](FIREFOX.md); this roadmap describes Chrome/Chromium.
 
 ## Limitations
 
