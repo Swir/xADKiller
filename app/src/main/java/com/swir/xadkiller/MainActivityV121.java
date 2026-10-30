@@ -318,7 +318,9 @@ public class MainActivityV121 extends MainActivityV140 {
     }
 
     private void styleInteractiveTree(View view) {
-        if (view instanceof Button) {
+        if (view instanceof Switch) {
+            styleSwitch((Switch) view);
+        } else if (view instanceof Button) {
             styleActionButton((Button) view);
         } else if (view instanceof EditText) {
             EditText input = (EditText) view;
@@ -327,8 +329,6 @@ public class MainActivityV121 extends MainActivityV140 {
             input.setBackground(premiumGradient(
                     Color.parseColor("#071421"), Color.parseColor("#06101A"), 12,
                     Color.parseColor("#315B73")));
-        } else if (view instanceof Switch) {
-            styleSwitch((Switch) view);
         } else if (view instanceof ImageView) {
             ImageView icon = (ImageView) view;
             icon.setPadding(dp16(5), dp16(5), dp16(5), dp16(5));

@@ -5,6 +5,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.VpnService;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.os.SystemClock;
 import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -144,6 +147,20 @@ public class VpnRuntimeTest {
         bytes.write(new byte[]{0, 0, 1, 0, 1});
         byte[] payload = bytes.toByteArray();
         try (DatagramSocket socket = new DatagramSocket()) {
+            // Android exempts the VPN provider UID from default VPN routing. Bind this
+            // in-process probe explicitly to the VPN, as an ordinary protected app routes.
+            ConnectivityManager manager = context.getSystemService(ConnectivityManager.class);
+            Network vpn = null;
+            long deadline = SystemClock.elapsedRealtime() + 5000;
+            while (vpn == null && SystemClock.elapsedRealtime() < deadline) {
+                for (Network network : manager.getAllNetworks()) {
+                    NetworkCapabilities caps = manager.getNetworkCapabilities(network);
+                    if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) vpn = network;
+                }
+                if (vpn == null) SystemClock.sleep(50);
+            }
+            assertNotNull("VPN network must be registered before a wire-level probe", vpn);
+            vpn.bindSocket(socket);
             socket.setSoTimeout(12_000);
             socket.connect(InetAddress.getByName("10.111.222.1"), 53);
             socket.send(new DatagramPacket(payload, payload.length));
