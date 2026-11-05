@@ -1,0 +1,1787 @@
+{
+  "schema": 1,
+  "reviewed_at": "2026-11-05T20:03:32Z",
+  "feed_version": "2026.11.05.1",
+  "parallel_v2_version": "2026.11.05.2",
+  "scope": "Reviewed runtime feed refresh, not a rebuild or complete audit of all bundled static lists. Sources cross-checked; existing curated entries retained except the documented false-positive fixes. No bulk import of the aggressive HaGeZi list.",
+  "sources": [
+    {
+      "id": "easylist",
+      "url": "https://easylist-downloads.adblockplus.org/easylist.txt",
+      "resolved_url": "https://easylist-downloads.adblockplus.org/easylist.txt",
+      "retrieved_at": "2026-11-05T20:00:23.705583+00:00",
+      "sha256": "4cd4fdb775ffbf02e2f6272730386ef5996ced9b7434dd30d78dbebf34f8dc63",
+      "bytes": 2062389,
+      "headers": [
+        "! Version: 202611051952",
+        "! Last modified: 05 Nov 2026 19:52 UTC",
+        "! Licence: https://easylist.to/pages/licence.html"
+      ]
+    },
+    {
+      "id": "easyprivacy",
+      "url": "https://easylist-downloads.adblockplus.org/easyprivacy.txt",
+      "resolved_url": "https://easylist-downloads.adblockplus.org/easyprivacy.txt",
+      "retrieved_at": "2026-11-05T20:00:24.391884+00:00",
+      "sha256": "a964383eb0a34d9e7a25f60c7469ca46de28de16d369fb45b093db00a320f0b2",
+      "bytes": 1445199,
+      "headers": [
+        "! Version: 202611051952",
+        "! Last modified: 05 Nov 2026 19:52 UTC",
+        "! Licence: https://easylist.to/pages/licence.html"
+      ]
+    },
+    {
+      "id": "adguard-base",
+      "url": "https://filters.adtidy.org/extension/chromium/filters/2.txt",
+      "resolved_url": "https://filters.adtidy.org/extension/chromium/filters/2.txt",
+      "retrieved_at": "2026-11-05T20:00:34.137112+00:00",
+      "sha256": "6ea7a85a933019e666b5996901eb6087ecf629bf243898b6b4e9b8ef6b97cf73",
+      "bytes": 7070386,
+      "headers": [
+        "! Version: 2.5.2.36",
+        "! TimeUpdated: 2026-11-05T18:09:40+00:00",
+        "! License: https://github.com/AdguardTeam/AdguardFilters/blob/master/LICENSE"
+      ]
+    },
+    {
+      "id": "adguard-tracking",
+      "url": "https://filters.adtidy.org/extension/chromium/filters/3.txt",
+      "resolved_url": "https://filters.adtidy.org/extension/chromium/filters/3.txt",
+      "retrieved_at": "2026-11-05T20:00:33.894584+00:00",
+      "sha256": "4e542ce8aabc9279341930992dfac9d592c85d3cb26693727f334860fe0918a5",
+      "bytes": 15170247,
+      "headers": [
+        "! Version: 2.1.14.93",
+        "! TimeUpdated: 2026-11-05T17:09:07+00:00",
+        "! License: https://github.com/AdguardTeam/AdguardFilters/blob/master/LICENSE"
+      ]
+    },
+    {
+      "id": "hagezi-ultimate",
+      "url": "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/ultimate-onlydomains.txt",
+      "resolved_url": "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/ultimate-onlydomains.txt",
+      "retrieved_at": "2026-11-05T20:00:32.416487+00:00",
+      "sha256": "e1f5badd95de02343492a89e35a23e7863e8606d1c9ff84e2287d408967e1491",
+      "bytes": 4849413,
+      "headers": [
+        "# License: https://github.com/hagezi/dns-blocklists/blob/main/LICENSE",
+        "# Last modified: 05 Nov 2026 16:33 UTC",
+        "# Version: 2026.1105.1633.52"
+      ]
+    }
+  ],
+  "additions": [
+    {
+      "domain": "adkernel.com",
+      "rule": "||adkernel.com^",
+      "easylist_line": 17207,
+      "adguard_base_line": 91010,
+      "hagezi_line": 103492
+    },
+    {
+      "domain": "adpone.com",
+      "rule": "||adpone.com^",
+      "easylist_line": 17311,
+      "adguard_base_line": 91114,
+      "hagezi_line": 104035
+    },
+    {
+      "domain": "propellerads.com",
+      "rule": "||propellerads.com^",
+      "easylist_line": 43115,
+      "adguard_base_line": 116900,
+      "hagezi_line": 202049
+    },
+    {
+      "signature": {
+        "filter": "/prebid-load.js",
+        "types": [
+          "script"
+        ]
+      },
+      "rule": "/prebid-load.js$script",
+      "easylist_line": 971
+    },
+    {
+      "signature": {
+        "filter": "/prebid-wrapper.js",
+        "types": [
+          "script"
+        ],
+        "third_party": true
+      },
+      "rule": "/prebid-wrapper.js$script,third-party",
+      "easylist_line": 973
+    }
+  ],
+  "removed_domains": [
+    "graph.facebook.com",
+    "business-api.tiktok.com"
+  ],
+  "removed_matrix_paths": [
+    "/commercial/",
+    "/sponsored/",
+    "/promoted/",
+    "/advertising/"
+  ],
+  "titan_changes": [
+    "Third-party boundary on generic ad/video paths",
+    "Removed ambiguous iu query parameter",
+    "Added third-party prebid load/wrapper script detection",
+    "Removed generic commercial/sponsor/promoted path hints"
+  ],
+  "cosmetic_selectors": "Existing 35 selectors retained; no new selectors in this update.",
+  "domain_source_matches": {
+    "33across.com": {
+      "easylist": [
+        "||33across.com^$third-party"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||33across.com^$third-party"
+      ],
+      "adguard-tracking": [
+        "||33across.com^"
+      ],
+      "hagezi-ultimate": [
+        "33across.com"
+      ]
+    },
+    "adcolony.com": {
+      "easylist": [
+        "||adcolony.com^$third-party"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||adcolony.com^$third-party"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "adcolony.com"
+      ]
+    },
+    "adform.net": {
+      "easylist": [
+        "||adform.net^",
+        "||adform.net^$popup"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||adform.net^",
+        "||adform.net^$popup"
+      ],
+      "adguard-tracking": [
+        "||adform.net^$cookie=/uid|TPC/"
+      ],
+      "hagezi-ultimate": [
+        "adform.net"
+      ]
+    },
+    "adition.com": {
+      "easylist": [
+        "||adition.com^$third-party"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||adition.com^$third-party"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "adition.com"
+      ]
+    },
+    "adjust.com": {
+      "easylist": [
+        "||adjust.com^$script,third-party"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||adjust.com^$script,third-party"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "adjust.com"
+      ]
+    },
+    "adkernel.com": {
+      "easylist": [
+        "||adkernel.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||adkernel.com^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "adkernel.com"
+      ]
+    },
+    "adnxs.com": {
+      "easylist": [
+        "||adnxs.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||adnxs.com^$redirect=nooptext",
+        "||adnxs.com^$domain=iltalehti.fi,important",
+        "||adnxs.com^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "adnxs.com"
+      ]
+    },
+    "adpone.com": {
+      "easylist": [
+        "||adpone.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||adpone.com^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "adpone.com"
+      ]
+    },
+    "ads-twitter.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "ads-twitter.com"
+      ]
+    },
+    "ads.heytapmobi.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "ads.heytapmobi.com"
+      ]
+    },
+    "ads.huawei.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "ads.huawei.com"
+      ]
+    },
+    "ads.samsung.com": {
+      "easylist": [
+        "||ads.samsung.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||ads.samsung.com^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "ads.tiktok.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "ads.tiktok.com"
+      ]
+    },
+    "ads.unity.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "ads.yahoo.com": {
+      "easylist": [
+        "||ads.yahoo.com^$~image"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||ads.yahoo.com^$~image"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "ads.yahoo.com"
+      ]
+    },
+    "adsafeprotected.com": {
+      "easylist": [
+        "||adsafeprotected.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||adsafeprotected.com^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "adsafeprotected.com"
+      ]
+    },
+    "adsfs.oppomobile.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "adsfs.oppomobile.com"
+      ]
+    },
+    "adsrvr.org": {
+      "easylist": [
+        "||adsrvr.org^$third-party"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||adsrvr.org^$third-party"
+      ],
+      "adguard-tracking": [
+        "||adsrvr.org^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "adsrvr.org"
+      ]
+    },
+    "advertising.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||advertising.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "adx.ads.heytapmobi.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "adx.ads.oppomobile.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "alb.reddit.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||alb.reddit.com^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||alb.reddit.com^"
+      ],
+      "hagezi-ultimate": []
+    },
+    "amazon-adsystem.com": {
+      "easylist": [
+        "||amazon-adsystem.com^",
+        "||amazon-adsystem.com^$popup,domain=twitch.tv"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||amazon-adsystem.com^",
+        "||amazon-adsystem.com^",
+        "||amazon-adsystem.com^$popup,domain=twitch.tv"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "amazon-adsystem.com"
+      ]
+    },
+    "amplitude.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||amplitude.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "amplitude.com"
+      ]
+    },
+    "an.yandex.ru": {
+      "easylist": [
+        "||an.yandex.ru^$domain=~e.mail.ru"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||an.yandex.ru^$domain=~e.mail.ru"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "an.yandex.ru"
+      ]
+    },
+    "analytics.edgekey.net": {
+      "easylist": [],
+      "easyprivacy": [
+        "||analytics.edgekey.net^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||analytics.edgekey.net^"
+      ],
+      "hagezi-ultimate": []
+    },
+    "analytics.tiktok.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||analytics.tiktok.com^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||analytics.tiktok.com^"
+      ],
+      "hagezi-ultimate": [
+        "analytics.tiktok.com"
+      ]
+    },
+    "analytics.twitter.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "analytics.yahoo.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||analytics.yahoo.com^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||analytics.yahoo.com^"
+      ],
+      "hagezi-ultimate": [
+        "analytics.yahoo.com"
+      ]
+    },
+    "api.ad.xiaomi.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||api.ad.xiaomi.com^"
+      ],
+      "hagezi-ultimate": []
+    },
+    "appsflyer.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "auction.unityads.unity3d.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "bdapi.ads.oppomobile.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "bidswitch.net": {
+      "easylist": [
+        "||bidswitch.net^"
+      ],
+      "easyprivacy": [
+        "||bidswitch.net^"
+      ],
+      "adguard-base": [
+        "||bidswitch.net^"
+      ],
+      "adguard-tracking": [
+        "||bidswitch.net^"
+      ],
+      "hagezi-ultimate": [
+        "bidswitch.net"
+      ]
+    },
+    "bluekai.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||bluekai.com^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||bluekai.com^$third-party"
+      ],
+      "hagezi-ultimate": []
+    },
+    "branch.io": {
+      "easylist": [],
+      "easyprivacy": [
+        "||branch.io^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||branch.io^$cookie=bnc_returning_visitor"
+      ],
+      "hagezi-ultimate": [
+        "branch.io"
+      ]
+    },
+    "browser.sentry-cdn.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "bugsnag.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||bugsnag.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "bugsnag.com"
+      ]
+    },
+    "casalemedia.com": {
+      "easylist": [
+        "||casalemedia.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||casalemedia.com^"
+      ],
+      "adguard-tracking": [
+        "||casalemedia.com^"
+      ],
+      "hagezi-ultimate": [
+        "casalemedia.com"
+      ]
+    },
+    "chartbeat.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||chartbeat.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||chartbeat.com^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "chartbeat.com"
+      ]
+    },
+    "config.samsungads.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "config.unityads.unity3d.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "connect.facebook.net": {
+      "easylist": [],
+      "easyprivacy": [
+        "||connect.facebook.net^*/fbds.js$third-party",
+        "||connect.facebook.net^*/pcm.js$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "connect.facebook.net"
+      ]
+    },
+    "contextweb.com": {
+      "easylist": [
+        "||contextweb.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||contextweb.com^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "contextweb.com"
+      ]
+    },
+    "criteo.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||criteo.com^$third-party",
+        "||criteo.com^$domain=spiegel.de"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||criteo.com^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "criteo.com"
+      ]
+    },
+    "criteo.net": {
+      "easylist": [],
+      "easyprivacy": [
+        "||criteo.net^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||criteo.net^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "criteo.net"
+      ]
+    },
+    "ct.pinterest.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||ct.pinterest.com^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||ct.pinterest.com^",
+        "||ct.pinterest.com^$subdocument,redirect=noopframe"
+      ],
+      "hagezi-ultimate": [
+        "ct.pinterest.com"
+      ]
+    },
+    "data.ads.oppomobile.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "data.mistat.xiaomi.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||data.mistat.xiaomi.com^"
+      ],
+      "hagezi-ultimate": []
+    },
+    "demdex.net": {
+      "easylist": [],
+      "easyprivacy": [
+        "||demdex.net^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||demdex.net^"
+      ],
+      "hagezi-ultimate": [
+        "demdex.net"
+      ]
+    },
+    "doubleclick.net": {
+      "easylist": [
+        "||doubleclick.net^$popup"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||doubleclick.net^$popup"
+      ],
+      "adguard-tracking": [
+        "||doubleclick.net^$image,third-party",
+        "||doubleclick.net^*/trackimp/$third-party"
+      ],
+      "hagezi-ultimate": [
+        "doubleclick.net"
+      ]
+    },
+    "events.redditmedia.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||events.redditmedia.com^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||events.redditmedia.com^"
+      ],
+      "hagezi-ultimate": [
+        "events.redditmedia.com"
+      ]
+    },
+    "exelator.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||exelator.com^$third-party",
+        "||exelator.com^$domain=disqus.com"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||exelator.com^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "exelator.com"
+      ]
+    },
+    "flashtalking.com": {
+      "easylist": [
+        "||flashtalking.com^$third-party,domain=~toggo.de",
+        "||flashtalking.com^$popup,domain=twitch.tv"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||flashtalking.com^$third-party,domain=~toggo.de",
+        "||flashtalking.com^$popup,domain=twitch.tv"
+      ],
+      "adguard-tracking": [
+        "||flashtalking.com^"
+      ],
+      "hagezi-ultimate": [
+        "flashtalking.com"
+      ]
+    },
+    "freewheel.tv": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "freewheel.tv"
+      ]
+    },
+    "fullstory.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||fullstory.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||fullstory.com^$third-party"
+      ],
+      "hagezi-ultimate": []
+    },
+    "globalapi.ad.xiaomi.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||globalapi.ad.xiaomi.com^"
+      ],
+      "hagezi-ultimate": []
+    },
+    "google-analytics.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||google-analytics.com^$script,third-party,xmlhttprequest"
+      ],
+      "adguard-base": [
+        "||google-analytics.com^$image,redirect=1x1-transparent.gif,domain=simpmusic.org"
+      ],
+      "adguard-tracking": [
+        "||google-analytics.com^",
+        "||google-analytics.com^$object,redirect=noopjs",
+        "||google-analytics.com^$domain=promiflash.de,redirect=nooptext,important",
+        "||google-analytics.com^$domain=avgle.com"
+      ],
+      "hagezi-ultimate": [
+        "google-analytics.com"
+      ]
+    },
+    "googleadservices.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||googleadservices.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||googleadservices.com^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "googleadservices.com"
+      ]
+    },
+    "googlesyndication.com": {
+      "easylist": [
+        "||googlesyndication.com^$domain=blogto.com|youtube.com"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||googlesyndication.com^$domain=blogto.com|youtube.com"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "googlesyndication.com"
+      ]
+    },
+    "googletagmanager.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||googletagmanager.com^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "googletagmanager.com"
+      ]
+    },
+    "googletagservices.com": {
+      "easylist": [
+        "||googletagservices.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||googletagservices.com^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "googletagservices.com"
+      ]
+    },
+    "gum.criteo.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "gumgum.com": {
+      "easylist": [
+        "||gumgum.com^$third-party"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||gumgum.com^$third-party"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "gumgum.com"
+      ]
+    },
+    "heapanalytics.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||heapanalytics.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||heapanalytics.com^"
+      ],
+      "hagezi-ultimate": [
+        "heapanalytics.com"
+      ]
+    },
+    "hotjar.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||hotjar.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||hotjar.com^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "hotjar.com"
+      ]
+    },
+    "hotjar.io": {
+      "easylist": [],
+      "easyprivacy": [
+        "||hotjar.io^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||hotjar.io^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "hotjar.io"
+      ]
+    },
+    "iadcontent.apple.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "iadcontent.apple.com"
+      ]
+    },
+    "iadsdk.apple.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "iadsdk.apple.com"
+      ]
+    },
+    "ib.adnxs.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "idsync.rlcdn.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "imrworldwide.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||imrworldwide.com^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||imrworldwide.com^$third-party",
+        "||imrworldwide.com^$domain=cnet.com,important"
+      ],
+      "hagezi-ultimate": [
+        "imrworldwide.com"
+      ]
+    },
+    "indexww.com": {
+      "easylist": [
+        "||indexww.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||indexww.com^"
+      ],
+      "adguard-tracking": [
+        "||indexww.com^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "indexww.com"
+      ]
+    },
+    "innovid.com": {
+      "easylist": [
+        "||innovid.com^$third-party",
+        "||innovid.com^$popup,third-party"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||innovid.com^$third-party",
+        "||innovid.com^$popup,third-party"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "innovid.com"
+      ]
+    },
+    "kochava.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "kochava.com"
+      ]
+    },
+    "krxd.net": {
+      "easylist": [],
+      "easyprivacy": [
+        "||krxd.net^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||krxd.net^"
+      ],
+      "hagezi-ultimate": []
+    },
+    "lijit.com": {
+      "easylist": [
+        "||lijit.com^$third-party"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||lijit.com^$third-party"
+      ],
+      "adguard-tracking": [
+        "||lijit.com^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "lijit.com"
+      ]
+    },
+    "lkqd.net": {
+      "easylist": [
+        "||lkqd.net^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||lkqd.net^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "lkqd.net"
+      ]
+    },
+    "logrocket.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||logrocket.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "logservice.hicloud.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||logservice.hicloud.com^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||logservice.hicloud.com^"
+      ],
+      "hagezi-ultimate": [
+        "logservice.hicloud.com"
+      ]
+    },
+    "luckyorange.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||luckyorange.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||luckyorange.com^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "luckyorange.com"
+      ]
+    },
+    "mathtag.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||mathtag.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||mathtag.com^"
+      ],
+      "hagezi-ultimate": [
+        "mathtag.com"
+      ]
+    },
+    "mc.yandex.ru": {
+      "easylist": [],
+      "easyprivacy": [
+        "||mc.yandex.ru^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||mc.yandex.ru^",
+        "||mc.yandex.ru^$cookie=yabs-sid"
+      ],
+      "hagezi-ultimate": [
+        "mc.yandex.ru"
+      ]
+    },
+    "media.net": {
+      "easylist": [
+        "||media.net^$object,script,third-party,xmlhttprequest"
+      ],
+      "easyprivacy": [
+        "||media.net^$third-party"
+      ],
+      "adguard-base": [
+        "||media.net^$object,redirect=noopjs",
+        "||media.net^$object,script,third-party,xmlhttprequest"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "media.net"
+      ]
+    },
+    "metrics.data.hicloud.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "metrika.yandex.ru": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "metrika.yandex.ru"
+      ]
+    },
+    "mgid.com": {
+      "easylist": [
+        "||mgid.com^",
+        "||mgid.com^$document",
+        "||mgid.com^$popup"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||mgid.com^",
+        "||mgid.com^$document",
+        "||mgid.com^$popup"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "mgid.com"
+      ]
+    },
+    "mixpanel.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||mixpanel.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||mixpanel.com^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "mixpanel.com"
+      ]
+    },
+    "moatads.com": {
+      "easylist": [
+        "||moatads.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||moatads.com^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "moatads.com"
+      ]
+    },
+    "mouseflow.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||mouseflow.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||mouseflow.com^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "mouseflow.com"
+      ]
+    },
+    "notify.bugsnag.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "nr-data.net": {
+      "easylist": [],
+      "easyprivacy": [
+        "||nr-data.net^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||nr-data.net^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "nr-data.net"
+      ]
+    },
+    "openx.net": {
+      "easylist": [
+        "||openx.net^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||openx.net^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "openx.net"
+      ]
+    },
+    "outbrain.com": {
+      "easylist": [
+        "||outbrain.com^$domain=bgr.com|buzzfeed.com|dto.to|investing.com|mamasuncut.com|mangatoto.com|tvline.com"
+      ],
+      "easyprivacy": [
+        "||outbrain.com^$third-party",
+        "||outbrain.com^*/widgetStatistics.js"
+      ],
+      "adguard-base": [
+        "||outbrain.com^$domain=bgr.com|buzzfeed.com|dto.to|investing.com|mamasuncut.com|mangatoto.com|tvline.com"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "outbrain.com"
+      ]
+    },
+    "parsely.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "parsely.com"
+      ]
+    },
+    "pixel.quantserve.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||pixel.quantserve.com^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||pixel.quantserve.com^"
+      ],
+      "hagezi-ultimate": []
+    },
+    "pixel.rubiconproject.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||pixel.rubiconproject.com^"
+      ],
+      "hagezi-ultimate": []
+    },
+    "propellerads.com": {
+      "easylist": [
+        "||propellerads.com^",
+        "||propellerads.com^$popup"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||propellerads.com^",
+        "||propellerads.com^$popup"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "propellerads.com"
+      ]
+    },
+    "pubmatic.com": {
+      "easylist": [
+        "||pubmatic.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||pubmatic.com^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "pubmatic.com"
+      ]
+    },
+    "px.ads.linkedin.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "quantserve.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||quantserve.com^$script,third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||quantserve.com^$~object,third-party",
+        "||quantserve.com^*.swf?$third-party",
+        "||quantserve.com^*^a=$third-party",
+        "||quantserve.com^$cookie=mc"
+      ],
+      "hagezi-ultimate": [
+        "quantserve.com"
+      ]
+    },
+    "revcontent.com": {
+      "easylist": [
+        "||revcontent.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||revcontent.com^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "revcontent.com"
+      ]
+    },
+    "rlcdn.com": {
+      "easylist": [
+        "||rlcdn.com^"
+      ],
+      "easyprivacy": [
+        "||rlcdn.com^$domain=autobild.de|widgets.outbrain.com"
+      ],
+      "adguard-base": [
+        "||rlcdn.com^"
+      ],
+      "adguard-tracking": [
+        "||rlcdn.com^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "rlcdn.com"
+      ]
+    },
+    "rtb.gumgum.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "rubiconproject.com": {
+      "easylist": [
+        "||rubiconproject.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||rubiconproject.com^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "rubiconproject.com"
+      ]
+    },
+    "sa.api.intl.miui.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "samsungads.com": {
+      "easylist": [
+        "||samsungads.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||samsungads.com^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "samsungads.com"
+      ]
+    },
+    "scorecardresearch.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||scorecardresearch.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||scorecardresearch.com^$third-party",
+        "||scorecardresearch.com^$domain=cnet.com,important"
+      ],
+      "hagezi-ultimate": [
+        "scorecardresearch.com"
+      ]
+    },
+    "sdkconfig.ad.xiaomi.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||sdkconfig.ad.xiaomi.com^"
+      ],
+      "hagezi-ultimate": []
+    },
+    "secure.adnxs.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "segment.io": {
+      "easylist": [],
+      "easyprivacy": [
+        "||segment.io^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||segment.io^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "segment.io"
+      ]
+    },
+    "sentry.io": {
+      "easylist": [],
+      "easyprivacy": [
+        "||sentry.io^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "sentry.io"
+      ]
+    },
+    "serving-sys.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "serving-sys.com"
+      ]
+    },
+    "sessions.bugsnag.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "sharethrough.com": {
+      "easylist": [
+        "||sharethrough.com^",
+        "||sharethrough.com^$third-party"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||sharethrough.com^",
+        "||sharethrough.com^$third-party"
+      ],
+      "adguard-tracking": [
+        "||sharethrough.com^$cookie=stx_user_id"
+      ],
+      "hagezi-ultimate": [
+        "sharethrough.com"
+      ]
+    },
+    "singular.net": {
+      "easylist": [],
+      "easyprivacy": [
+        "||singular.net^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "sizmek.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "sizmek.com"
+      ]
+    },
+    "smartadserver.com": {
+      "easylist": [
+        "||smartadserver.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||smartadserver.com^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "smartadserver.com"
+      ]
+    },
+    "snap.licdn.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "sovrn.com": {
+      "easylist": [
+        "||sovrn.com^$third-party"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||sovrn.com^$third-party"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "sovrn.com"
+      ]
+    },
+    "spotx.tv": {
+      "easylist": [
+        "||spotx.tv^$third-party"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||spotx.tv^$third-party"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "spotx.tv"
+      ]
+    },
+    "spotxchange.com": {
+      "easylist": [
+        "||spotxchange.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||spotxchange.com^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "spotxchange.com"
+      ]
+    },
+    "springserve.com": {
+      "easylist": [
+        "||springserve.com^$~media,third-party"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||springserve.com^$~media,third-party"
+      ],
+      "adguard-tracking": [
+        "||springserve.com^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "springserve.com"
+      ]
+    },
+    "static.criteo.net": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "stg-data.ads.heytapmobi.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "sync.mathtag.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "sync.outbrain.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||sync.outbrain.com^$third-party"
+      ],
+      "hagezi-ultimate": []
+    },
+    "sync.taboola.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||sync.taboola.com^"
+      ],
+      "hagezi-ultimate": []
+    },
+    "taboola.com": {
+      "easylist": [
+        "||taboola.com^*/vignette-render.js",
+        "||taboola.com^$domain=independent.co.uk|outlook.live.com"
+      ],
+      "easyprivacy": [
+        "||taboola.com^$third-party"
+      ],
+      "adguard-base": [
+        "||taboola.com^$domain=1fichier.com|espn.com|gamespot.com|popsci.com|themarker.com",
+        "||taboola.com^$domain=sport5.co.il",
+        "||taboola.com^$domain=jbzd.com.pl",
+        "||taboola.com^$domain=1fichier.com|espn.com|gamespot.com|popsci.com",
+        "||taboola.com^$domain=wgrz.com",
+        "||taboola.com^$domain=livemint.com",
+        "||taboola.com^*/vignette-render.js",
+        "||taboola.com^$domain=independent.co.uk|outlook.live.com"
+      ],
+      "adguard-tracking": [
+        "||taboola.com^$third-party"
+      ],
+      "hagezi-ultimate": [
+        "taboola.com"
+      ]
+    },
+    "tapad.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||tapad.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "tapad.com"
+      ]
+    },
+    "teads.tv": {
+      "easylist": [
+        "||teads.tv^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||teads.tv^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "teads.tv"
+      ]
+    },
+    "tr.iadsdk.apple.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": []
+    },
+    "tracking.miui.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||tracking.miui.com^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||tracking.miui.com^"
+      ],
+      "hagezi-ultimate": [
+        "tracking.miui.com"
+      ]
+    },
+    "trk.pinterest.com": {
+      "easylist": [],
+      "easyprivacy": [
+        "||trk.pinterest.com^$third-party"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [
+        "||trk.pinterest.com^"
+      ],
+      "hagezi-ultimate": [
+        "trk.pinterest.com"
+      ]
+    },
+    "undertone.com": {
+      "easylist": [
+        "||undertone.com^$third-party"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||undertone.com^$third-party"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "undertone.com"
+      ]
+    },
+    "unityads.unity3d.com": {
+      "easylist": [],
+      "easyprivacy": [],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "unityads.unity3d.com"
+      ]
+    },
+    "unrulymedia.com": {
+      "easylist": [
+        "||unrulymedia.com^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||unrulymedia.com^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "unrulymedia.com"
+      ]
+    },
+    "yandexadexchange.net": {
+      "easylist": [],
+      "easyprivacy": [
+        "||yandexadexchange.net^"
+      ],
+      "adguard-base": [],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "yandexadexchange.net"
+      ]
+    },
+    "yieldlab.net": {
+      "easylist": [
+        "||yieldlab.net^"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||yieldlab.net^"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "yieldlab.net"
+      ]
+    },
+    "yieldmo.com": {
+      "easylist": [
+        "||yieldmo.com^$third-party"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||yieldmo.com^$third-party"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "yieldmo.com"
+      ]
+    },
+    "zedo.com": {
+      "easylist": [
+        "||zedo.com^$third-party",
+        "||zedo.com^$popup"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||zedo.com^$third-party",
+        "||zedo.com^$popup"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "zedo.com"
+      ]
+    },
+    "zemanta.com": {
+      "easylist": [
+        "||zemanta.com^$third-party"
+      ],
+      "easyprivacy": [],
+      "adguard-base": [
+        "||zemanta.com^$third-party"
+      ],
+      "adguard-tracking": [],
+      "hagezi-ultimate": [
+        "zemanta.com"
+      ]
+    }
+  },
+  "beta_note": "Existing installed opt-in beta builds pin the old immutable v2 snapshot. Updating the parallel data branch does not rewrite that snapshot or activate beta sessions. Stable consumers continue using schema v1."
+}

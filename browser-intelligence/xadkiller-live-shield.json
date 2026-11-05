@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "feed": "xADKiller Live Shield",
-  "feed_version": "2026.09.13.1",
-  "updated_at": "2026-09-13T15:05:00Z",
+  "feed_version": "2026.11.05.1",
+  "updated_at": "2026-11-05T20:03:32Z",
   "maintainer": "SWIR",
   "description": "Data-only domain intelligence for xADKiller Browser. Logic stays inside the extension package.",
   "standard_domains": [
@@ -85,12 +85,14 @@
     "singular.net",
     "sentry.io",
     "bugsnag.com",
-    "nr-data.net"
+    "nr-data.net",
+    "adkernel.com",
+    "adpone.com",
+    "propellerads.com"
   ],
   "ultra_domains": [
     "googletagmanager.com",
     "connect.facebook.net",
-    "graph.facebook.com",
     "ads-twitter.com",
     "analytics.twitter.com",
     "px.ads.linkedin.com",
@@ -101,7 +103,6 @@
     "alb.reddit.com",
     "ads.tiktok.com",
     "analytics.tiktok.com",
-    "business-api.tiktok.com",
     "analytics.yahoo.com",
     "ads.yahoo.com",
     "yandexadexchange.net",
