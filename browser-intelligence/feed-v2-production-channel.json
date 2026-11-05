@@ -2,7 +2,7 @@
   "schema": 1,
   "channel": "protection-feed-v2",
   "published_ref": "protection-feed-v2",
-  "published_commit": "0930f563b4a4bfdef67885988485bfa8c7646784",
+  "published_commit": "a536d9542c6ec5351a868d9735db6fb6c1aadc37",
   "publication_mode": "parallel-data-only-v2",
   "legacy_schema_v1_unchanged": true,
   "remote_executable_code": false,
@@ -11,36 +11,36 @@
     {
       "id": "live-shield",
       "path": "browser-intelligence/v2/xadkiller-live-shield.json",
-      "feed_version": "2026.09.18.1",
-      "expires_at": "2026-10-18T01:30:00Z",
-      "git_blob_sha1": "1e2931556cd6d888fd50da92d04266512a213fc7",
-      "bytes": 3771,
+      "feed_version": "2026.11.05.2",
+      "expires_at": "2026-12-05T20:03:33Z",
+      "git_blob_sha1": "3d634374ba9f74eef975d2da1322a321cb01caf7",
+      "bytes": 3776,
       "rollback": {
-        "previous_version": "2026.09.13.1",
+        "previous_version": "2026.11.05.1",
         "previous_ref": "live-shield-feed/browser-intelligence/xadkiller-live-shield.json"
       }
     },
     {
       "id": "live-matrix",
       "path": "browser-intelligence/v2/xadkiller-live-matrix.json",
-      "feed_version": "2026.09.18.1",
-      "expires_at": "2026-10-18T01:30:00Z",
-      "git_blob_sha1": "a10298b6d9004f0466bee6d601efce77d1a439a8",
-      "bytes": 10292,
+      "feed_version": "2026.11.05.2",
+      "expires_at": "2026-12-05T20:03:33Z",
+      "git_blob_sha1": "4e66cbb8c8297fbb5189b36827cfc4023b6793a0",
+      "bytes": 9956,
       "rollback": {
-        "previous_version": "2026.09.13.2",
+        "previous_version": "2026.11.05.1",
         "previous_ref": "main/browser-intelligence/xadkiller-live-shield.json"
       }
     },
     {
       "id": "titan",
       "path": "browser-intelligence/v2/xadkiller-titan-feed.json",
-      "feed_version": "2026.09.18.1",
-      "expires_at": "2026-10-18T01:30:00Z",
-      "git_blob_sha1": "ea60aa6a868b65b05f1554b89a5db3fa12d50214",
-      "bytes": 2085,
+      "feed_version": "2026.11.05.2",
+      "expires_at": "2026-12-05T20:03:33Z",
+      "git_blob_sha1": "006be32dc789b2a5cf441e53eeee2a4a454cfd43",
+      "bytes": 2251,
       "rollback": {
-        "previous_version": "2026.09.13.1",
+        "previous_version": "2026.11.05.1",
         "previous_ref": "main/browser-intelligence/xadkiller-titan-feed.json"
       }
     }

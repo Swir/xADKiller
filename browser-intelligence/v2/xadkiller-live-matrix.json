@@ -1,8 +1,8 @@
 {
   "schema": 2,
   "feed": "xADKiller Live Shield",
-  "feed_version": "2026.09.18.1",
-  "updated_at": "2026-09-18T01:30:00Z",
+  "feed_version": "2026.11.05.2",
+  "updated_at": "2026-11-05T20:03:33Z",
   "maintainer": "SWIR",
   "description": "Data-only domain, URL-signature and cosmetic intelligence for xADKiller Browser. All execution logic stays inside the extension package.",
   "standard_domains": [
@@ -85,12 +85,14 @@
     "singular.net",
     "sentry.io",
     "bugsnag.com",
-    "nr-data.net"
+    "nr-data.net",
+    "adkernel.com",
+    "adpone.com",
+    "propellerads.com"
   ],
   "ultra_domains": [
     "googletagmanager.com",
     "connect.facebook.net",
-    "graph.facebook.com",
     "ads-twitter.com",
     "analytics.twitter.com",
     "px.ads.linkedin.com",
@@ -101,7 +103,6 @@
     "alb.reddit.com",
     "ads.tiktok.com",
     "analytics.tiktok.com",
-    "business-api.tiktok.com",
     "analytics.yahoo.com",
     "ads.yahoo.com",
     "yandexadexchange.net",
@@ -213,14 +214,6 @@
       ]
     },
     {
-      "filter": "/advertising/",
-      "types": [
-        "script",
-        "xmlhttprequest",
-        "sub_frame"
-      ]
-    },
-    {
       "filter": "/ad-loader/",
       "types": [
         "script",
@@ -284,6 +277,19 @@
         "xmlhttprequest",
         "sub_frame"
       ]
+    },
+    {
+      "filter": "/prebid-load.js",
+      "types": [
+        "script"
+      ]
+    },
+    {
+      "filter": "/prebid-wrapper.js",
+      "types": [
+        "script"
+      ],
+      "third_party": true
     }
   ],
   "ultra_signatures": [
@@ -311,31 +317,6 @@
     },
     {
       "filter": "/adrequest",
-      "types": [
-        "script",
-        "xmlhttprequest",
-        "sub_frame"
-      ]
-    },
-    {
-      "filter": "/commercial/",
-      "types": [
-        "script",
-        "xmlhttprequest",
-        "sub_frame",
-        "media"
-      ]
-    },
-    {
-      "filter": "/sponsored/",
-      "types": [
-        "script",
-        "xmlhttprequest",
-        "sub_frame"
-      ]
-    },
-    {
-      "filter": "/promoted/",
       "types": [
         "script",
         "xmlhttprequest",
@@ -525,9 +506,9 @@
     "[id*='sponsored-content']",
     "[id*='promoted-content']"
   ],
-  "expires_at": "2026-10-18T01:30:00Z",
+  "expires_at": "2026-12-05T20:03:33Z",
   "rollback": {
-    "previous_version": "2026.09.13.2",
+    "previous_version": "2026.11.05.1",
     "previous_ref": "main/browser-intelligence/xadkiller-live-shield.json"
   }
 }

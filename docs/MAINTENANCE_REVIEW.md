@@ -30,7 +30,13 @@ Use the Actions job summary and `protection-feed-freshness` artifact to diagnose
 
 ## Baseline finding: 2026-11-05
 
-The three production-v1 feeds are dated 2026-09-13 and exceed the 45-day runtime policy. The three parallel-v2 feeds are dated 2026-09-18 and expired on 2026-10-18. Adding this audit detects that unresolved maintenance issue; it does not refresh those rules. A failing live audit is expected until a reviewed compatible data update is published. Unit tests of the auditor must still pass.
+The initial audit found all three production-v1 feeds dated 2026-09-13 beyond the 45-day runtime policy, plus three expired parallel-v2 feeds. The reviewed 2026.11.05.1 update refreshes all three stable endpoints with compatible schema-v1 data. The parallel schema-v2 snapshot is 2026.11.05.2, with a 30-day lifetime and rollback metadata referring to the refreshed v1 generation. Exact hashes, source provenance and changes are in `browser-intelligence/feed-review-2026-11-05.json` and the checksum/channel manifests.
+
+The data change adds three corroborated ad-network domains and two Prebid script signatures, removes two broad business/login API domains and four generic content-path signatures, and narrows TITAN's generic path rules to third-party requests. Existing cosmetic selectors remain unchanged. This is a runtime data refresh, not a new store binary or a rebuild of users' bundled static lists.
+
+`node browser-extension/tests/production-feed-update.mjs` verifies exact publication hashes, recovery from `stale_feed` for all three roles, preserved old-cache count thresholds, v1-to-v2 acceptance, actual Matrix/TITAN rule generation in both modes, and 40 blocking/normal-request fixtures. It is a deterministic request-level regression, not evidence of interactive login, payment or video playback on live sites. The current-time network audit remains separate and must pass after publication.
+
+Installed opt-in beta packages still pin their original immutable v2 snapshot. Publishing refreshed parallel data does not silently change that beta pin or activate a beta session. Stable installed consumers use the refreshed v1 URLs; beta repinning requires a separately tested package update.
 
 Generated local reports are written to `feed-audit-report/`; do not commit them as fresh source data.
 

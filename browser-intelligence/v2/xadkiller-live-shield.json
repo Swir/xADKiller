@@ -1,8 +1,8 @@
 {
   "schema": 2,
   "feed": "xADKiller Live Shield",
-  "feed_version": "2026.09.18.1",
-  "updated_at": "2026-09-18T01:30:00Z",
+  "feed_version": "2026.11.05.2",
+  "updated_at": "2026-11-05T20:03:33Z",
   "maintainer": "SWIR",
   "description": "Data-only domain intelligence for xADKiller Browser. Logic stays inside the extension package.",
   "standard_domains": [
@@ -85,12 +85,14 @@
     "singular.net",
     "sentry.io",
     "bugsnag.com",
-    "nr-data.net"
+    "nr-data.net",
+    "adkernel.com",
+    "adpone.com",
+    "propellerads.com"
   ],
   "ultra_domains": [
     "googletagmanager.com",
     "connect.facebook.net",
-    "graph.facebook.com",
     "ads-twitter.com",
     "analytics.twitter.com",
     "px.ads.linkedin.com",
@@ -101,7 +103,6 @@
     "alb.reddit.com",
     "ads.tiktok.com",
     "analytics.tiktok.com",
-    "business-api.tiktok.com",
     "analytics.yahoo.com",
     "ads.yahoo.com",
     "yandexadexchange.net",
@@ -150,9 +151,9 @@
     "sync.mathtag.com",
     "idsync.rlcdn.com"
   ],
-  "expires_at": "2026-10-18T01:30:00Z",
+  "expires_at": "2026-12-05T20:03:33Z",
   "rollback": {
-    "previous_version": "2026.09.13.1",
+    "previous_version": "2026.11.05.1",
     "previous_ref": "live-shield-feed/browser-intelligence/xadkiller-live-shield.json"
   }
 }

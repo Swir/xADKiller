@@ -1,8 +1,8 @@
 {
   "schema": 2,
   "feed": "xADKiller TITAN Intelligence",
-  "feed_version": "2026.09.18.1",
-  "updated_at": "2026-09-18T01:30:00Z",
+  "feed_version": "2026.11.05.2",
+  "updated_at": "2026-11-05T20:03:33Z",
   "maintainer": "SWIR",
   "description": "Data-only signatures for xADKiller Browser TITAN Shield. No executable remote code.",
   "regex_signatures": [
@@ -13,7 +13,8 @@
         "xmlhttprequest",
         "sub_frame",
         "image"
-      ]
+      ],
+      "third_party": true
     },
     {
       "regex": "^https?://[^/]+/(?:[^/?#]+/){0,4}(?:vast|vmap|ima3)(?:[._/-]|$)",
@@ -21,10 +22,18 @@
         "xmlhttprequest",
         "media",
         "sub_frame"
-      ]
+      ],
+      "third_party": true
     },
     {
-      "regex": "^https?://[^/]+/[^?#]*[?&](?:ad_unit|adunit|ad_slot|adslot|gdfp_req|iu)=",
+      "regex": "^https?://[^/]+/[^?#]*prebid-(?:load|wrapper)\\.js(?:[?#]|$)",
+      "types": [
+        "script"
+      ],
+      "third_party": true
+    },
+    {
+      "regex": "^https?://[^/]+/[^?#]*[?&](?:ad_unit|adunit|ad_slot|adslot|gdfp_req)=",
       "types": [
         "script",
         "xmlhttprequest",
@@ -56,15 +65,12 @@
     "/vast/",
     "/vmap/",
     "/ima3/",
-    "/commercial/",
-    "/sponsor/",
-    "/sponsored/",
-    "/promoted/",
-    "/advertising/",
     "/ad-loader.js",
     "/adloader.js",
     "/ads.js",
-    "/pagead.js"
+    "/pagead.js",
+    "/prebid-load.js",
+    "/prebid-wrapper.js"
   ],
   "strong_tokens": [
     "doubleclick",
@@ -85,9 +91,9 @@
     "securepubads",
     "adsbygoogle"
   ],
-  "expires_at": "2026-10-18T01:30:00Z",
+  "expires_at": "2026-12-05T20:03:33Z",
   "rollback": {
-    "previous_version": "2026.09.13.1",
+    "previous_version": "2026.11.05.1",
     "previous_ref": "main/browser-intelligence/xadkiller-titan-feed.json"
   }
 }

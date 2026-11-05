@@ -4,26 +4,26 @@
   "feeds": [
     {
       "id": "live-shield",
-      "target_version": "2026.09.18.1",
-      "target_updated_at": "2026-09-18T01:30:00Z",
-      "target_expires_at": "2026-10-18T01:30:00Z",
-      "parallel_v2_ref": "0930f563b4a4bfdef67885988485bfa8c7646784",
+      "target_version": "2026.11.05.2",
+      "target_updated_at": "2026-11-05T20:03:33Z",
+      "target_expires_at": "2026-12-05T20:03:33Z",
+      "parallel_v2_ref": "a536d9542c6ec5351a868d9735db6fb6c1aadc37",
       "parallel_v2_path": "browser-intelligence/v2/xadkiller-live-shield.json"
     },
     {
       "id": "live-matrix",
-      "target_version": "2026.09.18.1",
-      "target_updated_at": "2026-09-18T01:30:00Z",
-      "target_expires_at": "2026-10-18T01:30:00Z",
-      "parallel_v2_ref": "0930f563b4a4bfdef67885988485bfa8c7646784",
+      "target_version": "2026.11.05.2",
+      "target_updated_at": "2026-11-05T20:03:33Z",
+      "target_expires_at": "2026-12-05T20:03:33Z",
+      "parallel_v2_ref": "a536d9542c6ec5351a868d9735db6fb6c1aadc37",
       "parallel_v2_path": "browser-intelligence/v2/xadkiller-live-matrix.json"
     },
     {
       "id": "titan",
-      "target_version": "2026.09.18.1",
-      "target_updated_at": "2026-09-18T01:30:00Z",
-      "target_expires_at": "2026-10-18T01:30:00Z",
-      "parallel_v2_ref": "0930f563b4a4bfdef67885988485bfa8c7646784",
+      "target_version": "2026.11.05.2",
+      "target_updated_at": "2026-11-05T20:03:33Z",
+      "target_expires_at": "2026-12-05T20:03:33Z",
+      "parallel_v2_ref": "a536d9542c6ec5351a868d9735db6fb6c1aadc37",
       "parallel_v2_path": "browser-intelligence/v2/xadkiller-titan-feed.json"
     }
   ]

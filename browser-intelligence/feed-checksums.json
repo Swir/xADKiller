@@ -7,25 +7,25 @@
       "id": "live-shield",
       "source_ref": "live-shield-feed",
       "path": "browser-intelligence/xadkiller-live-shield.json",
-      "feed_version": "2026.09.13.1",
-      "updated_at": "2026-09-13T15:05:00Z",
-      "git_blob_sha1": "2b4d4ff60fb957698f51be3b791883db8f162869"
+      "feed_version": "2026.11.05.1",
+      "updated_at": "2026-11-05T20:03:32Z",
+      "git_blob_sha1": "feaaf7fd05375e9da52f940f200fd62b31bcff76"
     },
     {
       "id": "live-matrix",
       "source_ref": "main",
       "path": "browser-intelligence/xadkiller-live-shield.json",
-      "feed_version": "2026.09.13.2",
-      "updated_at": "2026-09-13T16:18:00Z",
-      "git_blob_sha1": "cb285128d415efe3792041c369693bb7485982be"
+      "feed_version": "2026.11.05.1",
+      "updated_at": "2026-11-05T20:03:32Z",
+      "git_blob_sha1": "3787b954d9b28e22a6b22aee28680ec507570a46"
     },
     {
       "id": "titan",
       "source_ref": "main",
       "path": "browser-intelligence/xadkiller-titan-feed.json",
-      "feed_version": "2026.09.13.1",
-      "updated_at": "2026-09-13T17:25:00Z",
-      "git_blob_sha1": "651b0df376800885ce1cbed8f3a879ba8dc662a4"
+      "feed_version": "2026.11.05.1",
+      "updated_at": "2026-11-05T20:03:32Z",
+      "git_blob_sha1": "1fea5d1e842b1b6c3f98918d1199519b72c880f1"
     }
   ]
 }
