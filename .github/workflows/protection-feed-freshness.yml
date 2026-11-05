@@ -1,0 +1,59 @@
+name: Protection feed freshness
+
+on:
+  schedule:
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'ci/audit_feed_freshness.py'
+      - 'ci/tests/test_feed_freshness.py'
+      - 'browser-intelligence/feed-checksums.json'
+      - 'browser-intelligence/feed-v2-production-channel.json'
+      - '.github/workflows/protection-feed-freshness.yml'
+  pull_request:
+    paths:
+      - 'ci/audit_feed_freshness.py'
+      - 'ci/tests/test_feed_freshness.py'
+      - 'browser-intelligence/feed-checksums.json'
+      - 'browser-intelligence/feed-v2-production-channel.json'
+      - '.github/workflows/protection-feed-freshness.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s ci/tests -p test_feed_freshness.py -v
+
+  published-feeds:
+    needs: regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Audit current published feeds
+        run: python ci/audit_feed_freshness.py
+      - name: Preserve freshness evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: protection-feed-freshness
+          path: feed-audit-report/
+          if-no-files-found: error
+          retention-days: 30
